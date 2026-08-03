@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Du კოლონის ფორმვორკის რედაქტორი</title>
+<style>
+  :root{
+    --bg:#1e2228; --panel:#272c33; --panel2:#2f353d; --line:#3a424c;
+    --text:#e6e9ee; --muted:#9aa4b1; --accent:#f5a623; --accent2:#4a90e2;
+    --sel:#f5a623; --grid:#333b45; --gridMajor:#454f5b; --surface:#20252b;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Georgian",Arial,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  /* ---- Top bar ---- */
+  header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex:0 0 auto;}
+  header h1{font-size:14px;margin:0;font-weight:600;letter-spacing:.2px;}
+  header h1 span{color:var(--accent);}
+  .toolbar{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
+  .btn:hover{background:#3a424c;}
+  .btn.active{background:var(--accent);color:#1c1c1c;border-color:var(--accent);font-weight:600;}
+  .btn.danger:hover{background:#7a2b2b;border-color:#a33;}
+  .sep{width:1px;height:22px;background:var(--line);margin:0 2px;}
+  .zoomlabel{font-size:12px;color:var(--muted);min-width:46px;text-align:center;}
+  select,input[type=number]{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:12px;}
+
+  /* ---- Body ---- */
+  #body{display:flex;flex:1 1 auto;min-height:0;}
+
+  /* ---- Palette ---- */
+  #palette{width:270px;flex:0 0 auto;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;}
+  #search{margin:10px;padding:7px 9px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:12px;}
+  #matlist{overflow-y:auto;padding:0 8px 16px;}
+  .cathead{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:14px 6px 6px;display:flex;align-items:center;gap:6px;}
+  .catdot{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  .mat{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;cursor:grab;border:1px solid transparent;user-select:none;}
+  .mat:hover{background:var(--panel2);border-color:var(--line);}
+  .mat:active{cursor:grabbing;}
+  .swatch{width:26px;height:26px;border-radius:4px;flex:0 0 auto;border:1px solid rgba(0,0,0,.35);position:relative;}
+  .mat .info{min-width:0;}
+  .mat .nm{font-size:12px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mat .dim{font-size:11px;color:var(--muted);}
+  .hint{font-size:11px;color:var(--muted);padding:6px 10px;line-height:1.4;}
+
+  /* ---- Canvas ---- */
+  #stage{flex:1 1 auto;position:relative;overflow:hidden;background:var(--surface);cursor:default;}
+  #world{position:absolute;left:0;top:0;transform-origin:0 0;}
+  .grid{position:absolute;left:0;top:0;}
+  .piece{position:absolute;box-sizing:border-box;border:1px solid rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:move;transform-origin:center center;}
+  .piece .lbl{font-size:10px;color:rgba(0,0,0,.72);text-align:center;padding:2px;line-height:1.15;pointer-events:none;white-space:normal;word-break:break-word;}
+  .piece.selected{outline:2px solid var(--sel);outline-offset:1px;box-shadow:0 0 0 1px rgba(0,0,0,.4);z-index:50;}
+  .dimtag{position:absolute;background:var(--accent);color:#1c1c1c;font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:60;}
+
+  /* rulers */
+  .ruler{position:absolute;background:var(--panel);color:var(--muted);font-size:9px;z-index:5;pointer-events:none;}
+  #rulerX{top:0;left:22px;right:0;height:22px;border-bottom:1px solid var(--line);}
+  #rulerY{top:22px;left:0;bottom:0;width:22px;border-right:1px solid var(--line);}
+  #rulerCorner{top:0;left:0;width:22px;height:22px;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);z-index:6;}
+
+  /* ---- Right info ---- */
+  #inspector{width:220px;flex:0 0 auto;background:var(--panel);border-left:1px solid var(--line);padding:14px;font-size:12px;overflow-y:auto;}
+  #inspector h2{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px;}
+  .kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);}
+  .kv .k{color:var(--muted);}
+  .empty{color:var(--muted);line-height:1.5;}
+  .countpill{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:2px 9px;font-size:11px;color:var(--muted);}
+  #dropHint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;pointer-events:none;text-align:center;}
+  footer{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:5px 14px;font-size:11px;color:var(--muted);display:flex;gap:18px;}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-size:10px;color:var(--text);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1><span>Du</span> კოლონის ფორმვორკის რედაქტორი</h1>
+    <div class="toolbar">
+      <button class="btn" id="snapBtn" title="ბადეზე მიბმა">⊞ მიბმა: <b id="snapState">ჩართ.</b></button>
+      <select id="snapSize" title="ბადის ბიჯი">
+        <option value="1">1 სმ</option>
+        <option value="5" selected>5 სმ</option>
+        <option value="10">10 სმ</option>
+        <option value="25">25 სმ</option>
+      </select>
+      <div class="sep"></div>
+      <button class="btn" id="rotateBtn" title="მოტრიალება (R)">⟳ 90°</button>
+      <button class="btn danger" id="deleteBtn" title="წაშლა (Del)">🗑 წაშლა</button>
+      <div class="sep"></div>
+      <button class="btn" id="zoomOut">−</button>
+      <span class="zoomlabel" id="zoomLabel">100%</span>
+      <button class="btn" id="zoomIn">+</button>
+      <button class="btn" id="fitBtn" title="ჩატევა">⤢ ცენტრი</button>
+      <div class="sep"></div>
+      <button class="btn" id="exportBtn">⤓ ექსპორტი</button>
+      <button class="btn" id="importBtn">⤒ იმპორტი</button>
+      <button class="btn danger" id="clearBtn">გასუფთავება</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+    </div>
+  </header>
+
+  <div id="body">
+    <!-- Palette -->
+    <aside id="palette">
+      <input id="search" type="text" placeholder="🔍 მასალის ძებნა...">
+      <div class="hint">გადმოათრიე მასალა ზედაპირზე. ზომები დაახლოებით სწორ მასშტაბშია (სმ).</div>
+      <div id="matlist"></div>
+    </aside>
+
+    <!-- Stage -->
+    <main id="stage">
+      <div id="rulerCorner">სმ</div>
+      <div class="ruler" id="rulerX"></div>
+      <div class="ruler" id="rulerY"></div>
+      <div id="world"></div>
+      <div id="dropHint">ზედაპირი ცარიელია — გადმოათრიე მასალა მარცხენა პანელიდან</div>
+    </main>
+
+    <!-- Inspector -->
+    <aside id="inspector">
+      <h2>დეტალები</h2>
+      <div id="inspContent"><div class="empty">მონიშნე ელემენტი დეტალების სანახავად.</div></div>
+      <h2 style="margin-top:22px;">სტატისტიკა</h2>
+      <div id="stats"></div>
+    </aside>
+  </div>
+
+  <footer>
+    <span><kbd>თრევა</kbd> გადაადგილება</span>
+    <span><kbd>R</kbd> მოტრიალება</span>
+    <span><kbd>Del</kbd> წაშლა</span>
+    <span><kbd>Space</kbd>+თრევა ან შუა ღილაკი — ხედის გადაწევა</span>
+    <span><kbd>ბორბალი</kbd> მასშტაბი</span>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   MATERIAL CATALOG  (Du column formwork)
+   dims in centimetres: w x h  (approximate real sizes)
+   ============================================================ */
+const CATS = {
+  panel:   {name:"პანელები",        color:"#c9a36a"},
+  waler:   {name:"ვალერები / სამაგრები", color:"#6fa8dc"},
+  corner:  {name:"კუთხეები",        color:"#93c47d"},
+  post:    {name:"დგარები",         color:"#b48ead"},
+  filler:  {name:"ჩაკერებები",      color:"#e0b872"},
+  rod:     {name:"ჭანჭიკები / შტირები", color:"#d98880"},
+  acc:     {name:"აქსესუარები",     color:"#8fa1ad"},
+};
+
+const MATERIALS = [
+  // Panels (w x h in cm)
+  {c:"panel", n:"პანელი 30*300", w:30, h:300},
+  {c:"panel", n:"პანელი 45*150", w:45, h:150},
+  {c:"panel", n:"პანელი 45*300", w:45, h:300},
+  {c:"panel", n:"პანელი 60*150", w:60, h:150},
+  {c:"panel", n:"პანელი 60*300", w:60, h:300},
+  {c:"panel", n:"პანელი 75*090", w:75, h:90},
+  {c:"panel", n:"პანელი 75*150", w:75, h:150},
+  {c:"panel", n:"პანელი 75*300", w:75, h:300},
+  {c:"panel", n:"პანელი 90*300", w:90, h:300},
+
+  // Walers (length x profile)
+  {c:"waler", n:"waler 100", w:100, h:12},
+  {c:"waler", n:"waler 120", w:120, h:12},
+  {c:"waler", n:"waler 150", w:150, h:12},
+  {c:"waler", n:"waler 300", w:300, h:12},
+  {c:"waler", n:"waler 600", w:600, h:12},
+
+  // Corners
+  {c:"corner", n:"გარე კუთხე 300", w:15, h:300},
+  {c:"corner", n:"შიდა კუთხე 20*20*150", w:20, h:150},
+  {c:"corner", n:"შიდა კუთხე 20*20*300", w:20, h:300},
+  {c:"corner", n:"შიდა კუთხე 20*20*300 ჯონი", w:20, h:300},
+  {c:"corner", n:"კუთხის თეფში", w:15, h:15},
+  {c:"corner", n:"კუთხის კონექტორი", w:8, h:8},
+  {c:"corner", n:"კუთხის კონექტორი 40სმ", w:8, h:40},
+
+  // Posts
+  {c:"post", n:"დგარი 100", w:10, h:100},
+  {c:"post", n:"დგარი 200", w:10, h:200},
+
+  // Fillers
+  {c:"filler", n:"ჩაკერება 5*150",  w:5,  h:150},
+  {c:"filler", n:"ჩაკერება 5*300",  w:5,  h:300},
+  {c:"filler", n:"ჩაკერება 10*150", w:10, h:150},
+  {c:"filler", n:"ჩაკერება 10*300", w:10, h:300},
+
+  // Tie rods / studs
+  {c:"rod", n:"ჭანჭიკი (შტირი 0,60 სმ)", w:60,  h:3},
+  {c:"rod", n:"ჭანჭიკი (შტირი 0,80 სმ)", w:80,  h:3},
+  {c:"rod", n:"ჭანჭიკი (შტირი 100 სმ)",  w:100, h:3},
+  {c:"rod", n:"ჭანჭიკი (შტირი 150 სმ)",  w:150, h:3},
+
+  // Accessories
+  {c:"acc", n:"კაუჭი ამწესთვის", w:15, h:25},
+  {c:"acc", n:"პანელზე სამაგრი კომპლექტი", w:12, h:12},
+  {c:"acc", n:"პანელის ბეტონზე სამაგრი", w:12, h:12},
+  {c:"acc", n:"ქანჩი + დისკო", w:8, h:8},
+  {c:"acc", n:"ჩამკეტი fix", w:10, h:20},
+  {c:"acc", n:"ჩამკეტი რეგულირებადი", w:10, h:25},
+  {c:"acc", n:"ძირის სამაგრი", w:15, h:15},
+  {c:"acc", n:"ხარაჩოს ფეხი", w:20, h:30},
+  {c:"acc", n:"გილზა ფიქსატორის", w:5, h:15},
+  {c:"acc", n:"ქანჩი (გაიკა) ფიქსატორის", w:6, h:6},
+];
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let zoom = 1;          // px per cm
+let panX = 40, panY = 40;
+let snap = true;
+let snapSize = 5;
+let pieces = [];       // {id, matIndex, x, y, rot}
+let selId = null;
+let nextId = 1;
+
+const world = document.getElementById('world');
+const stage = document.getElementById('stage');
+const WORLD_W = 4000, WORLD_H = 3000; // cm
+
+/* ============================================================
+   BUILD PALETTE
+   ============================================================ */
+function buildPalette(filter=""){
+  const list = document.getElementById('matlist');
+  list.innerHTML = "";
+  const f = filter.trim().toLowerCase();
+  Object.keys(CATS).forEach(cat=>{
+    const items = MATERIALS.map((m,i)=>({m,i}))
+      .filter(o=>o.m.c===cat && (!f || o.m.n.toLowerCase().includes(f)));
+    if(!items.length) return;
+    const head = document.createElement('div');
+    head.className='cathead';
+    head.innerHTML = `<span class="catdot" style="background:${CATS[cat].color}"></span>${CATS[cat].name}`;
+    list.appendChild(head);
+    items.forEach(({m,i})=>{
+      const el = document.createElement('div');
+      el.className='mat';
+      el.draggable=true;
+      el.dataset.idx=i;
+      const ar = m.w/m.h;
+      const sw = ar>=1 ? 26 : Math.max(8,26*ar);
+      const sh = ar>=1 ? Math.max(8,26/ar) : 26;
+      el.innerHTML = `
+        <div class="swatch" style="background:${CATS[m.c].color};width:${sw}px;height:${sh}px;"></div>
+        <div class="info">
+          <div class="nm" title="${m.n}">${m.n}</div>
+          <div class="dim">${m.w} × ${m.h} სმ</div>
+        </div>`;
+      el.addEventListener('dragstart',e=>{
+        e.dataTransfer.setData('text/plain', i);
+        e.dataTransfer.effectAllowed='copy';
+      });
+      list.appendChild(el);
+    });
+  });
+}
+
+/* ============================================================
+   RENDER WORLD
+   ============================================================ */
+function applyTransform(){
+  world.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  document.getElementById('zoomLabel').textContent = Math.round(zoom*100)+"%";
+  drawRulers();
+}
+
+function renderGrid(){
+  // grid drawn as SVG background sized to world in cm (1cm=1px pre-zoom)
+  let existing = world.querySelector('.grid');
+  if(existing) existing.remove();
+  const g = document.createElement('div');
+  g.className='grid';
+  g.style.width = WORLD_W+'px';
+  g.style.height = WORLD_H+'px';
+  g.style.background =
+    `linear-gradient(var(--gridMajor) 1px, transparent 1px) 0 0/100px 100px,
+     linear-gradient(90deg, var(--gridMajor) 1px, transparent 1px) 0 0/100px 100px,
+     linear-gradient(var(--grid) 1px, transparent 1px) 0 0/20px 20px,
+     linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/20px 20px`;
+  g.style.outline='1px solid #4a5560';
+  world.appendChild(g);
+}
+
+function pieceEl(p){
+  const m = MATERIALS[p.matIndex];
+  let el = document.getElementById('p'+p.id);
+  if(!el){
+    el = document.createElement('div');
+    el.className='piece';
+    el.id='p'+p.id;
+    el.innerHTML=`<div class="lbl"></div>`;
+    el.addEventListener('mousedown', e=>startMovePiece(e,p.id));
+    world.appendChild(el);
+  }
+  el.style.left = p.x+'px';
+  el.style.top = p.y+'px';
+  el.style.width = m.w+'px';
+  el.style.height = m.h+'px';
+  el.style.background = CATS[m.c].color;
+  el.style.transform = `rotate(${p.rot}deg)`;
+  el.classList.toggle('selected', p.id===selId);
+  const lbl = el.querySelector('.lbl');
+  // hide text on tiny pieces
+  lbl.textContent = (m.w*zoom>34 && m.h*zoom>18) ? m.n : "";
+  lbl.style.transform = `rotate(${-p.rot}deg)`;
+  return el;
+}
+
+function renderPieces(){
+  const ids = pieces.map(p=>'p'+p.id);
+  [...world.querySelectorAll('.piece')].forEach(el=>{
+    if(!ids.includes(el.id)) el.remove();
+  });
+  pieces.forEach(pieceEl);
+  document.getElementById('dropHint').style.display = pieces.length? 'none':'flex';
+  renderDimTag();
+  renderInspector();
+  renderStats();
+  autosave();
+}
+
+/* selected-piece dimension tag */
+function renderDimTag(){
+  let tag = document.getElementById('dimtag');
+  const p = pieces.find(x=>x.id===selId);
+  if(!p){ if(tag) tag.remove(); return; }
+  const m = MATERIALS[p.matIndex];
+  if(!tag){ tag=document.createElement('div'); tag.id='dimtag'; tag.className='dimtag'; stage.appendChild(tag); }
+  tag.textContent = `${m.w} × ${m.h} სმ`;
+  // position above piece (screen coords)
+  const sx = panX + (p.x + m.w/2)*zoom;
+  const sy = panY + p.y*zoom;
+  tag.style.left = (sx - tag.offsetWidth/2)+'px';
+  tag.style.top  = Math.max(24, sy-20)+'px';
+}
+
+/* ============================================================
+   INSPECTOR + STATS
+   ============================================================ */
+function renderInspector(){
+  const c = document.getElementById('inspContent');
+  const p = pieces.find(x=>x.id===selId);
+  if(!p){ c.innerHTML='<div class="empty">მონიშნე ელემენტი დეტალების სანახავად.</div>'; return; }
+  const m = MATERIALS[p.matIndex];
+  c.innerHTML = `
+    <div class="kv"><span class="k">დასახელება</span><b style="text-align:right">${m.n}</b></div>
+    <div class="kv"><span class="k">კატეგორია</span><span>${CATS[m.c].name}</span></div>
+    <div class="kv"><span class="k">ზომა</span><span>${m.w} × ${m.h} სმ</span></div>
+    <div class="kv"><span class="k">კოორდინატი</span><span>${Math.round(p.x)}, ${Math.round(p.y)}</span></div>
+    <div class="kv"><span class="k">მოტრიალება</span><span>${p.rot}°</span></div>`;
+}
+
+function renderStats(){
+  const s = document.getElementById('stats');
+  const total = pieces.length;
+  const counts = {};
+  pieces.forEach(p=>{ const n=MATERIALS[p.matIndex].n; counts[n]=(counts[n]||0)+1; });
+  let rows = Object.entries(counts).sort((a,b)=>b[1]-a[1])
+     .map(([n,c])=>`<div class="kv"><span class="k" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</span><span class="countpill">${c}</span></div>`).join('');
+  s.innerHTML = `<div class="kv"><span class="k">სულ ელემენტი</span><b>${total}</b></div>${rows||''}`;
+}
+
+/* ============================================================
+   PLACEMENT (drop)
+   ============================================================ */
+stage.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
+stage.addEventListener('drop', e=>{
+  e.preventDefault();
+  const idx = parseInt(e.dataTransfer.getData('text/plain'),10);
+  if(isNaN(idx)) return;
+  const m = MATERIALS[idx];
+  const r = stage.getBoundingClientRect();
+  let wx = (e.clientX - r.left - panX)/zoom - m.w/2;
+  let wy = (e.clientY - r.top  - panY)/zoom - m.h/2;
+  if(snap){ wx = Math.round(wx/snapSize)*snapSize; wy = Math.round(wy/snapSize)*snapSize; }
+  const p = {id:nextId++, matIndex:idx, x:wx, y:wy, rot:0};
+  pieces.push(p);
+  selId = p.id;
+  renderPieces();
+});
+
+/* ============================================================
+   MOVE / SELECT PIECE
+   ============================================================ */
+let moving=null;
+function startMovePiece(e,id){
+  if(spaceDown||e.button!==0) return;
+  e.stopPropagation();
+  selId=id;
+  const p = pieces.find(x=>x.id===id);
+  moving={id, sx:e.clientX, sy:e.clientY, ox:p.x, oy:p.y, moved:false};
+  renderPieces();
+}
+window.addEventListener('mousemove', e=>{
+  if(moving){
+    const p = pieces.find(x=>x.id===moving.id);
+    let nx = moving.ox + (e.clientX-moving.sx)/zoom;
+    let ny = moving.oy + (e.clientY-moving.sy)/zoom;
+    if(snap){ nx=Math.round(nx/snapSize)*snapSize; ny=Math.round(ny/snapSize)*snapSize; }
+    p.x=nx; p.y=ny; moving.moved=true;
+    pieceEl(p); renderDimTag();
+  } else if(panning){
+    panX = panStart.px + (e.clientX-panStart.x);
+    panY = panStart.py + (e.clientY-panStart.y);
+    applyTransform();
+    renderDimTag();
+  }
+});
+window.addEventListener('mouseup', ()=>{
+  if(moving){ moving=null; autosave(); renderInspector(); }
+  if(panning){ panning=false; stage.style.cursor='default'; }
+});
+
+/* click empty surface = deselect */
+stage.addEventListener('mousedown', e=>{
+  if(e.target===stage || e.target.classList.contains('grid') || e.target===world){
+    if(spaceDown || e.button===1){ startPan(e); }
+    else { selId=null; renderPieces(); }
+  }
+});
+
+/* ============================================================
+   PAN & ZOOM
+   ============================================================ */
+let panning=false, panStart=null, spaceDown=false;
+function startPan(e){ panning=true; panStart={x:e.clientX,y:e.clientY,px:panX,py:panY}; stage.style.cursor='grabbing'; e.preventDefault(); }
+stage.addEventListener('mousedown', e=>{ if((spaceDown||e.button===1)) startPan(e); });
+
+stage.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  const mx = e.clientX-r.left, my=e.clientY-r.top;
+  const wx=(mx-panX)/zoom, wy=(my-panY)/zoom;
+  const factor = e.deltaY<0 ? 1.12 : 1/1.12;
+  zoom = Math.min(8, Math.max(0.08, zoom*factor));
+  panX = mx - wx*zoom; panY = my - wy*zoom;
+  applyTransform(); renderPieces();
+},{passive:false});
+
+document.getElementById('zoomIn').onclick = ()=>zoomBy(1.2);
+document.getElementById('zoomOut').onclick = ()=>zoomBy(1/1.2);
+function zoomBy(f){
+  const r=stage.getBoundingClientRect(); const mx=r.width/2,my=r.height/2;
+  const wx=(mx-panX)/zoom, wy=(my-panY)/zoom;
+  zoom=Math.min(8,Math.max(0.08,zoom*f));
+  panX=mx-wx*zoom; panY=my-wy*zoom; applyTransform(); renderPieces();
+}
+document.getElementById('fitBtn').onclick = fitView;
+function fitView(){
+  if(!pieces.length){ zoom=1; panX=40; panY=40; applyTransform(); renderPieces(); return; }
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  pieces.forEach(p=>{const m=MATERIALS[p.matIndex];minx=Math.min(minx,p.x);miny=Math.min(miny,p.y);maxx=Math.max(maxx,p.x+m.w);maxy=Math.max(maxy,p.y+m.h);});
+  const r=stage.getBoundingClientRect();
+  const pad=60;
+  zoom=Math.min(8,Math.max(0.08,Math.min((r.width-2*pad)/(maxx-minx),(r.height-2*pad)/(maxy-miny))));
+  panX = pad - minx*zoom + (r.width-2*pad-(maxx-minx)*zoom)/2;
+  panY = pad - miny*zoom + (r.height-2*pad-(maxy-miny)*zoom)/2;
+  applyTransform(); renderPieces();
+}
+
+/* ============================================================
+   RULERS
+   ============================================================ */
+function drawRulers(){
+  const rx=document.getElementById('rulerX'), ry=document.getElementById('rulerY');
+  const r=stage.getBoundingClientRect();
+  const step = niceStep(zoom);
+  let hx='';
+  for(let cm=Math.ceil((-panX/zoom)/step)*step; cm*zoom+panX < r.width; cm+=step){
+    const x=cm*zoom+panX; if(x<22)continue;
+    hx+=`<div style="position:absolute;left:${x}px;top:0;height:100%;border-left:1px solid var(--line);padding-left:2px">${cm}</div>`;
+  }
+  rx.innerHTML=hx;
+  let hy='';
+  for(let cm=Math.ceil((-panY/zoom)/step)*step; cm*zoom+panY < r.height; cm+=step){
+    const y=cm*zoom+panY; if(y<22)continue;
+    hy+=`<div style="position:absolute;top:${y}px;left:0;width:100%;border-top:1px solid var(--line);padding-left:2px">${cm}</div>`;
+  }
+  ry.innerHTML=hy;
+}
+function niceStep(z){ const target=70/z; const steps=[10,20,50,100,200,500,1000,2000]; return steps.find(s=>s>=target)||2000; }
+
+/* ============================================================
+   TOOLBAR ACTIONS
+   ============================================================ */
+document.getElementById('snapBtn').onclick=()=>{ snap=!snap; document.getElementById('snapState').textContent=snap?'ჩართ.':'გამ.'; document.getElementById('snapBtn').classList.toggle('active',snap); };
+document.getElementById('snapBtn').classList.add('active');
+document.getElementById('snapSize').onchange=e=>snapSize=parseInt(e.target.value,10);
+document.getElementById('rotateBtn').onclick=rotateSel;
+document.getElementById('deleteBtn').onclick=deleteSel;
+document.getElementById('clearBtn').onclick=()=>{ if(pieces.length && confirm('ყველა ელემენტი წაიშალოს?')){ pieces=[]; selId=null; renderPieces(); } };
+function rotateSel(){ const p=pieces.find(x=>x.id===selId); if(p){ p.rot=(p.rot+90)%360; renderPieces(); } }
+function deleteSel(){ if(selId!=null){ pieces=pieces.filter(x=>x.id!==selId); selId=null; renderPieces(); } }
+
+document.getElementById('search').addEventListener('input',e=>buildPalette(e.target.value));
+
+/* keyboard */
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space' && !spaceDown && e.target.tagName!=='INPUT'){ spaceDown=true; stage.style.cursor='grab'; e.preventDefault(); }
+  if(e.target.tagName==='INPUT') return;
+  if(e.key==='r'||e.key==='R') rotateSel();
+  if(e.key==='Delete'||e.key==='Backspace'){ deleteSel(); e.preventDefault(); }
+});
+window.addEventListener('keyup',e=>{ if(e.code==='Space'){ spaceDown=false; stage.style.cursor='default'; } });
+
+/* ============================================================
+   SAVE / LOAD
+   ============================================================ */
+function autosave(){ try{ localStorage.setItem('du_formwork', JSON.stringify({pieces,nextId})); }catch(e){} }
+function load(){ try{ const d=JSON.parse(localStorage.getItem('du_formwork')); if(d&&d.pieces){ pieces=d.pieces; nextId=d.nextId||1; } }catch(e){} }
+
+document.getElementById('exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify({app:'du-formwork',version:1,pieces,nextId},null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='du-layout-'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+};
+document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{ const d=JSON.parse(rd.result); if(d.pieces){ pieces=d.pieces; nextId=d.nextId||pieces.length+1; selId=null; renderPieces(); fitView(); } }catch(err){ alert('ფაილის წაკითხვა ვერ მოხერხდა'); } };
+  rd.readAsText(f); e.target.value='';
+};
+
+/* ============================================================
+   INIT
+   ============================================================ */
+buildPalette();
+renderGrid();
+load();
+applyTransform();
+renderPieces();
+window.addEventListener('resize',()=>{ drawRulers(); renderDimTag(); });
+</script>
+</body>
+</html>
