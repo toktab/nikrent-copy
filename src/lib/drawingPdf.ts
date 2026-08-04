@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import type { DrawingDoc, Material, Piece } from '../types';
 import { contentBounds, pieceBounds, planH, planW } from './geometry';
 import { drawingSizeLabel } from './bom';
-import { barRect, lPoints } from './shapePath';
+import { barRect, scaledOutline } from './shapePath';
 import { stampedName } from './files';
 
 /**
@@ -152,7 +152,7 @@ function drawPiece(
   ctx.lineWidth = Math.max(1, cmToPx(0.4));
 
   if (m.shape === 'L') {
-    const pts = lPoints(w, h);
+    const pts = scaledOutline(m, w, h);
     ctx.beginPath();
     pts.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
     ctx.closePath();

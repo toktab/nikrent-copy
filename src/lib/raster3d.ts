@@ -126,12 +126,87 @@ function toRaster(raster: DepthRaster, p: ScreenPoint): ScreenPoint {
   return { x: p.x * raster.scale, y: p.y * raster.scale, depth: p.depth };
 }
 
-/** Rasterise one planar convex face given in CSS pixels. */
+interface Point2 {
+  x: number;
+  y: number;
+}
+
+/** Twice the signed area of a triangle; > 0 for a convex turn in this winding. */
+function turn(a: Point2, b: Point2, c: Point2): number {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+function strictlyInside(p: Point2, a: Point2, b: Point2, c: Point2): boolean {
+  const eps = 1e-9;
+  return turn(a, b, p) > eps && turn(b, c, p) > eps && turn(c, a, p) > eps;
+}
+
+/**
+ * Split a simple polygon into triangles by ear clipping.
+ *
+ * A triangle fan from the first vertex is the obvious approach and it is wrong
+ * for any concave outline. On an L-corner the fan produces triangles that lie
+ * *outside* the polygon, so colour spilled across the notch and left a diagonal
+ * seam where the spill happened to end.
+ */
+export function triangulate(poly: Point2[]): Array<[number, number, number]> {
+  const n = poly.length;
+  if (n < 3) return [];
+  if (n === 3) return [[0, 1, 2]];
+
+  // Work on an index ring wound so that a convex corner has `turn` > 0.
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % n];
+    area += a.x * b.y - b.x * a.y;
+  }
+  const ring = poly.map((_, i) => i);
+  if (area < 0) ring.reverse();
+
+  const out: Array<[number, number, number]> = [];
+  let guard = n * n;
+
+  while (ring.length > 3 && guard-- > 0) {
+    let clipped = false;
+    for (let i = 0; i < ring.length; i++) {
+      const i0 = ring[(i + ring.length - 1) % ring.length];
+      const i1 = ring[i];
+      const i2 = ring[(i + 1) % ring.length];
+      const a = poly[i0];
+      const b = poly[i1];
+      const c = poly[i2];
+      if (turn(a, b, c) <= 0) continue; // reflex vertex, not an ear
+
+      let empty = true;
+      for (const j of ring) {
+        if (j === i0 || j === i1 || j === i2) continue;
+        if (strictlyInside(poly[j], a, b, c)) {
+          empty = false;
+          break;
+        }
+      }
+      if (!empty) continue;
+
+      out.push([i0, i1, i2]);
+      ring.splice(i, 1);
+      clipped = true;
+      break;
+    }
+    // Degenerate input (repeated or collinear points): stop rather than spin.
+    if (!clipped) break;
+  }
+
+  if (ring.length === 3) out.push([ring[0], ring[1], ring[2]]);
+  return out;
+}
+
+/** Rasterise one planar face given in CSS pixels. Concave outlines are fine. */
 export function fillFace(raster: DepthRaster, pts: ScreenPoint[], colour: Rgb): void {
   if (pts.length < 3) return;
   const p = pts.map((q) => toRaster(raster, q));
-  for (let i = 2; i < p.length; i++) {
-    fillTriangle(raster, p[0], p[i - 1], p[i], colour);
+  for (const [a, b, c] of triangulate(p)) {
+    fillTriangle(raster, p[a], p[b], p[c], colour);
   }
 }
 

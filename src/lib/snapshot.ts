@@ -1,7 +1,7 @@
 import type { Material, Piece } from '../types';
 import { contentBounds, planH, planW } from './geometry';
 import { drawingSizeLabel } from './bom';
-import { barRect, lPoints } from './shapePath';
+import { barRect, scaledOutline } from './shapePath';
 
 /**
  * Renders the current drawing to an offscreen 2D canvas and returns a PNG data
@@ -135,7 +135,7 @@ function drawPiece(
   ctx.lineWidth = 1;
 
   if (m.shape === 'L') {
-    const pts = lPoints(w, h);
+    const pts = scaledOutline(m, w, h);
     ctx.beginPath();
     pts.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
     ctx.closePath();

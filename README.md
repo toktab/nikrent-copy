@@ -197,6 +197,15 @@ Shortcuts are written below with the macOS symbols; on Windows and Linux `⌘` i
   the drawing and short on the order. Corner profiles are also chosen per course: a 300 cm
   corner repeated on a 150 cm course stood 150 cm proud of the pour.
 
+  **Each corner is turned so its legs form the two outer faces.** An L is drawn with its legs
+  on the left and the bottom, so every corner needs a quarter turn on from that. All four
+  used to be one turn short, which pointed the notch outwards and buried a leg in the
+  concrete. It still reads as an L from most angles, which is how it survived; the test
+  probes the panel band on both outer faces and the pour itself instead of eyeballing it.
+
+  Corner legs are as thick as the panels they meet (9 cm). A flat 45 % of the box gave a
+  24 cm corner a 10.8 cm leg, reaching 1.8 cm past the panel line and into the pour.
+
   Without corner profiles the two X faces wrap the ends instead, pinwheel-fashion. Four
   faces each spanning only their own section leaves a panel-thickness hole at every box
   corner, so the box has to close the way it does on site.
@@ -279,14 +288,19 @@ edges stay parallel and the view keeps a measurable, CAD-like feel. Faces are ba
 culled by testing their outward normal against the view direction.
 
 **Shapes are extruded, not boxed.** The footprint comes from `planOutline` in
-`lib/shapePath.ts` — the same function the on-screen SVG and the PDF snapshot use — so an
-L-corner is extruded as an actual L. Extruding its bounding box instead drew corners as
-plain squares and filled in the notch the panels tuck into. Everything is derived from the
-outline's winding: read as the top ring it faces +Z, the base is that ring reversed, and each
-wall follows one outline edge, which puts the outward normal on the correct side even for the
-two walls inside a concave notch. `line` materials keep their full box rather than the
-slimmed, rounded bar the 2D view draws: that bar is a stylisation for legibility at small
-scale, whereas a waler's `depth` really is its profile.
+`lib/shapePath.ts` — the single source the on-screen SVG, the PDF snapshot, the printed
+drawing and the 3D view all share — so an L-corner is extruded as an actual L. Extruding its
+bounding box instead drew corners as plain squares and filled in the notch the panels tuck
+into. Everything is derived from the outline's winding: read as the top ring it faces +Z, the
+base is that ring reversed, and each wall follows one outline edge, which puts the outward
+normal on the correct side even for the two walls inside a concave notch. `line` materials
+keep their full box rather than the slimmed, rounded bar the 2D view draws: that bar is a
+stylisation for legibility at small scale, whereas a waler's `depth` really is its profile.
+
+**Faces are ear-clipped, not fanned.** A triangle fan from the first vertex is correct only
+for a convex polygon. On an L the fan emits triangles that lie *outside* the outline, so
+colour spilled across the notch and left a diagonal seam where the spill happened to stop —
+which is what made corners look wrong even once they were extruded as L's.
 
 **Orientation.** Plan `y` grows *downward* on screen, so `(x, y, z)` is a left-handed triple
 and the textbook camera formula silently mirrors the model — which reads as looking at the

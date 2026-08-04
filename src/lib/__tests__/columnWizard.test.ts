@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ColumnSpec, Material } from '../../types';
+import type { ColumnSpec, Material, Piece } from '../../types';
 import { coverExact, planColumn } from '../columnWizard';
-import { pieceBounds } from '../geometry';
+import { pieceBounds, planH, planW } from '../geometry';
+import { planOutline } from '../shapePath';
 import { createSeedMaterials } from '../../data/seedCatalog';
 
 const materials = createSeedMaterials();
@@ -23,6 +24,33 @@ const spec = (over: Partial<ColumnSpec> = {}): ColumnSpec => ({
 type Plan = ReturnType<typeof planColumn>;
 
 const materialOf = (id: string): Material => byId.get(id)!;
+
+/** A piece's outline in world cm, rotated and positioned as it will be drawn. */
+function worldOutline(p: Piece, m: Material): Array<[number, number]> {
+  const pw = planW(m);
+  const ph = planH(m);
+  const cx = p.x + pw / 2;
+  const cy = p.y + ph / 2;
+  const rad = (p.rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return planOutline(m).map(([x, y]): [number, number] => {
+    const ox = x - pw / 2;
+    const oy = y - ph / 2;
+    return [cx + ox * cos - oy * sin, cy + ox * sin + oy * cos];
+  });
+}
+
+function pointInPolygon(x: number, y: number, poly: Array<[number, number]>): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 const boxesOf = (plan: Plan, category: string) =>
   plan.pieces
     .filter((p) => materialOf(p.materialId).category === category)
@@ -131,6 +159,46 @@ describe('planColumn', () => {
 
       expect(topFace.x).toBeCloseTo(topLeft.x + topLeft.w); // no gap along x
       expect(leftFace.y).toBeCloseTo(topLeft.y + topLeft.h); // no gap along y
+    });
+
+    it('turns each corner so its legs form the two outer faces', () => {
+      // An L is drawn with its legs on the left and the bottom, so every corner
+      // needs a quarter turn on from where it sits in the catalog. Getting this
+      // wrong points the notch outwards and buries a leg in the concrete — it
+      // still looks like an L from most angles, which is why it survived.
+      const plan = planColumn(spec({ includeWalers: false }), materials);
+      const corners = plan.pieces.filter(
+        (p) => materialOf(p.materialId).category === 'corner',
+      );
+      expect(corners).toHaveLength(4);
+
+      for (const p of corners) {
+        const m = materialOf(p.materialId);
+        const poly = worldOutline(p, m);
+        const box = pieceBounds(p, m);
+        // Which side of the column is this corner on?
+        const left = box.x < 0;
+        const top = box.y < 0;
+
+        // 4.5 cm out from the concrete is inside the panel band, so the corner
+        // must cover it on both of its outer faces...
+        const alongTop = { x: left ? 5 : 55, y: top ? -4.5 : 64.5 };
+        const alongLeft = { x: left ? -4.5 : 64.5, y: top ? 5 : 55 };
+        expect(pointInPolygon(alongTop.x, alongTop.y, poly)).toBe(true);
+        expect(pointInPolygon(alongLeft.x, alongLeft.y, poly)).toBe(true);
+
+        // ...and must leave the pour itself completely clear.
+        const inside = { x: left ? 7 : 53, y: top ? 7 : 53 };
+        expect(pointInPolygon(inside.x, inside.y, poly)).toBe(false);
+      }
+    });
+
+    it('gives the corner legs the same thickness as the panels they meet', () => {
+      // A flat 45 % of the box made a 24 cm corner leg 10.8 cm, reaching
+      // 1.8 cm past the panel line and into the concrete.
+      const m = materials.find((x) => x.id === 'corner-outer-300')!;
+      const xs = [...new Set(planOutline(m).map(([x]) => x))].sort((a, b) => a - b);
+      expect(xs).toEqual([0, 9, 24]); // leg is 9 cm, the panel thickness
     });
 
     it('sets the corner in by the panel thickness it stands off', () => {

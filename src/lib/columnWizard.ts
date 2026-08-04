@@ -357,11 +357,16 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
     if (corner) {
       const cw = planW(corner);
       const ch = planH(corner);
+      // An L is drawn with its legs on the LEFT and the BOTTOM, so the notch
+      // starts out facing up-right. The top-left corner of the column needs its
+      // legs on the top and the left — a quarter turn on from that. Every spot
+      // used to be one turn short, which pointed each notch outwards and buried
+      // a leg in the concrete.
       const spots: Array<[number, number, number]> = [
-        [originX - panelDepth, originY - panelDepth, 0],
-        [originX + sectionX + panelDepth - cw, originY - panelDepth, 90],
-        [originX + sectionX + panelDepth - cw, originY + sectionY + panelDepth - ch, 180],
-        [originX - panelDepth, originY + sectionY + panelDepth - ch, 270],
+        [originX - panelDepth, originY - panelDepth, 90],
+        [originX + sectionX + panelDepth - cw, originY - panelDepth, 180],
+        [originX + sectionX + panelDepth - cw, originY + sectionY + panelDepth - ch, 270],
+        [originX - panelDepth, originY + sectionY + panelDepth - ch, 0],
       ];
       for (const [left, top, rot] of spots) {
         const { x, y } = placeAt(left, top, cw, ch, rot);

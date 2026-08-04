@@ -8,14 +8,26 @@ import { planH, planW } from './geometry';
  * the drawing, the printout and the visualisation always agree.
  */
 
-/** Leg thickness of an L-profile: a fraction of the smaller side. */
-export function legThickness(w: number, h: number): number {
-  return Math.max(0.5, Math.min(w, h) * 0.45);
+/** Du panels are 9 cm thick, and corner legs follow them. */
+const PANEL_LEG_CM = 9;
+
+/**
+ * Leg thickness of an L-profile, in the same units as `w`/`h`.
+ *
+ * A corner profile wraps the outside of the formwork box, so its legs are as
+ * thick as the panels they sit against — that is what makes its inner faces
+ * line up with the panel faces and leave the concrete clear. The old flat 45 %
+ * of the box gave a 24 cm corner a 10.8 cm leg, which reached 1.8 cm past the
+ * panel line and into the pour. Falls back to the proportional rule only when
+ * the box is too small to take a full panel thickness.
+ */
+export function legThickness(w: number, h: number, panelThickness = PANEL_LEG_CM): number {
+  return Math.max(0.5, Math.min(panelThickness, Math.min(w, h) * 0.45));
 }
 
 /** L-profile: vertical leg on the left, horizontal leg along the bottom. */
-export function lPoints(w: number, h: number): Array<[number, number]> {
-  const t = legThickness(w, h);
+export function lPoints(w: number, h: number, panelThickness = PANEL_LEG_CM): Array<[number, number]> {
+  const t = legThickness(w, h, panelThickness);
   return [
     [0, 0],
     [t, 0],
@@ -68,6 +80,17 @@ export function planOutline(m: Material): Array<[number, number]> {
     [pw, ph],
     [0, ph],
   ];
+}
+
+/**
+ * The same outline scaled into a renderer's own units — the px canvases work in
+ * scaled pixels, but a corner's leg thickness is a real 9 cm and has to be
+ * scaled with everything else rather than taken as 9 px.
+ */
+export function scaledOutline(m: Material, w: number, h: number): Array<[number, number]> {
+  const sx = w / planW(m);
+  const sy = h / planH(m);
+  return planOutline(m).map(([x, y]): [number, number] => [x * sx, y * sy]);
 }
 
 /** Twice the signed area; positive means the winding described above. */

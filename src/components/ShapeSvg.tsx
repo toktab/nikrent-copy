@@ -1,5 +1,5 @@
 import type { Material } from '../types';
-import { barRect, lPoints, pointsAttr } from '../lib/shapePath';
+import { barRect, planOutline, pointsAttr } from '../lib/shapePath';
 import { planH, planW } from '../lib/geometry';
 
 interface Props {
@@ -34,7 +34,7 @@ export function ShapeSvg({ material: m, width, height, strokeWidth = 1, opacity 
       aria-hidden="true"
     >
       {m.shape === 'L' ? (
-        <polygon points={pointsAttr(lPoints(pw, ph))} fill={m.color} stroke={stroke} strokeWidth={sw} />
+        <polygon points={pointsAttr(planOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />
       ) : m.shape === 'line' ? (
         <LineBar m={m} stroke={stroke} strokeWidth={sw} />
       ) : (
