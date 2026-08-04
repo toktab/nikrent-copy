@@ -162,6 +162,8 @@ export type DialogState =
   | { kind: 'warehouses' }
   | { kind: 'title-block' }
   | { kind: 'documents' }
+  | { kind: 'users' }
+  | { kind: 'password' }
   | {
       kind: 'confirm';
       title: string;

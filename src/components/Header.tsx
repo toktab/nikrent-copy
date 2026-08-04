@@ -9,6 +9,8 @@ import {
 } from '../lib/catalogFile';
 import { pickFile, readFileAsText } from '../lib/files';
 import { combo } from '../lib/platform';
+import { SyncBadge } from './SyncBadge';
+import { UserMenu } from './UserMenu';
 
 const SNAP_STEPS = [1, 5, 10, 25];
 
@@ -313,6 +315,11 @@ export function Header() {
           <button className="btn" onClick={fitToContent} title="ჩატევა">
             ⤢ ცენტრი
           </button>
+        </div>
+
+        <div className="header-right">
+          <SyncBadge />
+          <UserMenu />
         </div>
       </div>
 

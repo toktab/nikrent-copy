@@ -6,3 +6,6 @@ dist-ssr
 .DS_Store
 *.log
 .claude/settings.local.json
+
+# Supabase CLI scratch (project link, temp build state)
+supabase/.temp/

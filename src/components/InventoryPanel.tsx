@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER, categoryLabel } from '../data/categories';
 import { fmtMoney, sizeLabel } from '../lib/bom';
 import { commitmentsByMaterial, emptyCommitment, stockIn, totalStock } from '../lib/inventory';
@@ -14,6 +15,7 @@ export function InventoryPanel() {
   const activeDocId = useEditorStore((s) => s.activeDocId);
   const warehouses = useEditorStore((s) => s.warehouses);
   const setStock = useEditorStore((s) => s.setStock);
+  const canManage = useCanManageCatalog();
   const openDialog = useEditorStore((s) => s.openDialog);
 
   const [query, setQuery] = useState('');
@@ -196,6 +198,7 @@ export function InventoryPanel() {
                         min={0}
                         step={1}
                         value={stockIn(m, editingId)}
+                        disabled={!canManage}
                         onChange={(e) => setStock(m.id, editingId, Number(e.target.value))}
                       />
                       {multi && <span className="bom-size">სულ {owned}</span>}

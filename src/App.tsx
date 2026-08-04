@@ -14,6 +14,8 @@ import { DocumentsDialog } from './components/DocumentsDialog';
 import { ColumnWizardDialog } from './components/ColumnWizardDialog';
 import { WarehousesDialog } from './components/WarehousesDialog';
 import { TitleBlockDialog } from './components/TitleBlockDialog';
+import { UsersDialog } from './components/UsersDialog';
+import { PasswordDialog } from './components/PasswordDialog';
 
 export default function App() {
   const dialog = useEditorStore((s) => s.dialog);
@@ -106,6 +108,8 @@ export default function App() {
       {dialog?.kind === 'column-wizard' && <ColumnWizardDialog />}
       {dialog?.kind === 'warehouses' && <WarehousesDialog />}
       {dialog?.kind === 'title-block' && <TitleBlockDialog />}
+      {dialog?.kind === 'users' && <UsersDialog />}
+      {dialog?.kind === 'password' && <PasswordDialog />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}

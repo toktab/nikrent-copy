@@ -28,9 +28,42 @@ import {
 import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
+import { isConfigured } from '../lib/supabase';
+import type { DataSnapshot } from '../lib/syncDiff';
 
 export const STORAGE_KEY = 'du-formwork-v2';
+
+/**
+ * Where preferences go once the backend is in use.
+ *
+ * Deliberately a different key from `STORAGE_KEY`. With a server, company data
+ * is no longer persisted locally, so writing preferences back to the old key
+ * would overwrite the saved catalog and drawings with a file containing
+ * nothing but zoom and toggle states — destroying the very data the migration
+ * exists to import. Leaving that key untouched also keeps it as an on-disk
+ * backup of everything from before the move.
+ */
+export const PREFS_KEY = 'du-formwork-prefs';
+
 const HISTORY_LIMIT = 80;
+
+/** Settings that belong to one person on one machine, not to the company. */
+const PREF_KEYS = [
+  'zoom',
+  'panX',
+  'panY',
+  'snap',
+  'snapStep',
+  'edgeSnap',
+  'showDims',
+  'showNames',
+  'forceLabels',
+  'showOverlaps',
+  'viewMode',
+  'hiddenLines',
+  'paletteOpen',
+  'inspectorOpen',
+] as const;
 
 /**
  * One-off corrections to built-in sizes that were wrong in the v1 port.
@@ -72,6 +105,12 @@ export interface EditorState {
   documents: DrawingDoc[];
   activeDocId: string;
   warehouses: Warehouse[];
+  /**
+   * False until the server's data has been loaded. The sync engine watches
+   * this: pushing before it is true would upload the seed catalog and the
+   * empty starter drawing over whatever the company actually has.
+   */
+  dataLoaded: boolean;
 
   // ── history ──
   past: DocSnapshot[];
@@ -114,6 +153,12 @@ export interface EditorState {
   guideY: number | null;
   /** material being dragged in from the palette, for the drop preview */
   draggingMaterialId: string | null;
+
+  // ── actions: data ──
+  /** Replace all company data with what the server holds. */
+  hydrateFromServer: (snapshot: DataSnapshot) => void;
+  /** Mark the local-only path as ready, when there is no server to wait for. */
+  markLoadedOffline: () => void;
 
   // ── actions: view ──
   setStageSize: (w: number, h: number) => void;
@@ -288,6 +333,8 @@ export const useEditorStore = create<EditorState>()(
         documents: [firstDoc],
         activeDocId: firstDoc.id,
         warehouses: [{ ...DEFAULT_WAREHOUSE }],
+        // With a server, nothing here is real until it has been loaded.
+        dataLoaded: !isConfigured,
 
         past: [],
         future: [],
@@ -318,6 +365,51 @@ export const useEditorStore = create<EditorState>()(
         guideX: null,
         guideY: null,
         draggingMaterialId: null,
+
+        // ── data ──────────────────────────────────────────────────────────
+        /**
+         * Adopt the server's data wholesale.
+         *
+         * Gaps are filled rather than left empty so a brand-new project is
+         * usable immediately: no warehouse means the default store, no catalog
+         * means the built-in Du materials, no drawings means one blank sheet.
+         * Whatever is filled in here is pushed up by the next sync, so the
+         * server ends up holding it too.
+         */
+        hydrateFromServer: (snapshot) =>
+          set((s) => {
+            const materials = snapshot.materials.length
+              ? snapshot.materials
+              : createSeedMaterials();
+            applySizeFixes(materials);
+
+            const warehouses = snapshot.warehouses.length
+              ? snapshot.warehouses
+              : [{ ...DEFAULT_WAREHOUSE }];
+
+            const documents = snapshot.documents.length
+              ? snapshot.documents
+              : [newDoc('ნახაზი 1')];
+
+            // Stay on the same drawing across a reload where possible.
+            const active =
+              documents.find((d) => d.id === s.activeDocId) ?? documents[0];
+
+            return {
+              materials,
+              warehouses,
+              documents,
+              activeDocId: active.id,
+              pieces: active.pieces,
+              removedBuiltins: [],
+              dataLoaded: true,
+              selectedIds: [],
+              past: [],
+              future: [],
+            };
+          }),
+
+        markLoadedOffline: () => set({ dataLoaded: true }),
 
         // ── view ──────────────────────────────────────────────────────────
         setStageSize: (w, h) => set({ stageW: w, stageH: h }),
@@ -829,7 +921,9 @@ export const useEditorStore = create<EditorState>()(
       };
     },
     {
-      name: STORAGE_KEY,
+      // With a backend, only preferences are kept locally, and under their own
+      // key — see PREFS_KEY for why sharing the old one would destroy data.
+      name: isConfigured ? PREFS_KEY : STORAGE_KEY,
       version: 3,
       storage: safeStorage,
       // v2 stored a single top-level `pieces` array instead of named drawings.
@@ -849,31 +943,31 @@ export const useEditorStore = create<EditorState>()(
           'შენახული ნახაზი ვერ ჩაიტვირთა და შესაძლოა დაიკარგოს. გააკეთე ექსპორტი და გადატვირთე გვერდი.',
         );
       },
-      // Autosave: catalog + inventory + every drawing + settings.
-      // Selection, history and dialogs stay transient.
-      partialize: (s) => ({
-        materials: s.materials,
-        removedBuiltins: s.removedBuiltins,
-        documents: s.documents,
-        activeDocId: s.activeDocId,
-        warehouses: s.warehouses,
-        zoom: s.zoom,
-        panX: s.panX,
-        panY: s.panY,
-        snap: s.snap,
-        snapStep: s.snapStep,
-        edgeSnap: s.edgeSnap,
-        showDims: s.showDims,
-        showNames: s.showNames,
-        forceLabels: s.forceLabels,
-        showOverlaps: s.showOverlaps,
-        viewMode: s.viewMode,
-        hiddenLines: s.hiddenLines,
-        paletteOpen: s.paletteOpen,
-        inspectorOpen: s.inspectorOpen,
-      }),
+      /**
+       * With a backend, company data belongs to the server and only the
+       * per-device preferences are written locally. Without one, everything is
+       * saved exactly as before so the offline path is unchanged.
+       */
+      partialize: (s) => {
+        const prefs = Object.fromEntries(
+          PREF_KEYS.map((key) => [key, s[key]]),
+        ) as Partial<EditorState>;
+        if (isConfigured) return prefs;
+        return {
+          ...prefs,
+          materials: s.materials,
+          removedBuiltins: s.removedBuiltins,
+          documents: s.documents,
+          activeDocId: s.activeDocId,
+          warehouses: s.warehouses,
+        };
+      },
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<EditorState> & { pieces?: Piece[] };
+
+        // Preferences only; the catalog and drawings arrive from the server.
+        if (isConfigured) return { ...current, ...saved, dataLoaded: false };
+
         const { documents, activeDocId, pieces } = restoreDocuments(saved);
         const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
@@ -910,7 +1004,7 @@ onStorageFailure = (message) => {
  * Restores the drawing list. Handles state saved before named drawings existed,
  * where a single `pieces` array lived at the top level.
  */
-function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
+export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
   documents: DrawingDoc[];
   activeDocId: string;
   pieces: Piece[];
@@ -943,7 +1037,7 @@ function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
  * Restores the warehouse list, inventing entries for any store id that stock
  * still references — otherwise counted quantities would become unreachable.
  */
-function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[]): Warehouse[] {
+export function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[]): Warehouse[] {
   const warehouses: Warehouse[] = Array.isArray(stored)
     ? stored
         .filter((w): w is Warehouse => !!w && typeof w.id === 'string')
@@ -973,7 +1067,7 @@ function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[
  *  - re-adds built-ins that a newer app version introduced,
  *  - respects built-ins the user deleted on purpose.
  */
-function mergeCatalog(
+export function mergeCatalog(
   stored: Material[] | undefined,
   removedBuiltins: string[] | undefined,
 ): Material[] {

@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { AuthGate } from './components/AuthGate';
+import { DataGate } from './components/DataGate';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles.css';
 
@@ -10,7 +12,11 @@ if (!container) throw new Error('#root not found');
 createRoot(container).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <AuthGate>
+        <DataGate>
+          <App />
+        </DataGate>
+      </AuthGate>
     </ErrorBoundary>
   </StrictMode>,
 );
