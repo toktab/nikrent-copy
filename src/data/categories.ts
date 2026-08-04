@@ -10,7 +10,7 @@ export interface CategoryDef {
 /** Copied verbatim from the v1 prototype's CATS map. */
 export const CATEGORIES: Record<Category, CategoryDef> = {
   panel: { name: 'პანელები', color: '#c9a36a' },
-  waler: { name: 'ვალერები / სამაგრები', color: '#6fa8dc' },
+  waler: { name: 'ვოლერები / სამაგრები', color: '#6fa8dc' },
   corner: { name: 'კუთხეები', color: '#93c47d' },
   post: { name: 'დგარები', color: '#b48ead' },
   filler: { name: 'ჩაკერებები', color: '#e0b872' },

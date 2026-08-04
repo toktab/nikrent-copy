@@ -74,11 +74,30 @@ describe('buildBom', () => {
     expect(bom.shortageCount).toBe(1);
   });
 
-  it('sums length for linear items and area for the rest', () => {
+  it('sums the length of every structural item, not just the linear ones', () => {
+    // A "პანელი 45*300" is 3 m long exactly like a 3 m waler. Counting length
+    // only for `shape: 'line'` left panels, corners and fillers — most of a
+    // real order — reporting nothing at all.
     const bom = buildBom([panel, waler], [piece('panel', 'a'), piece('waler', 'b')]);
-    // panel 45×300 cm = 1.35 m², waler length 300 cm = 3 m
+    expect(bom.totalLengthM).toBeCloseTo(6); // 3 m panel + 3 m waler
+    expect(bom.groups.find((g) => g.category === 'panel')!.rows[0].lengthM).toBeCloseTo(3);
+  });
+
+  it('counts face area only for what actually forms the concrete face', () => {
+    const bom = buildBom([panel, waler], [piece('panel', 'a'), piece('waler', 'b')]);
+    // panel 45×300 cm = 1.35 m²; a waler has a profile, not a face
     expect(bom.totalAreaM2).toBeCloseTo(1.35);
-    expect(bom.totalLengthM).toBeCloseTo(3);
+    expect(bom.groups.find((g) => g.category === 'waler')!.rows[0].areaM2).toBe(0);
+  });
+
+  it('gives accessories neither a length nor an area', () => {
+    // A nut is ordered by the piece; 8 cm of "length" per nut is noise in the
+    // metres total and 0.0064 m² is noise in the area total.
+    const nut = material({ id: 'nut', name: 'ქანჩი', category: 'acc', w: 8, h: 8 });
+    const bom = buildBom([nut], [piece('nut', 'a')]);
+    expect(bom.totalLengthM).toBe(0);
+    expect(bom.totalAreaM2).toBe(0);
+    expect(bom.totalPieces).toBe(1);
   });
 
   it('totals cost and weight', () => {

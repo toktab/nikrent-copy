@@ -183,6 +183,8 @@ export function parseLayoutFile(text: string): Piece[] {
       x: num(r.x, 0),
       y: num(r.y, 0),
       rot,
+      // elevation is optional; files written before it existed sit on the ground
+      z: Math.max(0, num(r.z, 0)),
     });
   }
   if (!pieces.length) throw new Error('ფაილში ვალიდური ელემენტი არ არის.');

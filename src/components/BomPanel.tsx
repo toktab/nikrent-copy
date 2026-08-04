@@ -145,6 +145,8 @@ export function BomPanel() {
                       <span className="bom-name">{r.material.name}</span>
                       <span className="bom-size">
                         {sizeLabel(r.material)} სმ
+                        {r.lengthM > 0 ? ` · ${fmtNum(r.lengthM)} მ` : ''}
+                        {r.weightKg > 0 ? ` · ${fmtNum(r.weightKg)} კგ` : ''}
                         {r.cost > 0 ? ` · ${fmtMoney(r.cost)}` : ''}
                       </span>
                     </td>
@@ -163,6 +165,7 @@ export function BomPanel() {
                     ჯამი
                     {g.lengthM > 0 && <span className="bom-size">{fmtNum(g.lengthM)} მ</span>}
                     {g.areaM2 > 0 && <span className="bom-size">{fmtNum(g.areaM2)} მ²</span>}
+                    {g.weightKg > 0 && <span className="bom-size">{fmtNum(g.weightKg)} კგ</span>}
                     {g.cost > 0 && <span className="bom-size">{fmtMoney(g.cost)}</span>}
                   </td>
                   <td className="num">{g.pieces}</td>

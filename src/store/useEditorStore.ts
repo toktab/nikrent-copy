@@ -6,12 +6,13 @@ import type {
   DialogState,
   DocSnapshot,
   DrawingDoc,
+  HiddenLineMode,
   Material,
   MaterialDraft,
   Piece,
   Warehouse,
 } from '../types';
-import { SEED_MATERIALS, createSeedMaterials } from '../data/seedCatalog';
+import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { sanitizeMaterial } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -30,6 +31,37 @@ import { planColumn } from '../lib/columnWizard';
 
 export const STORAGE_KEY = 'du-formwork-v2';
 const HISTORY_LIMIT = 80;
+
+/**
+ * One-off corrections to built-in sizes that were wrong in the v1 port.
+ *
+ * Applied only where the stored value still matches the wrong one, so a company
+ * that has already entered its own size keeps it. Without this, a saved catalog
+ * would carry the broken dimension forever — stored materials always win over
+ * the seed, which is what makes user edits stick.
+ *
+ * Must stay ABOVE `create()`: rehydration runs while the store is being built,
+ * so anything it reaches has to be initialised by then. A `const` declared
+ * further down the file is still in its temporal dead zone at that moment, and
+ * the ReferenceError is swallowed by the persist middleware — the saved drawing
+ * is silently dropped and then overwritten with an empty one.
+ */
+const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number }> = [
+  // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
+  // concrete face. The mismatch left a hole beside every corner and made the
+  // column wizard lay panels that did not reach the corner profile.
+  { id: 'corner-outer-300', fromW: 15, toW: 24 },
+];
+
+/** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
+export function applySizeFixes(materials: Material[]): void {
+  for (const fix of BUILTIN_SIZE_FIXES) {
+    const m = materials.find((x) => x.id === fix.id);
+    if (!m || !m.builtin || m.w !== fix.fromW) continue;
+    m.w = fix.toW;
+    m.depth = defaultDepth(m.category, m.w, m.h);
+  }
+}
 
 export interface EditorState {
   // ── data ──
@@ -62,8 +94,10 @@ export interface EditorState {
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
   showOverlaps: boolean;
-  /** what a plain wheel / two-finger scroll does; the modifier does the other */
-  wheelMode: 'pan' | 'zoom';
+  /** 2D plan editor, or the read-only 3D visualisation */
+  viewMode: '2d' | '3d';
+  /** what the 3D view does with edges that sit behind other pieces */
+  hiddenLines: HiddenLineMode;
   /** side panels can be folded away to give the canvas room on small screens */
   paletteOpen: boolean;
   inspectorOpen: boolean;
@@ -138,7 +172,8 @@ export interface EditorState {
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
-  setWheelMode: (mode: 'pan' | 'zoom') => void;
+  setViewMode: (mode: '2d' | '3d') => void;
+  setHiddenLines: (mode: HiddenLineMode) => void;
   setPaletteOpen: (on: boolean) => void;
   setInspectorOpen: (on: boolean) => void;
   setPaletteQuery: (q: string) => void;
@@ -268,7 +303,8 @@ export const useEditorStore = create<EditorState>()(
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
-        wheelMode: 'pan',
+        viewMode: '2d',
+        hiddenLines: 'hide',
         // Start folded on a phone-ish window so the canvas is usable at all.
         paletteOpen: typeof window === 'undefined' || window.innerWidth > 900,
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
@@ -702,7 +738,8 @@ export const useEditorStore = create<EditorState>()(
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
-        setWheelMode: (mode) => set({ wheelMode: mode }),
+        setViewMode: (mode) => set({ viewMode: mode }),
+        setHiddenLines: (mode) => set({ hiddenLines: mode }),
         setPaletteOpen: (on) => set({ paletteOpen: on }),
         setInspectorOpen: (on) => set({ inspectorOpen: on }),
         setPaletteQuery: (q) => set({ paletteQuery: q }),
@@ -798,6 +835,20 @@ export const useEditorStore = create<EditorState>()(
       // v2 stored a single top-level `pieces` array instead of named drawings.
       // `merge` normalises either shape, so migration just passes state through.
       migrate: (persisted) => persisted as Partial<EditorState>,
+      /**
+       * The persist middleware swallows anything `merge` throws: the store is
+       * left on its empty defaults and the next autosave writes those over the
+       * user's saved work. That is the worst possible failure mode and it is
+       * completely silent, so it gets reported here instead — loudly, and
+       * before the banner tells the user to export what is left.
+       */
+      onRehydrateStorage: () => (_state, error) => {
+        if (!error) return;
+        console.error('შენახული მონაცემების წაკითხვა ვერ მოხერხდა', error);
+        onStorageFailure(
+          'შენახული ნახაზი ვერ ჩაიტვირთა და შესაძლოა დაიკარგოს. გააკეთე ექსპორტი და გადატვირთე გვერდი.',
+        );
+      },
       // Autosave: catalog + inventory + every drawing + settings.
       // Selection, history and dialogs stay transient.
       partialize: (s) => ({
@@ -816,7 +867,8 @@ export const useEditorStore = create<EditorState>()(
         showNames: s.showNames,
         forceLabels: s.forceLabels,
         showOverlaps: s.showOverlaps,
-        wheelMode: s.wheelMode,
+        viewMode: s.viewMode,
+        hiddenLines: s.hiddenLines,
         paletteOpen: s.paletteOpen,
         inspectorOpen: s.inspectorOpen,
       }),
@@ -935,6 +987,7 @@ function mergeCatalog(
     taken.add(m.id);
     materials.push(m);
   }
+  applySizeFixes(materials);
 
   const removed = new Set(removedBuiltins ?? []);
   for (const seed of createSeedMaterials()) {

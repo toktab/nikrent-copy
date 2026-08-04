@@ -5,6 +5,13 @@ export type Category = 'panel' | 'waler' | 'corner' | 'post' | 'filler' | 'rod' 
 export type Shape = 'rect' | 'L' | 'line';
 
 /**
+ * What the 3D view does with edges that are behind other pieces:
+ * drop them entirely, draw them dashed, or show everything (x-ray, handy for
+ * checking ties buried inside a column).
+ */
+export type HiddenLineMode = 'hide' | 'dashed' | 'show';
+
+/**
  * Stock is held per warehouse: `{ [warehouseId]: quantity }`. Companies that
  * only ever use one store see a single number in the UI and never meet the
  * concept. See `lib/inventory.ts` for the helpers.
@@ -56,8 +63,17 @@ export interface Piece {
   /** cm, top-left of the un-rotated box in world coordinates */
   x: number;
   y: number;
-  /** 0 | 90 | 180 | 270 */
+  /** rotation in degrees, any angle */
   rot: number;
+  /**
+   * Elevation of the piece's underside in cm, 0 = on the ground.
+   *
+   * The 2D surface is a plan view and ignores this entirely — two pieces at
+   * different heights sit on top of each other in plan, which is correct. It
+   * exists so stacked courses and waler rings are real, counted pieces rather
+   * than a multiplier, and so the 3D view can show them at the right height.
+   */
+  z?: number;
 }
 
 /** Everything a material needs except its identity flags. */

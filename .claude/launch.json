@@ -6,6 +6,12 @@
       "runtimeExecutable": "/Users/tornikegogichaishvili/.local/node-v24.18.1-darwin-arm64/bin/node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5173", "--strictPort"],
       "port": 5173
+    },
+    {
+      "name": "du-formwork-preview",
+      "runtimeExecutable": "/Users/tornikegogichaishvili/.local/node-v24.18.1-darwin-arm64/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "preview", "--port", "4173", "--strictPort"],
+      "port": 4173
     }
   ]
 }

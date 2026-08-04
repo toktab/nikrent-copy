@@ -10,6 +10,7 @@ const HEADERS = [
   'ზომა (სმ) / Size (cm)',
   'არტიკული / Article',
   'რაოდენობა / Quantity',
+  'სიგრძე (მ) / Length (m)',
   'მარაგი / In stock',
   'ნაშთი / Remaining',
   'ერთ. ფასი / Unit price',
@@ -30,6 +31,7 @@ function bomRows(bom: Bom): Cell[][] {
         sizeLabel(row.material),
         row.material.article,
         row.used,
+        Number(fmtNum(row.lengthM)),
         row.stock,
         row.remaining,
         row.material.price,
@@ -43,6 +45,7 @@ function bomRows(bom: Bom): Cell[][] {
       '',
       '',
       group.pieces,
+      Number(fmtNum(group.lengthM)),
       '',
       '',
       '',
@@ -58,6 +61,7 @@ function bomRows(bom: Bom): Cell[][] {
     '',
     '',
     bom.totalPieces,
+    Number(fmtNum(bom.totalLengthM)),
     '',
     '',
     '',
@@ -121,7 +125,7 @@ export function exportBomToExcel(bom: Bom): void {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
     wb,
-    makeSheet(bomRows(bom), [34, 22, 15, 16, 12, 11, 11, 13, 13, 13]),
+    makeSheet(bomRows(bom), [34, 22, 15, 16, 12, 14, 11, 11, 13, 13, 13]),
     'უწყისი',
   );
   XLSX.utils.book_append_sheet(wb, makeSheet(summaryRows(bom), [24, 12, 16, 16, 15, 14, 12]), 'შეჯამება');

@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './store/useEditorStore';
+import { combo } from './lib/platform';
 import { Header } from './components/Header';
 import { Palette } from './components/Palette';
 import { StageCanvas } from './components/StageCanvas';
+import { View3D } from './components/View3D';
 import { SidePanel } from './components/SidePanel';
 import { MaterialFormDialog } from './components/MaterialFormDialog';
 import { SheetImportDialog } from './components/SheetImportDialog';
@@ -18,6 +20,7 @@ export default function App() {
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const toast = useEditorStore((s) => s.toast);
   const setToast = useEditorStore((s) => s.setToast);
+  const viewMode = useEditorStore((s) => s.viewMode);
   const paletteOpen = useEditorStore((s) => s.paletteOpen);
   const inspectorOpen = useEditorStore((s) => s.inspectorOpen);
   const setPaletteOpen = useEditorStore((s) => s.setPaletteOpen);
@@ -46,7 +49,7 @@ export default function App() {
           </button>
         )}
 
-        <StageCanvas />
+        {viewMode === '3d' ? <View3D /> : <StageCanvas />}
 
         {inspectorOpen ? (
           <SidePanel />
@@ -69,19 +72,19 @@ export default function App() {
           <kbd>R</kbd> მოტრიალება
         </span>
         <span>
-          <kbd>Del</kbd> წაშლა
+          <kbd>{combo(['del'])}</kbd> წაშლა
         </span>
         <span>
-          <kbd>⌘Z</kbd> დაბრუნება
+          <kbd>{combo(['mod', 'Z'])}</kbd> დაბრუნება
         </span>
         <span>
-          <kbd>⌘D</kbd> დუბლირება
+          <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
         </span>
         <span>
           <kbd>ისრები</kbd> გადაწევა
         </span>
         <span>
-          <kbd>Shift</kbd>+კლიკი — მონიშვნის დამატება
+          <kbd>{combo(['shift'])}</kbd>+კლიკი — მონიშვნის დამატება
         </span>
         <span>
           <kbd>Space</kbd>+თრევა ან შუა ღილაკი — ხედის გადაწევა
@@ -90,7 +93,7 @@ export default function App() {
           <kbd>ორი თითი</kbd> ხედის გადაწევა
         </span>
         <span>
-          <kbd>⌘/Ctrl</kbd>+სქროლი ან პინჩი — მასშტაბი
+          <kbd>{combo(['mod'])}</kbd>+სქროლი ან პინჩი — მასშტაბი
         </span>
       </footer>
 

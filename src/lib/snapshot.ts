@@ -165,18 +165,44 @@ function drawLabel(
   const boxW = (upright ? planW(m) : planH(m)) * scale;
   const boxH = (upright ? planH(m) : planW(m)) * scale;
   const text = drawingSizeLabel(m);
-  const font = 10;
+  const cx = tx(p.x + planW(m) / 2);
+  const cy = ty(p.y + planH(m) / 2);
+  const vertical = boxH > boxW;
+  const along = vertical ? boxH : boxW;
+  const across = vertical ? boxW : boxH;
+  const font = (px: number) =>
+    `600 ${px}px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif`;
 
   ctx.save();
-  ctx.font = `600 ${font}px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const textW = ctx.measureText(text).width;
+  ctx.fillStyle = 'rgba(0,0,0,.78)';
 
-  if (textW + 6 <= boxW && font + 4 <= boxH) {
-    ctx.fillStyle = 'rgba(0,0,0,.78)';
-    ctx.fillText(text, tx(p.x + planW(m) / 2), ty(p.y + planH(m) / 2));
+  // Bars carry their dimension along the length; compact pieces must fit both
+  // ways, so shrink the font before falling back to a leadered outside label.
+  const bar = m.shape === 'line' || along >= across * 4;
+  for (const px of [11, 9, 7.5]) {
+    ctx.font = font(px);
+    const w = ctx.measureText(text).width;
+    if (w + 4 <= along && (bar || px * 1.15 <= across)) {
+      ctx.translate(cx, cy);
+      if (vertical) ctx.rotate(-Math.PI / 2);
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+      return;
+    }
   }
+
+  const px = 9;
+  ctx.font = font(px);
+  const ly = cy - boxH / 2 - 5 - px / 2;
+  ctx.strokeStyle = 'rgba(0,0,0,.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - boxH / 2);
+  ctx.lineTo(cx, ly + px / 2);
+  ctx.stroke();
+  ctx.fillText(text, cx, ly);
   ctx.restore();
 }
 

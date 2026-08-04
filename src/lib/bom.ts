@@ -58,11 +58,34 @@ export interface Bom {
 }
 
 /**
+ * Length in metres for one piece of this material.
+ *
+ * Every structural element has a real length: a "პანელი 30*300" is 3 m long,
+ * exactly like a 3 m waler. Length used to be counted only for `shape: 'line'`
+ * materials, so panels, corners and fillers — most of a real order — reported
+ * nothing and the total read far too low.
+ *
+ * Accessories are the exception: a nut or a clamp is ordered by the piece, and
+ * neither a length nor an area means anything for it.
+ */
+export function unitLengthM(m: Material): number {
+  return m.category === 'acc' ? 0 : lengthCm(m) / 100;
+}
+
+/**
+ * Formwork face area in m² for one piece — only the materials that actually
+ * form the concrete face (panels, fillers, corners). Linear members have a
+ * profile, not a face, and accessories have neither.
+ */
+export function unitAreaM2(m: Material): number {
+  return isLinear(m) || m.category === 'acc' ? 0 : (m.w * m.h) / 10000;
+}
+
+/**
  * Live bill of materials for the pieces passed in (normally the active drawing).
  *
- * Length is summed for linear materials (shape `line`: walers, tie rods, posts)
- * using their longer side; area is summed for everything else (panels, fillers,
- * corners, accessories) as w × h.
+ * Each row carries both a length and an area; see `unitLengthM` / `unitAreaM2`
+ * for which materials get which.
  *
  * `documents` is optional: when supplied, each row also reports how much of the
  * stock is committed across every drawing, not just this one.
@@ -112,8 +135,8 @@ export function buildBom(
       const count = used.get(m.id) ?? 0;
       if (count === 0) continue; // BOM only lists what is actually used
 
-      const rowLength = isLinear(m) ? (count * lengthCm(m)) / 100 : 0;
-      const rowArea = isLinear(m) ? 0 : (count * m.w * m.h) / 10000;
+      const rowLength = count * unitLengthM(m);
+      const rowArea = count * unitAreaM2(m);
       const stock = totalStock(m);
       const commitment = commitments.get(m.id) ?? emptyCommitment();
       const rowCost = count * m.price;

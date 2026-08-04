@@ -8,6 +8,7 @@ import {
   parseLayoutFile,
 } from '../lib/catalogFile';
 import { pickFile, readFileAsText } from '../lib/files';
+import { combo } from '../lib/platform';
 
 const SNAP_STEPS = [1, 5, 10, 25];
 
@@ -20,7 +21,7 @@ export function Header() {
   const forceLabels = useEditorStore((s) => s.forceLabels);
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
-  const wheelMode = useEditorStore((s) => s.wheelMode);
+  const viewMode = useEditorStore((s) => s.viewMode);
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
   const selectedIds = useEditorStore((s) => s.selectedIds);
@@ -38,7 +39,7 @@ export function Header() {
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
-  const setWheelMode = useEditorStore((s) => s.setWheelMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
@@ -203,6 +204,23 @@ export function Header() {
           </button>
         </div>
 
+        <div className="view-switch" role="group" aria-label="ხედი">
+          <button
+            className={`btn small${viewMode === '2d' ? ' active' : ''}`}
+            onClick={() => setViewMode('2d')}
+            title="გეგმა — რედაქტირებადი"
+          >
+            2D
+          </button>
+          <button
+            className={`btn small${viewMode === '3d' ? ' active' : ''}`}
+            onClick={() => setViewMode('3d')}
+            title="სივრცითი ხედი — მხოლოდ სანახავად"
+          >
+            3D
+          </button>
+        </div>
+
         {shortages > 0 && (
           <span className="shortage-badge" title="კომპონენტი, რომლის მარაგიც არ ჰყოფნის">
             ⚠ დეფიციტი: {shortages}
@@ -210,10 +228,10 @@ export function Header() {
         )}
 
         <div className="toolbar">
-          <button className="btn" onClick={undo} disabled={!canUndo} title="დაბრუნება (Ctrl/⌘+Z)">
+          <button className="btn" onClick={undo} disabled={!canUndo} title={`დაბრუნება (${combo(['mod', 'Z'])})`}>
             ↩
           </button>
-          <button className="btn" onClick={redo} disabled={!canRedo} title="გამეორება (Ctrl/⌘+Shift+Z)">
+          <button className="btn" onClick={redo} disabled={!canRedo} title={`გამეორება (${combo(['mod', 'shift', 'Z'])})`}>
             ↪
           </button>
 
@@ -262,7 +280,7 @@ export function Header() {
             className="btn"
             onClick={duplicateSelected}
             disabled={!hasSelection}
-            title="დუბლირება (Ctrl/⌘+D)"
+            title={`დუბლირება (${combo(['mod', 'D'])})`}
           >
             ⧉
           </button>
@@ -278,7 +296,7 @@ export function Header() {
             className="btn danger"
             onClick={deleteSelected}
             disabled={!hasSelection}
-            title="წაშლა (Del)"
+            title={`წაშლა (${combo(['del'])})`}
           >
             🗑
           </button>
@@ -339,29 +357,29 @@ export function Header() {
             გადაფარება
           </button>
 
-          <span className="sep" />
-          <button
-            className="btn small"
-            onClick={() => setWheelMode(wheelMode === 'pan' ? 'zoom' : 'pan')}
-            title={
-              wheelMode === 'pan'
-                ? 'ორი თითით — ხედის გადაწევა, ⌘/Ctrl+სქროლი — მასშტაბი (ტაჩპედი)'
-                : 'სქროლი — მასშტაბი, ⌘/Ctrl+სქროლი — გადაწევა (მაუსი)'
-            }
-          >
-            {wheelMode === 'pan' ? '🖐 ტაჩპედი' : '🖱 მაუსი'}
-          </button>
         </div>
 
         <div className="toolbar">
           <span className="group-label">კატალოგი</span>
-          <button className="btn small" onClick={() => exportCatalogFile(materials, warehouses)}>
+          <button
+            className="btn small"
+            onClick={() => exportCatalogFile(materials, warehouses)}
+            title="მასალები, ფასები და მარაგები ერთ ფაილად — სარეზერვო ასლი და სხვა კომპიუტერზე გადატანა"
+          >
             ⤓ ექსპორტი
           </button>
-          <button className="btn small" onClick={() => void importCatalog()}>
+          <button
+            className="btn small"
+            onClick={() => void importCatalog()}
+            title="ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)"
+          >
             ⤒ იმპორტი
           </button>
-          <button className="btn small danger" onClick={resetCatalog}>
+          <button
+            className="btn small danger"
+            onClick={resetCatalog}
+            title="41 ჩაშენებული Du მასალის დაბრუნება — დამატებული კომპონენტები და მარაგები წაიშლება"
+          >
             აღდგენა
           </button>
 
@@ -383,13 +401,27 @@ export function Header() {
           >
             {printing ? '…' : '🖨 ბეჭდვა'}
           </button>
-          <button className="btn small" onClick={() => exportLayoutFile(pieces)} disabled={!pieces.length}>
+          <button
+            className="btn small"
+            onClick={() => exportLayoutFile(pieces)}
+            disabled={!pieces.length}
+            title="მიმდინარე ნახაზი ფაილად — არქივი ან კოლეგისთვის გასაგზავნად"
+          >
             ⤓ ექსპორტი
           </button>
-          <button className="btn small" onClick={() => void importLayout()}>
+          <button
+            className="btn small"
+            onClick={() => void importLayout()}
+            title="ნახაზის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარე ნახაზს)"
+          >
             ⤒ იმპორტი
           </button>
-          <button className="btn small danger" onClick={clearAll} disabled={!pieces.length}>
+          <button
+            className="btn small danger"
+            onClick={clearAll}
+            disabled={!pieces.length}
+            title="ყველა ელემენტის წაშლა ზედაპირიდან — კატალოგი და მარაგები რჩება"
+          >
             გასუფთავება
           </button>
         </div>

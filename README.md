@@ -146,6 +146,9 @@ materials by array index).
 
 ### 0 — Editing that survives real use
 
+Shortcuts are written below with the macOS symbols; on Windows and Linux `⌘` is `Ctrl` and
+`⌫` is `Del`. **The interface relabels itself** — see [Keyboard](#keyboard).
+
 * **Undo / redo** — `⌘Z` / `⌘⇧Z` (or `Ctrl`), plus toolbar buttons. A drag, an array, a
   catalog edit or a bulk import is one step each; live dragging does not flood the history.
   Depth 80.
@@ -176,6 +179,30 @@ materials by array index).
   and where the catalog cannot satisfy the geometry (an odd face width, a height that does
   not divide into available panel heights) it **warns instead of rounding** — an under-count
   here is a short delivery on site.
+
+  **Exact cover, not greedy.** Face widths and course heights are solved with a small
+  dynamic program that finds the fewest pieces summing to exactly the target. Greedy
+  largest-first is the obvious approach and it is wrong: a 105 cm face has an exact
+  75 + 30 answer, but greedy takes the 90 and strands 15, so the wizard reported a shortfall
+  that did not exist. A 180 cm pour is 90 + 90; greedy takes 150 and strands 30.
+
+  **Fillers close what panels cannot.** ჩაკერება are searched separately, and only after
+  the panels have covered something — a 70 cm face is a 60 panel plus a 10 filler. Throwing
+  fillers into one combined search instead lets a face with no fitting panel be "solved"
+  with a dozen 5 cm strips, which is not an answer; there, the wizard says so.
+
+  **Corners are set in by the panel they stand off.** A corner leg is measured from the
+  outside of the box, so a 24 cm leg wrapping a 9 cm panel reaches 15 cm along the concrete.
+  Treating the bare leg as face coverage left a 9 cm hole beside every corner — visible on
+  the drawing and short on the order. Corner profiles are also chosen per course: a 300 cm
+  corner repeated on a 150 cm course stood 150 cm proud of the pour.
+
+  Without corner profiles the two X faces wrap the ends instead, pinwheel-fashion. Four
+  faces each spanning only their own section leaves a panel-thickness hole at every box
+  corner, so the box has to close the way it does on site.
+
+  Walers and tie rods are **centred on the column**. A 100 cm waler on a 78 cm side has
+  22 cm spare; hanging all of it off one end put the ring visibly askew in the 3D view.
 * **Edge snapping** — dragged pieces snap to nearby piece edges and centres, not just the
   grid, with alignment guides. Panel widths are not grid multiples, so this is what actually
   makes panels butt together.
@@ -201,17 +228,109 @@ materials by array index).
 
 ### Navigating the view
 
-Trackpad-first, because that is what most people are on:
+A trackpad and a mouse both work at once, with nothing to configure:
 
 | gesture | does |
 | --- | --- |
-| two-finger scroll | **pan** |
+| two-finger scroll (trackpad) | **pan** |
+| wheel notch (mouse) | **zoom** |
 | pinch, or `⌘`/`Ctrl` + scroll | **zoom** (anchored on the pointer) |
 | `Shift` + scroll | horizontal pan (for one-wheel mice) |
 | space + drag, or middle-mouse drag | pan |
 
-The **🖐 ტაჩპედი / 🖱 მაუსი** toggle swaps the default, so on a mouse a plain wheel zooms and
-the modifier pans. The modifier always does the opposite of whichever default is active.
+`Ctrl` + wheel needs care: a trackpad pinch and a Windows mouse zoom both arrive as
+ctrl+wheel. They are told apart by delta shape — small or fractional means pinch, a chunky
+integer notch means mouse. Reading a Windows Ctrl+wheel as a pinch zoomed e¹ ≈ 2.7× per
+click and convinced the classifier the mouse was a trackpad, after which every plain scroll
+panned instead of zooming.
+
+### Keyboard
+
+The handlers have always accepted either modifier (`e.metaKey || e.ctrlKey`), and `Delete`
+and `Backspace` both delete, so every shortcut works on both platforms. What was wrong was
+what the interface *said*: hard-coded `⌘Z` and `Ctrl/⌘` labels, which read as noise on
+Windows and name a key that machine does not have.
+
+`lib/platform.ts` detects the OS once and `combo(['mod', 'Z'])` renders `⌘Z` on a Mac and
+`Ctrl+Z` everywhere else — macOS strings its symbols together, Windows spells them out and
+joins with `+`. Sources are consulted in order of trustworthiness (`userAgentData`, then
+`navigator.platform`, then the user-agent string), and macOS is tested before Windows
+because "Darwin" contains "win" and an iPad reports as a Mac.
+
+Both devices arrive as `wheel` events, so `lib/wheelInput.ts` tells them apart by shape: a
+trackpad emits small, often fractional deltas with a non-zero `deltaX` and reports a pinch as
+ctrl+wheel, while a mouse emits chunky integer notches with no horizontal axis. Evidence
+accumulates over several events rather than being judged one at a time — a single trackpad
+flick can momentarily look mouse-like — and swapping devices mid-session flips it back within
+a few events.
+
+### 3D view
+
+The **2D / 3D** switch in the title bar opens a read-only visualisation. The editor works in
+plan, so it can only ever show footprints; the 3D view extrudes every piece to its real `h`
+so the formwork can be seen standing up, with a 1 m ground grid and the overall pour height
+called out.
+
+Drag to orbit, `Shift`+drag or middle-drag to pan, scroll/pinch to zoom. **გეგმა** snaps the
+camera straight overhead. It is deliberately not editable — all editing stays in 2D.
+
+`lib/iso3d.ts` holds the maths: a plain axonometric (no perspective) camera, so parallel
+edges stay parallel and the view keeps a measurable, CAD-like feel. Faces are back-face
+culled by testing their outward normal against the view direction.
+
+**Shapes are extruded, not boxed.** The footprint comes from `planOutline` in
+`lib/shapePath.ts` — the same function the on-screen SVG and the PDF snapshot use — so an
+L-corner is extruded as an actual L. Extruding its bounding box instead drew corners as
+plain squares and filled in the notch the panels tuck into. Everything is derived from the
+outline's winding: read as the top ring it faces +Z, the base is that ring reversed, and each
+wall follows one outline edge, which puts the outward normal on the correct side even for the
+two walls inside a concave notch. `line` materials keep their full box rather than the
+slimmed, rounded bar the 2D view draws: that bar is a stylisation for legibility at small
+scale, whereas a waler's `depth` really is its profile.
+
+**Orientation.** Plan `y` grows *downward* on screen, so `(x, y, z)` is a left-handed triple
+and the textbook camera formula silently mirrors the model — which reads as looking at the
+column from underneath. The camera is built so that at elevation π/2 the projection is
+exactly the 2D plan (`x` right, `y` down) and every lower elevation just tips that plan
+toward the viewer. Elevation is clamped to the upper hemisphere, so the eye is always above
+the ground. A test asserts the ground plane's winding is preserved at every camera angle,
+which is precisely the mirroring that used to slip through.
+
+### Hidden lines
+
+Formwork cannot be drawn by sorting faces. A 100 cm waler whose centroid is nearer than a
+300 cm panel still runs *behind* that panel, so any painter's algorithm paints it straight
+over the face that should hide it — which is what put stray bars and lines across the
+panels.
+
+`lib/raster3d.ts` rasterises faces into a real per-pixel depth buffer instead. Depth
+interpolates linearly across a face because the projection is parallel, so it is exact — no
+perspective correction. The same buffer then answers "is this stretch of edge behind
+something?", which is what the **ფარული ხაზები** control uses:
+
+| mode | edges behind other pieces |
+| --- | --- |
+| `დამალული` (default) | dropped — a clean solid model |
+| `წყვეტილი` | drawn dashed, the drafting convention |
+| `გამჭვირვალე` | all drawn solid — x-ray, for checking ties buried inside a column |
+
+An edge lies exactly on the face it belongs to, so the depth test carries a tolerance sized
+to the depth a face gains over a pixel or two; without it every piece loses its own outline.
+Worst case — geometry covering the whole viewport — the buffer clear, fill and blit measure
+under 10 ms a frame, and a real model covers a fraction of that.
+
+### Piece elevation
+
+`Piece.z` is the height of a piece's underside in cm. The 2D plan **ignores it entirely** —
+two pieces at different heights sit on top of each other in plan, which is correct for a plan
+view — but it means a stacked course or a waler ring is a real, counted piece rather than a
+multiplier applied to the summary afterwards.
+
+That distinction matters: the column wizard used to place one course and one waler ring and
+then multiply the *summary* by the level count, so the wizard promised 16 walers while the
+BOM ordered 4. Every ring and course is now placed for real at its own elevation, the counts
+agree, and the 3D view shows the rings at their true heights. A test pins summary-vs-placed
+agreement so it cannot drift again.
 
 ### Dropping materials
 
@@ -249,18 +368,44 @@ the classic mistake: it put a 300 cm panel 150 cm away from the pointer.
   deliberately separate from the catalog.
 * On reload the stored catalog is repaired and merged with the seed list, so new built-ins
   introduced by a future version appear without wiping the user's edits or stock.
+* **Corrections to built-in sizes** ride along in `BUILTIN_SIZE_FIXES`, applied only where
+  the stored value still matches the wrong one — a company that has already entered its own
+  size keeps it. Stored materials always win over the seed (that is what makes edits stick),
+  so without this a saved catalog would carry a bad dimension forever.
+
+  That table **must stay above `create()`**. Rehydration runs while the store is still being
+  built, so anything it reaches has to be initialised by then; a `const` declared further
+  down the file is still in its temporal dead zone at that moment. The persist middleware
+  swallows whatever `merge` throws, leaving the store on its empty defaults — and the next
+  autosave then writes those over the user's saved drawing, silently. `onRehydrateStorage`
+  now reports any such failure to the console *and* to the storage banner, so this class of
+  bug can never be quiet again.
 
 ### 3 — Bill of materials
 
 * **Live on-screen panel** (`უწყისი` tab): every component in use, grouped by category, with
   quantity, in-stock and remaining per row, plus a per-category subtotal and a grand total.
-* **Summary card**: total pieces, total length in m, total area in m², shortage count.
-  Length sums the longer side of linear materials (`shape: line` — walers, tie rods, posts);
-  area sums w × h for everything else.
-* **⤓ Excel** — ordering sheet with `Component, Category, Size (cm), Quantity, In stock,
-  Remaining` (bilingual headers), plus a second summary sheet. **⤓ CSV** writes the same
-  list with a UTF-8 BOM so Excel renders Georgian correctly.
+* **Summary card**: total pieces, total length in m, total area in m², shortage count, cost
+  and weight.
+
+  **Length is counted for every structural material**, not just linear ones. A
+  "პანელი 30*300" is 3 m long exactly like a 3 m waler; counting only `shape: 'line'`
+  materials left panels, corners and fillers — most of a real order — contributing nothing,
+  so the metres total read far too low. Accessories are the exception: a nut is ordered by
+  the piece and has neither a meaningful length nor a face area. Area stays restricted to
+  what actually forms the concrete face (panels, fillers, corners).
+* **⤓ Excel** — ordering sheet with `Component, Category, Size (cm), Quantity, Length (m),
+  In stock, Remaining, Unit price, Line total, Weight` (bilingual headers), plus a second
+  summary sheet. **⤓ CSV** writes the same list with a UTF-8 BOM so Excel renders Georgian
+  correctly. This is the internal sheet, so it keeps the stock columns.
 * **⤓ PDF** — printable A4 table, optionally with a snapshot of the drawing above it.
+
+  The PDF is the **handout**, not the internal sheet: its columns are
+  `კომპონენტი, ზომა, რაოდ., სიგრძე, წონა`. Stock and remaining are deliberately absent —
+  they are internal figures that mean nothing to whoever receives the document, whereas
+  weight is what a crane and a truck are booked against. Totals that are incomplete because
+  a component has no weight entered are marked `*` and footnoted rather than printed as if
+  they were real.
 
   The table is laid out as HTML and rasterised with html2canvas before being placed into
   jsPDF: jsPDF's built-in fonts have no Georgian glyphs, so drawing text directly would

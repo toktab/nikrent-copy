@@ -52,7 +52,7 @@ export function ColumnWizardDialog() {
   if (!Number.isFinite(spec.sectionY) || spec.sectionY <= 0) errors.push('კვეთის Y სავალდებულოა.');
   if (!Number.isFinite(spec.height) || spec.height <= 0) errors.push('სიმაღლე სავალდებულოა.');
   if (includeWalers && (!Number.isFinite(spec.walerSpacing) || spec.walerSpacing <= 0)) {
-    errors.push('ვალერების ბიჯი დადებითი უნდა იყოს.');
+    errors.push('ვოლერების ბიჯი დადებითი უნდა იყოს.');
   }
 
   // Live preview of exactly what will be placed, warnings included.
@@ -130,7 +130,7 @@ export function ColumnWizardDialog() {
           />
         </label>
         <label className="field">
-          <span>ვალერების ბიჯი (სმ)</span>
+          <span>ვოლერების ბიჯი (სმ)</span>
           <input
             type="number"
             min={1}
@@ -157,7 +157,7 @@ export function ColumnWizardDialog() {
             checked={includeWalers}
             onChange={(e) => setIncludeWalers(e.target.checked)}
           />
-          ვალერები
+          ვოლერები
         </label>
         <label className="check-row">
           <input
@@ -181,8 +181,14 @@ export function ColumnWizardDialog() {
               <span>კუთხე</span>
               <b>{plan.summary.corners}</b>
             </div>
+            {plan.summary.fillers > 0 && (
+              <div className="sc-item">
+                <span>ჩაკერება</span>
+                <b>{plan.summary.fillers}</b>
+              </div>
+            )}
             <div className="sc-item">
-              <span>ვალერი</span>
+              <span>ვოლერი</span>
               <b>{plan.summary.walers}</b>
             </div>
             <div className="sc-item">

@@ -186,6 +186,60 @@ input[type='color'] {
   min-width: 46px;
   text-align: center;
 }
+/* 2D / 3D switch */
+.view-switch {
+  display: flex;
+  gap: 2px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px;
+}
+.view-switch .btn {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  font-weight: 600;
+}
+.view-switch .btn.active {
+  background: var(--accent);
+  color: #1c1c1c;
+}
+
+/* ---------------------------------------------------------------- 3D view */
+.view3d {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  background: var(--surface);
+}
+.view3d:active {
+  cursor: grabbing;
+}
+.view3d-bar {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 34, 40, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.view3d-select {
+  font-size: 11px;
+  padding: 4px 5px;
+}
+.view3d-hint {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* drawing picker in the title bar */
 .doc-picker {
   display: flex;

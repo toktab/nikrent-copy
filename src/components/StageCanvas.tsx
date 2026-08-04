@@ -20,6 +20,7 @@ import {
   WORLD_H,
   WORLD_W,
 } from '../lib/geometry';
+import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ShapeSvg } from './ShapeSvg';
 import { LabelLayer } from './LabelLayer';
@@ -43,6 +44,7 @@ export function StageCanvas() {
   const stageRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction>(null);
   const spaceRef = useRef(false);
+  const wheelClassifier = useRef(createWheelClassifier());
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeBox | null>(null);
@@ -84,40 +86,22 @@ export function StageCanvas() {
     const el = stageRef.current;
     if (!el) return;
     /**
-     * Trackpad-first wheel handling.
-     *
-     * A two-finger trackpad scroll and a mouse wheel both arrive as `wheel`, so
-     * the two gestures are separated by intent rather than guesswork:
-     *   • plain wheel / two-finger scroll → PAN   (the trackpad default)
-     *   • pinch, or ⌘/Ctrl + wheel        → ZOOM
-     * The `wheelMode` setting flips the default for people on a mouse, and the
-     * modifier always does the opposite of whatever the default is.
-     *
-     * A browser reports a trackpad pinch as ctrl+wheel, which is why `ctrlKey`
-     * counts as the zoom gesture.
+     * Wheel handling that serves a trackpad and a mouse at the same time, with
+     * nothing to configure — see `lib/wheelInput.ts` for how the two are told
+     * apart. Trackpad two-finger scroll pans, a mouse wheel zooms, a pinch or
+     * ⌘/Ctrl+wheel always zooms.
      */
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const s = useEditorStore.getState();
       const r = el.getBoundingClientRect();
+      const action = wheelClassifier.current.classify(e, el.clientHeight);
 
-      // Firefox can report deltas in lines rather than pixels.
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1;
-      const dx = e.deltaX * unit;
-      const dy = e.deltaY * unit;
-
-      const modifier = e.ctrlKey || e.metaKey;
-      const zoom = (s.wheelMode === 'zoom') !== modifier; // XOR
-
-      if (zoom) {
-        // Pinch deltas are small and continuous; a mouse wheel is chunky.
-        const factor = modifier ? Math.exp(-dy / 100) : dy < 0 ? 1.12 : 1 / 1.12;
-        s.zoomAt(factor, e.clientX - r.left, e.clientY - r.top);
-        return;
+      if (action.kind === 'zoom') {
+        s.zoomAt(action.factor, e.clientX - r.left, e.clientY - r.top);
+      } else {
+        s.setPan(s.panX - action.dx, s.panY - action.dy);
       }
-
-      // Shift turns a one-axis mouse wheel into horizontal panning.
-      s.setPan(s.panX - (e.shiftKey ? dy : dx), s.panY - (e.shiftKey ? 0 : dy));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
