@@ -110,6 +110,17 @@ export async function deleteUser(userId: string): Promise<void> {
   await callAdminFunction({ action: 'delete', userId });
 }
 
+/**
+ * Issue a new password for someone who is locked out, and hand it back so the
+ * admin can pass it on. Returns the generated password — it is never
+ * retrievable afterwards, since only a hash is stored.
+ */
+export async function resetPassword(userId: string): Promise<string> {
+  const password = generatePassword();
+  await callAdminFunction({ action: 'reset-password', userId, password });
+  return password;
+}
+
 /** Change your own password. Available to every role. */
 export async function changeOwnPassword(password: string): Promise<void> {
   const supabase = requireSupabase();

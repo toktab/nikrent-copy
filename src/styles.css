@@ -1628,3 +1628,62 @@ kbd {
   min-width: 120px;
   text-align: center;
 }
+
+/* ---------------------------------------------------------------- presence */
+.presence {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+}
+
+/* Overlapped like a stack of chips, newest on top. */
+.presence-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #1c1c1c;
+  border: 2px solid var(--panel);
+  margin-left: -7px;
+  cursor: default;
+  user-select: none;
+  animation: presence-in 180ms ease-out;
+}
+
+.presence-dot:first-child {
+  margin-left: 0;
+}
+
+.presence-dot.more {
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@keyframes presence-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-dot {
+    animation: none;
+  }
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}

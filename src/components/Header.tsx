@@ -9,6 +9,7 @@ import {
 } from '../lib/catalogFile';
 import { pickFile, readFileAsText } from '../lib/files';
 import { combo } from '../lib/platform';
+import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { UserMenu } from './UserMenu';
 
@@ -204,6 +205,7 @@ export function Header() {
           >
             ნახაზები…
           </button>
+          <PresenceBar />
         </div>
 
         <div className="view-switch" role="group" aria-label="ხედი">

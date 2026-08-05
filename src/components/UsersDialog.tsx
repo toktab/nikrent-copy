@@ -4,6 +4,7 @@ import {
   deleteUser,
   generatePassword,
   listProfiles,
+  resetPassword,
   setRole,
 } from '../lib/adminUsers';
 import { useAuthStore, type Profile, type Role } from '../store/useAuthStore';
@@ -42,7 +43,11 @@ export function UsersDialog() {
    * Shown once, after the account is made. There is no way to read it back
    * later — Supabase stores only a hash — so the admin has to pass it on now.
    */
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [issued, setIssued] = useState<{
+    email: string;
+    password: string;
+    kind: 'created' | 'reset';
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -68,7 +73,7 @@ export function UsersDialog() {
     const password = generatePassword();
     try {
       await createUser({ email: address, fullName: fullName.trim(), role, password });
-      setCreated({ email: address, password });
+      setIssued({ email: address, password, kind: 'created' });
       setEmail('');
       setFullName('');
       await refresh();
@@ -85,6 +90,19 @@ export function UsersDialog() {
     try {
       await setRole(id, next);
       await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onReset(profile: Profile) {
+    setBusy(true);
+    setError(null);
+    try {
+      const password = await resetPassword(profile.id);
+      setIssued({ email: profile.email, password, kind: 'reset' });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -113,27 +131,27 @@ export function UsersDialog() {
     });
   }
 
-  if (created) {
+  if (issued) {
     return (
       <Modal
-        title="ანგარიში შეიქმნა"
-        onClose={() => setCreated(null)}
+        title={issued.kind === 'created' ? 'ანგარიში შეიქმნა' : 'პაროლი განახლდა'}
+        onClose={() => setIssued(null)}
         footer={
-          <button className="btn primary" onClick={() => setCreated(null)}>
+          <button className="btn primary" onClick={() => setIssued(null)}>
             გასაგებია
           </button>
         }
       >
         <p className="field-hint">
-          გადაეცი ეს პაროლი <b>{created.email}</b>-ს. ის მეორედ აღარ გამოჩნდება — თუ დაიკარგება,
+          გადაეცი ეს პაროლი <b>{issued.email}</b>-ს. ის მეორედ აღარ გამოჩნდება — თუ დაიკარგება,
           საჭირო იქნება ახლის გენერაცია.
         </p>
         <div className="temp-password">
-          <code>{created.password}</code>
+          <code>{issued.password}</code>
           <button
             className="btn small"
             onClick={() => {
-              void navigator.clipboard?.writeText(created.password);
+              void navigator.clipboard?.writeText(issued.password);
               setToast('პაროლი დაკოპირდა');
             }}
           >
@@ -200,7 +218,15 @@ export function UsersDialog() {
                       ))}
                     </select>
                   </td>
-                  <td>
+                  <td className="row-actions">
+                    <button
+                      className="btn small"
+                      disabled={busy}
+                      onClick={() => void onReset(row)}
+                      title="ახალი პაროლის გენერაცია — ძველი გაუქმდება"
+                    >
+                      პაროლი
+                    </button>
                     <button
                       className="btn small danger"
                       disabled={busy || isMe}

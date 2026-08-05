@@ -114,6 +114,21 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, id: newId });
   }
 
+  if (body.action === 'reset-password') {
+    const userId = body.userId ?? '';
+    const password = body.password ?? '';
+    if (!userId) return json({ error: 'userId is required' }, 400);
+    if (password.length < 12) return json({ error: 'პაროლი ძალიან მოკლეა' }, 400);
+
+    // A generated replacement shown once, rather than a reset email: the
+    // built-in mailer is rate limited to roughly two messages an hour, so a
+    // link would often simply never arrive.
+    const { error: resetError } = await admin.auth.admin.updateUserById(userId, { password });
+    if (resetError) return json({ error: resetError.message }, 400);
+
+    return json({ ok: true });
+  }
+
   if (body.action === 'delete') {
     const userId = body.userId ?? '';
     if (!userId) return json({ error: 'userId is required' }, 400);
