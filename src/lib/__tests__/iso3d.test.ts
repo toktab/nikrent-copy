@@ -24,7 +24,6 @@ const material = (over: Partial<Material> = {}): Material => ({
   color: '#c9a36a',
   builtin: true,
   stock: {},
-  price: 0,
   weight: 0,
   article: '',
   supplier: '',

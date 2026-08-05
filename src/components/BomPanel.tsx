@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { buildBom, fmtMoney, fmtNum, sizeLabel } from '../lib/bom';
+import { buildBom, fmtNum, sizeLabel } from '../lib/bom';
+import { Icon } from './Icon';
 
 /** Live bill of materials: what is on the surface, grouped by category. */
 export function BomPanel() {
@@ -75,32 +76,32 @@ export function BomPanel() {
           <b>{bom.shortageCount}</b>
         </div>
         <div className="sc-item">
-          <span>ღირებულება{bom.unpricedRows > 0 ? ' *' : ''}</span>
-          <b>{fmtMoney(bom.totalCost)}</b>
-        </div>
-        <div className="sc-item">
           <span>წონა{bom.unweighedRows > 0 ? ' *' : ''}</span>
           <b>{fmtNum(bom.totalWeightKg)} კგ</b>
         </div>
       </div>
 
-      {(bom.unpricedRows > 0 || bom.unweighedRows > 0) && (
+      {bom.unweighedRows > 0 && (
         <p className="hint-note" style={{ margin: '0 0 10px' }}>
-          * ჯამი არასრულია — {bom.unpricedRows > 0 && `${bom.unpricedRows} პოზიციას ფასი`}
-          {bom.unpricedRows > 0 && bom.unweighedRows > 0 && ', '}
-          {bom.unweighedRows > 0 && `${bom.unweighedRows} პოზიციას წონა`} არ აქვს მითითებული.
+          * წონის ჯამი არასრულია — {bom.unweighedRows} პოზიციას წონა არ აქვს მითითებული.
         </p>
       )}
 
       <div className="export-row">
         <button className="btn small" onClick={onExcel} disabled={!!busy || !bom.totalPieces}>
-          {busy === 'xlsx' ? '…' : '⤓ Excel'}
+          {busy === 'xlsx' ? '…' : <>
+            <Icon name="download" /> Excel
+          </>}
         </button>
         <button className="btn small" onClick={onCsv} disabled={!!busy || !bom.totalPieces}>
-          {busy === 'csv' ? '…' : '⤓ CSV'}
+          {busy === 'csv' ? '…' : <>
+            <Icon name="download" /> CSV
+          </>}
         </button>
         <button className="btn small" onClick={onPdf} disabled={!!busy || !bom.totalPieces}>
-          {busy === 'pdf' ? '…' : '⤓ PDF'}
+          {busy === 'pdf' ? '…' : <>
+            <Icon name="download" /> PDF
+          </>}
         </button>
       </div>
       <label className="check-row">
@@ -147,14 +148,13 @@ export function BomPanel() {
                         {sizeLabel(r.material)} სმ
                         {r.lengthM > 0 ? ` · ${fmtNum(r.lengthM)} მ` : ''}
                         {r.weightKg > 0 ? ` · ${fmtNum(r.weightKg)} კგ` : ''}
-                        {r.cost > 0 ? ` · ${fmtMoney(r.cost)}` : ''}
                       </span>
                     </td>
                     <td className="num">{r.used}</td>
                     <td className="num">{r.stock}</td>
                     <td className="num">
                       {r.remaining}
-                      {r.shortage && <span className="warn-badge" title="დეფიციტი">⚠</span>}
+                      {r.shortage && <span className="warn-badge" title="დეფიციტი"><Icon name="warning" /></span>}
                     </td>
                   </tr>
                 ))}
@@ -166,7 +166,6 @@ export function BomPanel() {
                     {g.lengthM > 0 && <span className="bom-size">{fmtNum(g.lengthM)} მ</span>}
                     {g.areaM2 > 0 && <span className="bom-size">{fmtNum(g.areaM2)} მ²</span>}
                     {g.weightKg > 0 && <span className="bom-size">{fmtNum(g.weightKg)} კგ</span>}
-                    {g.cost > 0 && <span className="bom-size">{fmtMoney(g.cost)}</span>}
                   </td>
                   <td className="num">{g.pieces}</td>
                   <td colSpan={2} />

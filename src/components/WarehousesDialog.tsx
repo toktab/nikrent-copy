@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { stockIn } from '../lib/inventory';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 /** Manage the stores the company keeps formwork in. */
 export function WarehousesDialog() {
@@ -63,8 +64,7 @@ export function WarehousesDialog() {
                 title={warehouses.length <= 1 ? 'ბოლო საწყობი ვერ წაიშლება' : 'წაშლა'}
                 disabled={warehouses.length <= 1}
                 onClick={() => askDelete(w.id, w.name)}
-              >
-                🗑
+              ><Icon name="trash" />
               </button>
             </div>
           </div>
@@ -90,8 +90,7 @@ export function WarehousesDialog() {
             addWarehouse(newName);
             setNewName('');
           }}
-        >
-          ＋ დამატება
+        ><Icon name="plus" /> დამატება
         </button>
       </div>
     </Modal>

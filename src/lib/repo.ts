@@ -83,7 +83,6 @@ interface MaterialRow {
   shape: Material['shape'];
   color: string;
   builtin: boolean;
-  price: number;
   weight: number;
   article: string;
   supplier: string;
@@ -112,7 +111,6 @@ function materialToRow(m: Material): MaterialRow {
     shape: m.shape,
     color: m.color,
     builtin: m.builtin,
-    price: m.price,
     weight: m.weight,
     article: m.article,
     supplier: m.supplier,
@@ -130,7 +128,6 @@ function rowToMaterial(row: MaterialRow, stock: StockByWarehouse): Material {
     shape: row.shape,
     color: row.color,
     builtin: row.builtin,
-    price: Number(row.price),
     weight: Number(row.weight),
     article: row.article,
     supplier: row.supplier,

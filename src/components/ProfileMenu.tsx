@@ -3,6 +3,7 @@ import { initialsFor } from '../lib/presence';
 import { removeAvatar, updateDisplayName, uploadAvatar, validateAvatar } from '../lib/profile';
 import { useAuthStore, type Role } from '../store/useAuthStore';
 import { useEditorStore } from '../store/useEditorStore';
+import { Icon } from './Icon';
 
 const ROLE_LABEL: Record<Role, string> = {
   admin: 'ადმინისტრატორი',
@@ -202,8 +203,7 @@ export function ProfileMenu() {
                   setOpen(false);
                   openDialog({ kind: 'users' });
                 }}
-              >
-                👥 გუნდის მართვა
+              ><Icon name="users" /> გუნდის მართვა
               </button>
             )}
             <button
@@ -212,8 +212,7 @@ export function ProfileMenu() {
                 setOpen(false);
                 openDialog({ kind: 'password' });
               }}
-            >
-              🔑 პაროლის შეცვლა
+            ><Icon name="key" /> პაროლის შეცვლა
             </button>
             <button className="btn full danger" onClick={() => void signOut()}>
               გამოსვლა

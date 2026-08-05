@@ -1860,3 +1860,16 @@ kbd {
     width: auto;
   }
 }
+
+/* -------------------------------------------------------------------- icons */
+.icon {
+  flex: 0 0 auto;
+  /* Nudged up so a 24-grid glyph sits on the Georgian x-height rather than
+     riding the baseline of the label beside it. */
+  vertical-align: -0.15em;
+}
+
+.link-button .icon,
+.btn .icon {
+  pointer-events: none;
+}

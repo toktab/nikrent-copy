@@ -7,6 +7,7 @@ import {
 } from '../lib/syncEngine';
 import { isConfigured } from '../lib/supabase';
 import { useEditorStore } from '../store/useEditorStore';
+import { Icon } from './Icon';
 
 /**
  * Whether the server has the user's work.
@@ -71,7 +72,7 @@ export function SyncBadge() {
   if (status === 'error') {
     return (
       <div className="sync-badge bad" role="alert" title={error ?? ''}>
-        <span>⚠ შენახვა ვერ მოხერხდა</span>
+        <span><Icon name="warning" /> შენახვა ვერ მოხერხდა</span>
         <button className="btn small" onClick={() => void flush()}>
           ხელახლა
         </button>

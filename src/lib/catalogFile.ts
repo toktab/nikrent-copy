@@ -69,7 +69,6 @@ export function sanitizeMaterial(raw: unknown, taken: Set<string>): Material | n
     builtin: r.builtin === true,
     // handles both the legacy `stock: number` and the per-warehouse map
     stock: normalizeStock(r.stock),
-    price: Math.max(0, num(r.price, 0)),
     weight: Math.max(0, num(r.weight, 0)),
     article: String(r.article ?? '').trim(),
     supplier: String(r.supplier ?? '').trim(),

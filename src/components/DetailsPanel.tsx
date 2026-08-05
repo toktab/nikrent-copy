@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { categoryLabel } from '../data/categories';
-import { fmtMoney } from '../lib/bom';
 import { totalStock } from '../lib/inventory';
 import { PiecePreview } from './ShapeSvg';
+import { Icon } from './Icon';
 
 /** Inspector for the current selection — one piece in detail, or a group summary. */
 export function DetailsPanel() {
@@ -36,20 +36,15 @@ export function DetailsPanel() {
 
   const actions = (
     <div className="row-actions">
-      <button className="btn small" onClick={() => rotateSelected(90)} title="მარჯვნივ 90°">
-        ⟳ 90°
+      <button className="btn small" onClick={() => rotateSelected(90)} title="მარჯვნივ 90°"><Icon name="rotate-cw" /> 90°
       </button>
-      <button className="btn small" onClick={() => rotateSelected(-90)} title="მარცხნივ 90°">
-        ⟲ 90°
+      <button className="btn small" onClick={() => rotateSelected(-90)} title="მარცხნივ 90°"><Icon name="rotate-ccw" /> 90°
       </button>
-      <button className="btn small" onClick={duplicateSelected}>
-        ⧉ დუბლირება
+      <button className="btn small" onClick={duplicateSelected}><Icon name="copy" /> დუბლირება
       </button>
-      <button className="btn small" onClick={() => openDialog({ kind: 'array' })}>
-        ⋮⋮ მასივი
+      <button className="btn small" onClick={() => openDialog({ kind: 'array' })}><Icon name="array" /> მასივი
       </button>
-      <button className="btn small danger" onClick={deleteSelected}>
-        🗑 წაშლა
+      <button className="btn small danger" onClick={deleteSelected}><Icon name="trash" /> წაშლა
       </button>
     </div>
   );
@@ -119,12 +114,6 @@ export function DetailsPanel() {
         <span className="k">მარაგი</span>
         <span>{totalStock(material)} ცალი</span>
       </div>
-      {material.price > 0 && (
-        <div className="kv">
-          <span className="k">ერთ. ფასი</span>
-          <span>{fmtMoney(material.price)}</span>
-        </div>
-      )}
       {material.weight > 0 && (
         <div className="kv">
           <span className="k">წონა</span>
@@ -139,8 +128,7 @@ export function DetailsPanel() {
         disabled={!canManage}
         title={canManage ? undefined : ADMIN_ONLY_TITLE}
         onClick={() => openDialog({ kind: 'material', materialId: material.id })}
-      >
-        ✎ კომპონენტის რედაქტირება
+      ><Icon name="pencil" /> კომპონენტის რედაქტირება
       </button>
     </div>
   );

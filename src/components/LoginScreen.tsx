@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { isRemembered } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
+import { Icon } from './Icon';
 
 /**
  * Sign-in screen. There is no "create account" link on purpose — accounts are
@@ -126,7 +127,13 @@ export function LoginScreen() {
             clearError();
           }}
         >
-          {mode === 'sign-in' ? 'პაროლი დაგავიწყდა?' : '← შესვლა'}
+          {mode === 'sign-in' ? (
+            'პაროლი დაგავიწყდა?'
+          ) : (
+            <>
+              <Icon name="arrow-left" /> შესვლა
+            </>
+          )}
         </button>
 
         {mode === 'sign-in' && (

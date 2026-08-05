@@ -47,11 +47,9 @@ export interface Material {
   builtin: boolean;
   /** inventory: how many the company owns, per warehouse */
   stock: StockByWarehouse;
-  /** unit price in the project currency (0 = not priced yet) */
-  price: number;
   /** unit weight in kg (0 = unknown) — drives crane and truck loads */
   weight: number;
-  /** supplier article / catalogue number */
+  /** supplier's own designation for the part (აღნიშვნა) */
   article: string;
   supplier: string;
 }

@@ -16,6 +16,7 @@ import { WarehousesDialog } from './components/WarehousesDialog';
 import { TitleBlockDialog } from './components/TitleBlockDialog';
 import { UsersDialog } from './components/UsersDialog';
 import { PasswordDialog } from './components/PasswordDialog';
+import { Icon } from './components/Icon';
 
 export default function App() {
   const dialog = useEditorStore((s) => s.dialog);
@@ -46,8 +47,7 @@ export default function App() {
             className="rail rail-left"
             onClick={() => setPaletteOpen(true)}
             title="მასალების პანელი"
-          >
-            ▸ მასალები
+          ><Icon name="chevron-right" /> მასალები
           </button>
         )}
 
@@ -60,8 +60,7 @@ export default function App() {
             className="rail rail-right"
             onClick={() => setInspectorOpen(true)}
             title="უწყისი და მარაგი"
-          >
-            ◂ უწყისი
+          ><Icon name="chevron-left" /> უწყისი
           </button>
         )}
       </div>

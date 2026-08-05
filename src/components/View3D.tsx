@@ -24,6 +24,7 @@ import {
   type ScreenPoint,
 } from '../lib/raster3d';
 import { createWheelClassifier } from '../lib/wheelInput';
+import { Icon } from './Icon';
 
 /** Darken/lighten a #rrggbb by a 0..1+ factor. */
 function shade(hex: string, factor: number): Rgb {
@@ -261,22 +262,19 @@ export function View3D() {
       />
 
       <div className="view3d-bar">
-        <button className="btn small" onClick={fit} disabled={!hasPieces} title="ჩატევა">
-          ⤢ ცენტრი
+        <button className="btn small" onClick={fit} disabled={!hasPieces} title="ჩატევა"><Icon name="fit" /> ცენტრი
         </button>
         <button
           className="btn small"
           onClick={() => setCam(DEFAULT_CAMERA)}
           title="საწყისი კუთხე — ხედი ზემოდან"
-        >
-          ↺ კუთხე
+        ><Icon name="reset" /> კუთხე
         </button>
         <button
           className="btn small"
           onClick={() => setCam({ azimuth: 0, elevation: Math.PI / 2 })}
           title="ზუსტად ზემოდან — ემთხვევა 2D გეგმას"
-        >
-          ⌗ გეგმა
+        ><Icon name="grid" /> გეგმა
         </button>
         <select
           className="view3d-select"

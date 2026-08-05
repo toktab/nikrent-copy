@@ -31,7 +31,6 @@ export const SHEET_TEMPLATE_HEADERS = [
   'shape',
   'color',
   'stock',
-  'price',
   'weight',
   'article',
   'supplier',
@@ -48,9 +47,8 @@ const HEADER_ALIASES: Record<keyof MaterialDraft | 'w' | 'h', string[]> = {
   shape: ['shape', 'form', 'ფორმა'],
   color: ['color', 'colour', 'ფერი'],
   stock: ['stock', 'qty', 'quantity', 'inventory', 'მარაგი', 'რაოდენობა'],
-  price: ['price', 'cost', 'unitprice', 'ფასი', 'ღირებულება'],
   weight: ['weight', 'kg', 'weightkg', 'წონა'],
-  article: ['article', 'articleno', 'code', 'sku', 'artno', 'არტიკული', 'კოდი'],
+  article: ['article', 'articleno', 'code', 'sku', 'artno', 'არტიკული', 'აღნიშვნა', 'კოდი'],
   supplier: ['supplier', 'vendor', 'manufacturer', 'მომწოდებელი'],
 };
 
@@ -164,7 +162,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
     }
 
     /** Optional non-negative number column; warns and falls back to 0. */
-    const optionalNumber = (field: 'stock' | 'price' | 'weight' | 'depth', label: string): number => {
+    const optionalNumber = (field: 'stock' | 'weight' | 'depth', label: string): number => {
       const value = pick(raw, field);
       if (value === undefined || String(value).trim() === '') return 0;
       const n = toNumber(value);
@@ -177,7 +175,6 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
 
     const stock = optionalNumber('stock', 'მარაგი');
     const depth = optionalNumber('depth', 'სისქე');
-    const price = optionalNumber('price', 'ფასი');
     const weight = optionalNumber('weight', 'წონა');
     const article = String(pick(raw, 'article') ?? '').trim();
     const supplier = String(pick(raw, 'supplier') ?? '').trim();
@@ -198,7 +195,6 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
             shape,
             color,
             stock: { [DEFAULT_WAREHOUSE.id]: stock },
-            price,
             weight,
             article,
             supplier,

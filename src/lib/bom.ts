@@ -20,12 +20,8 @@ export interface BomRow {
   lengthM: number;
   /** total area in m² (non-linear materials only) */
   areaM2: number;
-  /** used × unit price */
-  cost: number;
   /** used × unit weight, kg */
   weightKg: number;
-  /** true when the material has no price set, so the total is understated */
-  priceMissing: boolean;
   weightMissing: boolean;
 }
 
@@ -37,7 +33,6 @@ export interface BomGroup {
   pieces: number;
   lengthM: number;
   areaM2: number;
-  cost: number;
   weightKg: number;
   shortages: number;
 }
@@ -47,11 +42,9 @@ export interface Bom {
   totalPieces: number;
   totalLengthM: number;
   totalAreaM2: number;
-  totalCost: number;
   totalWeightKg: number;
   shortageCount: number;
-  /** rows whose price/weight is unset, so the totals are lower bounds */
-  unpricedRows: number;
+  /** rows whose weight is unset, so the total is a lower bound */
   unweighedRows: number;
   /** pieces whose material no longer exists in the catalog */
   orphanPieces: number;
@@ -115,10 +108,8 @@ export function buildBom(
   let totalPieces = 0;
   let totalLengthM = 0;
   let totalAreaM2 = 0;
-  let totalCost = 0;
   let totalWeightKg = 0;
   let shortageCount = 0;
-  let unpricedRows = 0;
   let unweighedRows = 0;
 
   for (const category of CATEGORY_ORDER) {
@@ -126,7 +117,6 @@ export function buildBom(
     let pieceCount = 0;
     let lengthM = 0;
     let areaM2 = 0;
-    let cost = 0;
     let weightKg = 0;
     let shortages = 0;
 
@@ -139,7 +129,6 @@ export function buildBom(
       const rowArea = count * unitAreaM2(m);
       const stock = totalStock(m);
       const commitment = commitments.get(m.id) ?? emptyCommitment();
-      const rowCost = count * m.price;
       const rowWeight = count * m.weight;
       const shortage = count > stock;
 
@@ -153,19 +142,15 @@ export function buildBom(
         shortage,
         lengthM: rowLength,
         areaM2: rowArea,
-        cost: rowCost,
         weightKg: rowWeight,
-        priceMissing: m.price <= 0,
         weightMissing: m.weight <= 0,
       });
 
       pieceCount += count;
       lengthM += rowLength;
       areaM2 += rowArea;
-      cost += rowCost;
       weightKg += rowWeight;
       if (shortage) shortages++;
-      if (m.price <= 0) unpricedRows++;
       if (m.weight <= 0) unweighedRows++;
     }
 
@@ -180,7 +165,6 @@ export function buildBom(
       pieces: pieceCount,
       lengthM,
       areaM2,
-      cost,
       weightKg,
       shortages,
     });
@@ -188,7 +172,6 @@ export function buildBom(
     totalPieces += pieceCount;
     totalLengthM += lengthM;
     totalAreaM2 += areaM2;
-    totalCost += cost;
     totalWeightKg += weightKg;
     shortageCount += shortages;
   }
@@ -198,10 +181,8 @@ export function buildBom(
     totalPieces,
     totalLengthM,
     totalAreaM2,
-    totalCost,
     totalWeightKg,
     shortageCount,
-    unpricedRows,
     unweighedRows,
     orphanPieces,
   };
@@ -233,8 +214,3 @@ export function fmtNum(n: number, digits = 2): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(digits);
 }
 
-/** Money with thousands separators, e.g. "12 480.50". */
-export function fmtMoney(n: number): string {
-  if (!Number.isFinite(n)) return '0';
-  return n.toLocaleString('ka-GE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}

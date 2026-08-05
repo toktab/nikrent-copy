@@ -13,6 +13,7 @@ import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { ProfileMenu } from './ProfileMenu';
+import { Icon } from './Icon';
 
 const SNAP_STEPS = [1, 5, 10, 25];
 
@@ -228,17 +229,14 @@ export function Header() {
         </div>
 
         {shortages > 0 && (
-          <span className="shortage-badge" title="კომპონენტი, რომლის მარაგიც არ ჰყოფნის">
-            ⚠ დეფიციტი: {shortages}
+          <span className="shortage-badge" title="კომპონენტი, რომლის მარაგიც არ ჰყოფნის"><Icon name="warning" /> დეფიციტი: {shortages}
           </span>
         )}
 
         <div className="toolbar">
-          <button className="btn" onClick={undo} disabled={!canUndo} title={`დაბრუნება (${combo(['mod', 'Z'])})`}>
-            ↩
+          <button className="btn" onClick={undo} disabled={!canUndo} title={`დაბრუნება (${combo(['mod', 'Z'])})`}><Icon name="undo" />
           </button>
-          <button className="btn" onClick={redo} disabled={!canRedo} title={`გამეორება (${combo(['mod', 'shift', 'Z'])})`}>
-            ↪
+          <button className="btn" onClick={redo} disabled={!canRedo} title={`გამეორება (${combo(['mod', 'shift', 'Z'])})`}><Icon name="redo" />
           </button>
 
           <span className="sep" />
@@ -247,8 +245,7 @@ export function Header() {
             className={`btn${snap ? ' active' : ''}`}
             onClick={() => setSnap(!snap)}
             title="ბადეზე მიბმა"
-          >
-            ⊞ მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
+          ><Icon name="grid" /> მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
           </button>
           <select
             value={snapStep}
@@ -268,8 +265,7 @@ export function Header() {
             className="btn"
             onClick={() => openDialog({ kind: 'column-wizard' })}
             title="კოლონის ავტომატური აწყობა"
-          >
-            🏛 კოლონა
+          ><Icon name="column" /> კოლონა
           </button>
 
           <span className="sep" />
@@ -279,45 +275,38 @@ export function Header() {
             onClick={() => rotateSelected(90)}
             disabled={!hasSelection}
             title="მოტრიალება 90° (R). ზუსტი კუთხე — „დეტალები“ ჩანართში."
-          >
-            ⟳ 90°
+          ><Icon name="rotate-cw" /> 90°
           </button>
           <button
             className="btn"
             onClick={duplicateSelected}
             disabled={!hasSelection}
             title={`დუბლირება (${combo(['mod', 'D'])})`}
-          >
-            ⧉
+          ><Icon name="copy" />
           </button>
           <button
             className="btn"
             onClick={() => openDialog({ kind: 'array' })}
             disabled={!hasSelection}
             title="მასივი — ასლების გამრავლება"
-          >
-            ⋮⋮ მასივი
+          ><Icon name="array" /> მასივი
           </button>
           <button
             className="btn danger"
             onClick={deleteSelected}
             disabled={!hasSelection}
             title={`წაშლა (${combo(['del'])})`}
-          >
-            🗑
+          ><Icon name="trash" />
           </button>
 
           <span className="sep" />
 
-          <button className="btn" onClick={() => zoomBy(1 / 1.2)}>
-            −
+          <button className="btn" onClick={() => zoomBy(1 / 1.2)}><Icon name="minus" />
           </button>
           <span className="zoomlabel">{Math.round(zoom * 100)}%</span>
-          <button className="btn" onClick={() => zoomBy(1.2)}>
-            ＋
+          <button className="btn" onClick={() => zoomBy(1.2)}><Icon name="plus" />
           </button>
-          <button className="btn" onClick={fitToContent} title="ჩატევა">
-            ⤢ ცენტრი
+          <button className="btn" onClick={fitToContent} title="ჩატევა"><Icon name="fit" /> ცენტრი
           </button>
         </div>
 
@@ -376,8 +365,7 @@ export function Header() {
             className="btn small"
             onClick={() => exportCatalogFile(materials, warehouses)}
             title="მასალები, ფასები და მარაგები ერთ ფაილად — სარეზერვო ასლი და სხვა კომპიუტერზე გადატანა"
-          >
-            ⤓ ექსპორტი
+          ><Icon name="download" /> ექსპორტი
           </button>
           <button
             className="btn small"
@@ -388,8 +376,7 @@ export function Header() {
                 ? 'ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)'
                 : ADMIN_ONLY_TITLE
             }
-          >
-            ⤒ იმპორტი
+          ><Icon name="upload" /> იმპორტი
           </button>
           <button
             className="btn small danger"
@@ -420,22 +407,22 @@ export function Header() {
             disabled={!pieces.length || printing}
             title="მასშტაბური ნახაზი შტამპით (PDF)"
           >
-            {printing ? '…' : '🖨 ბეჭდვა'}
+            {printing ? '…' : <>
+              <Icon name="print" /> ბეჭდვა
+            </>}
           </button>
           <button
             className="btn small"
             onClick={() => exportLayoutFile(pieces)}
             disabled={!pieces.length}
             title="მიმდინარე ნახაზი ფაილად — არქივი ან კოლეგისთვის გასაგზავნად"
-          >
-            ⤓ ექსპორტი
+          ><Icon name="download" /> ექსპორტი
           </button>
           <button
             className="btn small"
             onClick={() => void importLayout()}
             title="ნახაზის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარე ნახაზს)"
-          >
-            ⤒ იმპორტი
+          ><Icon name="upload" /> იმპორტი
           </button>
           <button
             className="btn small danger"
@@ -448,7 +435,7 @@ export function Header() {
         </div>
       </div>
 
-      {storageError && <div className="storage-banner">⚠ {storageError}</div>}
+      {storageError && <div className="storage-banner"><Icon name="warning" /> {storageError}</div>}
     </header>
   );
 }

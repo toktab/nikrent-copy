@@ -121,7 +121,6 @@ export function createSeedMaterials(): Material[] {
     color: categoryColor(category),
     builtin: true,
     stock: { [DEFAULT_WAREHOUSE.id]: 0 },
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',

@@ -23,7 +23,6 @@ const corner = (over: Partial<Material> = {}): Material => ({
   color: '#7cb342',
   builtin: true,
   stock: {},
-  price: 0,
   weight: 0,
   article: '',
   supplier: '',

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER, categoryLabel } from '../data/categories';
-import { fmtMoney, sizeLabel } from '../lib/bom';
+import { sizeLabel } from '../lib/bom';
 import { commitmentsByMaterial, emptyCommitment, stockIn, totalStock } from '../lib/inventory';
+import { Icon } from './Icon';
 
 /**
  * Stock per component. Shows what the company owns, what every drawing has
@@ -52,15 +53,13 @@ export function InventoryPanel() {
   const totals = useMemo(() => {
     let stock = 0;
     let shortages = 0;
-    let value = 0;
     for (const m of materials) {
       const owned = totalStock(m);
       const c = commitments.get(m.id) ?? emptyCommitment();
       stock += owned;
-      value += owned * m.price;
       if (owned - c.committed < 0) shortages++;
     }
-    return { stock, shortages, value, count: materials.length };
+    return { stock, shortages, count: materials.length };
   }, [materials, commitments]);
 
   const exportXlsx = async () => {
@@ -76,7 +75,6 @@ export function InventoryPanel() {
           shape: m.shape,
           article: m.article,
           supplier: m.supplier,
-          price: m.price,
           weight: m.weight,
           stockPerWarehouse: warehouses.map((w) => stockIn(m, w.id)),
           totalStock: totalStock(m),
@@ -97,10 +95,6 @@ export function InventoryPanel() {
         <div className="sc-item">
           <span>სულ მარაგი</span>
           <b>{totals.stock}</b>
-        </div>
-        <div className="sc-item">
-          <span>მარაგის ღირებულება</span>
-          <b>{fmtMoney(totals.value)}</b>
         </div>
         <div className={`sc-item${totals.shortages ? ' warn' : ''}`}>
           <span>არ ჰყოფნის</span>
@@ -130,7 +124,7 @@ export function InventoryPanel() {
         className="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="🔍 კომპონენტი ან არტიკული..."
+        placeholder="კომპონენტი ან აღნიშვნა…"
       />
       <label className="check-row">
         <input
@@ -141,8 +135,7 @@ export function InventoryPanel() {
         მხოლოდ დეფიციტი (ყველა ნახაზის გათვალისწინებით)
       </label>
       <div className="export-row">
-        <button className="btn small" onClick={() => void exportXlsx()}>
-          ⤓ კატალოგი Excel-ში
+        <button className="btn small" onClick={() => void exportXlsx()}><Icon name="download" /> კატალოგი Excel-ში
         </button>
       </div>
 
@@ -211,7 +204,7 @@ export function InventoryPanel() {
                     </td>
                     <td className="num">
                       {free}
-                      {shortage && <span className="warn-badge">⚠</span>}
+                      {shortage && <span className="warn-badge"><Icon name="warning" /></span>}
                     </td>
                   </tr>
                 );

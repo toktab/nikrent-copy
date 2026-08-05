@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 /**
  * Repeat the selection along one axis — the fast way to lay out a run of
@@ -87,14 +88,12 @@ export function ArrayDialog() {
             <button
               className={`btn small${axis === 'x' ? ' active' : ''}`}
               onClick={() => setAxis('x')}
-            >
-              → ჰორიზონტალურად
+            ><Icon name="arrow-right" /> ჰორიზონტალურად
             </button>
             <button
               className={`btn small${axis === 'y' ? ' active' : ''}`}
               onClick={() => setAxis('y')}
-            >
-              ↓ ვერტიკალურად
+            ><Icon name="arrow-down" /> ვერტიკალურად
             </button>
           </div>
         </label>

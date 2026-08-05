@@ -21,7 +21,6 @@ function material(id: string, patch: Partial<Material> = {}): Material {
     color: '#888888',
     builtin: false,
     stock: {},
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',

@@ -14,7 +14,6 @@ function material(over: Partial<Material> = {}): Material {
     color: '#c9a36a',
     builtin: true,
     stock: { main: 10 },
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',
@@ -30,7 +29,7 @@ const piece = (materialId: string, id: string): Piece => ({
   rot: 0,
 });
 
-const panel = material({ id: 'panel', price: 100, weight: 40 });
+const panel = material({ id: 'panel', weight: 40 });
 const waler = material({
   id: 'waler',
   name: 'waler 300',
@@ -40,7 +39,6 @@ const waler = material({
   depth: 9,
   shape: 'line',
   stock: { main: 1 },
-  price: 50,
   weight: 12,
 });
 
@@ -100,18 +98,15 @@ describe('buildBom', () => {
     expect(bom.totalPieces).toBe(1);
   });
 
-  it('totals cost and weight', () => {
+  it('totals weight', () => {
     const bom = buildBom([panel, waler], [piece('panel', 'a'), piece('panel', 'b'), piece('waler', 'c')]);
-    expect(bom.totalCost).toBe(250); // 2×100 + 1×50
     expect(bom.totalWeightKg).toBe(92); // 2×40 + 1×12
   });
 
-  it('reports rows with no price so the total is not read as complete', () => {
-    const free = material({ id: 'free', price: 0, weight: 0 });
+  it('reports rows with no weight so the total is not read as complete', () => {
+    const free = material({ id: 'free', weight: 0 });
     const bom = buildBom([free], [piece('free', 'a')]);
-    expect(bom.unpricedRows).toBe(1);
     expect(bom.unweighedRows).toBe(1);
-    expect(bom.totalCost).toBe(0);
   });
 
   it('counts pieces whose material was deleted as orphans', () => {

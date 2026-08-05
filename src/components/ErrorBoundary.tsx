@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { STORAGE_KEY } from '../store/useEditorStore';
+import { Icon } from './Icon';
 
 interface Props {
   children: ReactNode;
@@ -54,8 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <button className="btn primary" onClick={() => window.location.reload()}>
             გვერდის განახლება
           </button>
-          <button className="btn" onClick={this.downloadState}>
-            ⤓ შენახული მონაცემების ჩამოტვირთვა
+          <button className="btn" onClick={this.downloadState}><Icon name="download" /> შენახული მონაცემების ჩამოტვირთვა
           </button>
         </div>
       </div>

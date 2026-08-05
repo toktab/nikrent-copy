@@ -4,6 +4,7 @@ import { useEditorStore } from '../store/useEditorStore';
 import { SHEET_TEMPLATE_HEADERS, validateRows, type ParseSummary } from '../lib/sheetSchema';
 import { categoryLabel } from '../data/categories';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 /** Bulk-add components from an Excel/CSV file or pasted text, with a preview. */
 export function SheetImportDialog() {
@@ -76,8 +77,7 @@ export function SheetImportDialog() {
       onClose={closeDialog}
       footer={
         <>
-          <button className="btn" onClick={() => void onTemplate()}>
-            ⤓ ნიმუშის ჩამოტვირთვა
+          <button className="btn" onClick={() => void onTemplate()}><Icon name="download" /> ნიმუშის ჩამოტვირთვა
           </button>
           <span className="flex-spacer" />
           <button className="btn" onClick={closeDialog}>
@@ -99,8 +99,7 @@ export function SheetImportDialog() {
       </p>
 
       <div className="import-sources">
-        <label className="btn">
-          📂 ფაილის არჩევა (.xlsx / .csv)
+        <label className="btn"><Icon name="folder" /> ფაილის არჩევა (.xlsx / .csv)
           <input
             type="file"
             accept=".xlsx,.xls,.csv,text/csv"
@@ -175,7 +174,7 @@ export function SheetImportDialog() {
                         </span>
                       ))}
                       {r.draft && r.errors.length === 0 && r.warnings.length === 0 && (
-                        <span className="msg ok">✓</span>
+                        <span className="msg ok"><Icon name="check" /></span>
                       )}
                     </td>
                   </tr>

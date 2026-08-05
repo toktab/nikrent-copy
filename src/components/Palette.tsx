@@ -6,6 +6,7 @@ import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { usageByMaterial } from '../lib/bom';
 import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
 import { Swatch } from './ShapeSvg';
+import { Icon } from './Icon';
 
 /** Left-hand material palette: search, grouped list, drag source, inline stock. */
 export function Palette() {
@@ -34,8 +35,7 @@ export function Palette() {
     <aside className="palette">
       <div className="panel-head">
         <span>მასალები</span>
-        <button className="btn icon" title="დაკეცვა" onClick={() => setPaletteOpen(false)}>
-          ◂
+        <button className="btn icon" title="დაკეცვა" onClick={() => setPaletteOpen(false)}><Icon name="chevron-left" />
         </button>
       </div>
       <div className="palette-top">
@@ -44,23 +44,21 @@ export function Palette() {
           disabled={!canManage}
           title={canManage ? undefined : ADMIN_ONLY_TITLE}
           onClick={() => openDialog({ kind: 'material' })}
-        >
-          ＋ ახალი კომპონენტი
+        ><Icon name="plus" /> ახალი კომპონენტი
         </button>
         <button
           className="btn full"
           disabled={!canManage}
           title={canManage ? undefined : ADMIN_ONLY_TITLE}
           onClick={() => openDialog({ kind: 'sheet-import' })}
-        >
-          📊 იმპორტი ცხრილიდან
+        ><Icon name="sheet" /> იმპორტი ცხრილიდან
         </button>
         <input
           className="search"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="🔍 მასალის ძებნა..."
+          placeholder="მასალის ძებნა…"
         />
       </div>
 
@@ -168,16 +166,14 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
           disabled={!canManage}
           title={canManage ? 'რედაქტირება' : ADMIN_ONLY_TITLE}
           onClick={() => openDialog({ kind: 'material', materialId: m.id })}
-        >
-          ✎
+        ><Icon name="pencil" />
         </button>
         <button
           className="btn icon danger"
           disabled={!canManage}
           title={canManage ? 'წაშლა' : ADMIN_ONLY_TITLE}
           onClick={askDelete}
-        >
-          🗑
+        ><Icon name="trash" />
         </button>
       </div>
     </div>

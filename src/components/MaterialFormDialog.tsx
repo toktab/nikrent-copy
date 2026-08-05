@@ -36,7 +36,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const [depthTouched, setDepthTouched] = useState(Boolean(existing));
   const [color, setColor] = useState(existing?.color ?? categoryColor('panel'));
   const [stock, setStock] = useState(String(existing ? stockIn(existing, primaryWarehouse) : 0));
-  const [price, setPrice] = useState(String(existing?.price ?? 0));
   const [weight, setWeight] = useState(String(existing?.weight ?? 0));
   const [article, setArticle] = useState(existing?.article ?? '');
   const [supplier, setSupplier] = useState(existing?.supplier ?? '');
@@ -47,7 +46,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const wNum = decimal(w);
   const hNum = decimal(h);
   const stockNum = Number(stock);
-  const priceNum = decimal(price);
   const weightNum = decimal(weight);
   const depthNum = decimal(depth);
 
@@ -56,7 +54,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   if (!Number.isFinite(wNum) || wNum <= 0) errors.push('სიგანე უნდა იყოს დადებითი რიცხვი.');
   if (!Number.isFinite(hNum) || hNum <= 0) errors.push('სიმაღლე უნდა იყოს დადებითი რიცხვი.');
   if (!Number.isFinite(stockNum) || stockNum < 0) errors.push('მარაგი არ შეიძლება იყოს უარყოფითი.');
-  if (!Number.isFinite(priceNum) || priceNum < 0) errors.push('ფასი არ შეიძლება იყოს უარყოფითი.');
   if (!Number.isFinite(weightNum) || weightNum < 0) errors.push('წონა არ შეიძლება იყოს უარყოფითი.');
   if (!Number.isFinite(depthNum) || depthNum <= 0) errors.push('სისქე უნდა იყოს დადებითი რიცხვი.');
 
@@ -72,7 +69,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
       color,
       builtin: false,
       stock: {},
-      price: 0,
       weight: 0,
       article: '',
       supplier: '',
@@ -93,7 +89,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
       shape,
       color,
       stock: nextStock,
-      price: priceNum || 0,
       weight: weightNum || 0,
       article: article.trim(),
       supplier: supplier.trim(),
@@ -222,17 +217,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
         </label>
 
         <label className="field">
-          <span>ერთეულის ფასი</span>
-          <input
-            type="number"
-            min={0}
-            step="any"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-          />
-        </label>
-
-        <label className="field">
           <span>წონა (კგ)</span>
           <input
             type="number"
@@ -244,7 +228,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
         </label>
 
         <label className="field">
-          <span>არტიკული</span>
+          <span>აღნიშვნა</span>
           <input value={article} onChange={(e) => setArticle(e.target.value)} placeholder="DU-…" />
         </label>
 
