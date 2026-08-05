@@ -37,9 +37,30 @@ import { Rulers } from './Rulers';
 /** What the pointer is currently doing on the stage. */
 type Interaction =
   | { type: 'pan'; sx: number; sy: number; px: number; py: number }
-  | { type: 'move'; sx: number; sy: number; baseline: Piece[] }
+  | { type: 'move'; sx: number; sy: number; baseline: Piece[]; moved: boolean }
   | { type: 'marquee'; sx: number; sy: number }
   | null;
+
+/** A press has to travel this far before it counts as a drag rather than a click. */
+const DRAG_THRESHOLD_PX = 3;
+
+/**
+ * Every piece under the cursor, nearest first.
+ *
+ * Read from the document rather than from geometry so it agrees with what the
+ * user can see by construction: the browser has already resolved stacking, and
+ * since the pieces hit-test on their painted shape, a piece only appears here
+ * where it is actually drawn.
+ */
+function stackUnder(clientX: number, clientY: number): string[] {
+  const ids: string[] = [];
+  for (const el of document.elementsFromPoint(clientX, clientY)) {
+    const piece = el instanceof Element ? el.closest<HTMLElement>('.piece') : null;
+    const id = piece?.dataset.pieceId;
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
 
 interface MarqueeBox {
   x: number;
@@ -219,12 +240,18 @@ export function StageCanvas() {
         return;
       }
       if (it.type === 'move') {
-        // Screen delta → world delta is just a division by the zoom.
-        s.moveSelectionBy(
-          (e.clientX - it.sx) / s.zoom,
-          (e.clientY - it.sy) / s.zoom,
-          it.baseline,
-        );
+        const dx = e.clientX - it.sx;
+        const dy = e.clientY - it.sy;
+        if (!it.moved) {
+          if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+          // Opened on the first real movement rather than on the press, so
+          // clicking around to inspect pieces does not fill the undo history
+          // with steps that changed nothing.
+          s.beginDrag();
+          it.moved = true;
+        }
+        // Screen delta → surface delta is just a division by the zoom.
+        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline);
         return;
       }
       // marquee: track the rubber band in stage-relative screen pixels
@@ -275,7 +302,7 @@ export function StageCanvas() {
         }
         setMarquee(null);
       }
-      if (it?.type === 'move') useEditorStore.getState().endDrag();
+      if (it?.type === 'move' && it.moved) useEditorStore.getState().endDrag();
       interaction.current = null;
       setPanning(false);
     };
@@ -398,19 +425,38 @@ export function StageCanvas() {
     e.stopPropagation();
     const s = useEditorStore.getState();
 
+    /**
+     * Alt reaches past whatever is in front.
+     *
+     * A plain click takes the piece on top, which is the one the user pointed
+     * at. But formwork stacks: in an elevation a whole back face hides behind
+     * the front one, and in plan a waler crosses the panels under it, so the
+     * pieces underneath need a way to be got at. Each Alt press steps one
+     * deeper into the stack and wraps around at the bottom.
+     */
+    let target = id;
+    if (e.altKey) {
+      const stack = stackUnder(e.clientX, e.clientY);
+      if (stack.length > 1) {
+        // Step from whatever is selected, so repeated presses walk the stack.
+        const from = stack.indexOf(s.selectedIds.length === 1 ? s.selectedIds[0] : id);
+        target = stack[(Math.max(0, from) + 1) % stack.length];
+      }
+    }
+
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      s.toggleSelect(id);
+      s.toggleSelect(target);
       return; // modifier-click adjusts the selection, it does not start a drag
     }
     // Clicking an already-selected piece keeps the group so it can be dragged.
-    if (!s.selectedIds.includes(id)) s.select(id);
+    if (!s.selectedIds.includes(target)) s.select(target);
 
-    s.beginDrag();
     interaction.current = {
       type: 'move',
       sx: e.clientX,
       sy: e.clientY,
       baseline: useEditorStore.getState().pieces,
+      moved: false,
     };
   }, []);
 

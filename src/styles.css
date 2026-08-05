@@ -512,10 +512,34 @@ input[type='color'] {
     linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 20px 20px;
   outline: 1px solid #4a5560;
 }
+/**
+ * Clicks land on the drawn shape, not on its bounding box.
+ *
+ * An L-corner's notch is inside its box but outside the piece, and the box is
+ * transparent there — so a click on the panel showing through that notch was
+ * caught by the corner sitting on top of it, and selected the wrong piece.
+ *
+ * Handing the hit test to the SVG geometry fixes it exactly: `visiblePainted`
+ * counts fill and stroke, so the notch stops being clickable while everything
+ * that is actually drawn stays so. Events still bubble to this div, which owns
+ * the pointer handler — `pointer-events: none` suppresses hit-testing, not
+ * propagation.
+ *
+ * Thin bars keep their generous target: `ShapeSvg` paints a faint full-box
+ * rectangle behind them on purpose, and a faint fill is still a painted one.
+ */
 .piece {
   position: absolute;
   cursor: move;
   transform-origin: center center;
+  pointer-events: none;
+}
+.piece .shape > * {
+  pointer-events: visiblePainted;
+}
+/* An elevation piece is a solid rectangle: box and shape are the same thing. */
+.piece.elevation {
+  pointer-events: auto;
 }
 .piece .shape {
   width: 100%;

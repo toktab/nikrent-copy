@@ -90,6 +90,9 @@ export default function App() {
           <kbd>{combo(['shift'])}</kbd>+კლიკი — მონიშვნის დამატება
         </span>
         <span>
+          <kbd>Alt</kbd>+კლიკი — ქვედა ელემენტის მონიშვნა
+        </span>
+        <span>
           <kbd>Space</kbd>+თრევა ან შუა ღილაკი — ხედის გადაწევა
         </span>
         <span>

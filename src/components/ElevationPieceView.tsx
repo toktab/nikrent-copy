@@ -37,6 +37,7 @@ export const ElevationPieceView = memo(function ElevationPieceView({
   return (
     <div
       className={`piece elevation${selected ? ' selected' : ''}`}
+      data-piece-id={piece.id}
       style={{
         left: r.x,
         top: r.y,

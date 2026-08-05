@@ -30,6 +30,7 @@ export const PieceView = memo(function PieceView({
   return (
     <div
       className={`piece${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
+      data-piece-id={piece.id}
       style={{
         left: piece.x,
         top: piece.y,
