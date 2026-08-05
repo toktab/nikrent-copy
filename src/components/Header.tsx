@@ -265,13 +265,19 @@ export function Header() {
             className="btn"
             onClick={() => openDialog({ kind: 'column-wizard' })}
             title="კოლონის ავტომატური აწყობა"
-          ><Icon name="column" /> კოლონა
+          ><Icon name="column" /> <span className="btn-label">კოლონა</span>
           </button>
           <button
             className="btn"
             onClick={() => openDialog({ kind: 'wall-wizard' })}
             title="კედლის ავტომატური აწყობა"
-          ><Icon name="wall" /> კედელი
+          ><Icon name="wall" /> <span className="btn-label">კედელი</span>
+          </button>
+          <button
+            className="btn"
+            onClick={() => openDialog({ kind: 'templates' })}
+            title="შენახული შაბლონები — მონიშნულის შენახვა და ჩასმა"
+          ><Icon name="copy" /> <span className="btn-label">შაბლონი</span>
           </button>
 
           <span className="sep" />
@@ -281,7 +287,7 @@ export function Header() {
             onClick={() => rotateSelected(90)}
             disabled={!hasSelection}
             title="მოტრიალება 90° (R). ზუსტი კუთხე — „დეტალები“ ჩანართში."
-          ><Icon name="rotate-cw" /> 90°
+          ><Icon name="rotate-cw" /> <span className="btn-label">90°</span>
           </button>
           <button
             className="btn"
@@ -295,7 +301,7 @@ export function Header() {
             onClick={() => openDialog({ kind: 'array' })}
             disabled={!hasSelection}
             title="მასივი — ასლების გამრავლება"
-          ><Icon name="array" /> მასივი
+          ><Icon name="array" /> <span className="btn-label">მასივი</span>
           </button>
           <button
             className="btn danger"
@@ -312,7 +318,7 @@ export function Header() {
           <span className="zoomlabel">{Math.round(zoom * 100)}%</span>
           <button className="btn" onClick={() => zoomBy(1.2)}><Icon name="plus" />
           </button>
-          <button className="btn" onClick={fitToContent} title="ჩატევა"><Icon name="fit" /> ცენტრი
+          <button className="btn" onClick={fitToContent} title="ჩატევა"><Icon name="fit" /> <span className="btn-label">ცენტრი</span>
           </button>
         </div>
 
@@ -371,7 +377,7 @@ export function Header() {
             className="btn small"
             onClick={() => exportCatalogFile(materials, warehouses)}
             title="მასალები, ფასები და მარაგები ერთ ფაილად — სარეზერვო ასლი და სხვა კომპიუტერზე გადატანა"
-          ><Icon name="download" /> ექსპორტი
+          ><Icon name="download" /> <span className="btn-label">ექსპორტი</span>
           </button>
           <button
             className="btn small"
@@ -382,7 +388,7 @@ export function Header() {
                 ? 'ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)'
                 : ADMIN_ONLY_TITLE
             }
-          ><Icon name="upload" /> იმპორტი
+          ><Icon name="upload" /> <span className="btn-label">იმპორტი</span>
           </button>
           <button
             className="btn small danger"
@@ -414,7 +420,7 @@ export function Header() {
             title="მასშტაბური ნახაზი შტამპით (PDF)"
           >
             {printing ? '…' : <>
-              <Icon name="print" /> ბეჭდვა
+              <Icon name="print" /> <span className="btn-label">ბეჭდვა</span>
             </>}
           </button>
           <button
@@ -422,13 +428,13 @@ export function Header() {
             onClick={() => exportLayoutFile(pieces)}
             disabled={!pieces.length}
             title="მიმდინარე ნახაზი ფაილად — არქივი ან კოლეგისთვის გასაგზავნად"
-          ><Icon name="download" /> ექსპორტი
+          ><Icon name="download" /> <span className="btn-label">ექსპორტი</span>
           </button>
           <button
             className="btn small"
             onClick={() => void importLayout()}
             title="ნახაზის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარე ნახაზს)"
-          ><Icon name="upload" /> იმპორტი
+          ><Icon name="upload" /> <span className="btn-label">იმპორტი</span>
           </button>
           <button
             className="btn small danger"

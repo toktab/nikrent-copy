@@ -1873,3 +1873,95 @@ kbd {
 .btn .icon {
   pointer-events: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   On-site tablet layout.
+
+   Measured at 768×1024 before this block: header 210px + footer 86px = 29%
+   of the screen given over to chrome, both header bars wrapping onto extra
+   rows. The canvas is the tool; everything else is overhead.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The footer is entirely keyboard shortcuts, which mean nothing without a
+   keyboard. On touch it is 86px of pure waste. */
+@media (pointer: coarse) {
+  .footer {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Icon-only toolbar: the labels repeat what the icon and tooltip already
+     say, and dropping them roughly halves the number of wrapped rows. */
+  .bar .btn-label {
+    display: none;
+  }
+  .bar .btn {
+    padding: 6px 8px;
+  }
+  .bar {
+    gap: 6px;
+    padding: 5px 8px;
+  }
+  .bar-sub {
+    padding: 4px 8px;
+  }
+  .toolbar {
+    gap: 4px;
+  }
+  /* Group labels ("წარწერები", "დახმარება") are guidance for a first-time
+     desktop user and cost a whole row here. */
+  .group-label {
+    display: none;
+  }
+  .doc-picker select {
+    max-width: 120px;
+  }
+  .zoomlabel {
+    min-width: 38px;
+    font-size: 11px;
+  }
+}
+
+/* Portrait tablet and below: the side panels take more than half the width,
+   so they open over the canvas instead of squeezing it. */
+@media (max-width: 820px) {
+  .palette,
+  .inspector {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 120;
+    width: 280px;
+    max-width: 82vw;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.55);
+  }
+  .palette {
+    left: 0;
+  }
+  .inspector {
+    right: 0;
+  }
+  .body {
+    position: relative;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Keep the hints available on a narrow window with a keyboard, but as one
+     scrollable row rather than three wrapped ones — they were costing 86px,
+     more than the drawing toolbar above them. */
+  .footer {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 14px;
+    padding: 4px 10px;
+    scrollbar-width: none;
+  }
+  .footer::-webkit-scrollbar {
+    display: none;
+  }
+  .footer span {
+    flex: 0 0 auto;
+  }
+}

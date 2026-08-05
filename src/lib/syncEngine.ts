@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { useEditorStore } from '../store/useEditorStore';
 import { ConflictError, PermissionError, applyPlan, fetchAll, reloadDocument } from './repo';
+import { captureError } from './errorLog';
 import {
   diffSnapshots,
   emptyPlan,
@@ -135,6 +136,13 @@ export async function flush(): Promise<void> {
         error: 'ეს ნახაზი სხვამ შეცვალა. აირჩიე რომელი ვერსია დარჩეს.',
       });
     } else {
+      // Neither a conflict nor a permission refusal, so something is actually
+      // wrong — and the user only sees "saving failed".
+      void captureError(err, 'sync', {
+        materials: sending.materialsUpsert.length,
+        documents: sending.documentsUpsert.length,
+        stock: sending.stockSet.length,
+      });
       useSyncStore.setState({
         status: 'error',
         error: err instanceof Error ? err.message : String(err),

@@ -182,6 +182,7 @@ export type DialogState =
   | { kind: 'array' }
   | { kind: 'column-wizard' }
   | { kind: 'wall-wizard' }
+  | { kind: 'templates' }
   | { kind: 'warehouses' }
   | { kind: 'title-block' }
   | { kind: 'documents' }

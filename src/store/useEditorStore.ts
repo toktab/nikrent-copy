@@ -192,6 +192,8 @@ export interface EditorState {
   arraySelection: (options: ArrayOptions) => void;
   generateColumn: (spec: ColumnSpec) => { added: number; warnings: string[] };
   generateWall: (spec: WallSpec) => { added: number; warnings: string[] };
+  /** Drop a saved assembly's pieces onto the surface, already positioned. */
+  insertPieces: (pieces: Piece[]) => void;
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
 
@@ -685,6 +687,14 @@ export const useEditorStore = create<EditorState>()(
             }));
           }
           return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        insertPieces: (incoming) => {
+          if (!incoming.length) return;
+          commit((s) => ({
+            pieces: [...s.pieces, ...incoming],
+            selectedIds: incoming.map((p) => p.id),
+          }));
         },
 
         clearPieces: () => commit(() => ({ pieces: [], selectedIds: [] })),
