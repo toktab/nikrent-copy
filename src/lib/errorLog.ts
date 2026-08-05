@@ -70,6 +70,56 @@ export async function captureError(
   }
 }
 
+/** One recorded crash, as an admin sees it. */
+export interface ErrorEntry {
+  id: number;
+  message: string;
+  stack: string;
+  source: string;
+  context: Record<string, unknown>;
+  user_agent: string;
+  url: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+/**
+ * Recent crashes, newest first.
+ *
+ * Reading is admin-only, enforced by row-level security rather than by hiding
+ * the button: a stack trace can carry fragments of whatever someone was
+ * working on, so it is not for the whole company.
+ *
+ * Capped because this is a diagnostic list, not an archive — nobody scrolls
+ * to the five hundredth crash, and fetching them all on a bad day would be a
+ * lot of text to move.
+ */
+export async function fetchErrors(limit = 100): Promise<ErrorEntry[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('error_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ErrorEntry[];
+}
+
+/**
+ * Clear the log once the reports have been dealt with.
+ *
+ * All or nothing rather than per row: these are read in a batch after
+ * something went wrong, and picking off single entries invites a half-cleared
+ * list nobody can tell the age of. The delete needs a where clause to be
+ * accepted at all, so it is bounded by the newest id the caller actually saw —
+ * which also means a crash arriving mid-read is not silently thrown away.
+ */
+export async function clearErrors(upToId: number): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.from('error_log').delete().lte('id', upToId);
+  if (error) throw new Error(error.message);
+}
+
 /**
  * Catch what React's error boundary cannot: errors thrown outside render, and
  * rejected promises nobody awaited. Returns a teardown.

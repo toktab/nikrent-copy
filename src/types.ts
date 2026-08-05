@@ -191,6 +191,7 @@ export type DialogState =
   | { kind: 'title-block' }
   | { kind: 'documents' }
   | { kind: 'users' }
+  | { kind: 'errors' }
   | { kind: 'password' }
   | {
       kind: 'confirm';

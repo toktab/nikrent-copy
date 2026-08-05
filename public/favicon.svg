@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!--
+    Formwork seen head-on: panels standing side by side, banded by a waler.
+
+    Drawn heavy and with only three elements because a favicon is read at
+    16px, where the app's 2px-stroke icon set turns to grey mush. Solid
+    shapes survive that; outlines do not.
+  -->
+  <rect width="64" height="64" rx="12" fill="#20252b"/>
+  <g fill="#f5a623">
+    <rect x="14" y="12" width="9" height="40" rx="1.5"/>
+    <rect x="27.5" y="12" width="9" height="40" rx="1.5"/>
+    <rect x="41" y="12" width="9" height="40" rx="1.5"/>
+  </g>
+  <rect x="9" y="27" width="46" height="8" rx="2" fill="#6ea8d8"/>
+</svg>

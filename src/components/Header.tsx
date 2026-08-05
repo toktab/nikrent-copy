@@ -322,10 +322,10 @@ export function Header() {
 
           <span className="sep" />
 
-          <button className="btn" onClick={() => zoomBy(1 / 1.2)}><Icon name="minus" />
+          <button className="btn" onClick={() => zoomBy(1 / 1.2)} title="დაშორება"><Icon name="minus" />
           </button>
           <span className="zoomlabel">{Math.round(zoom * 100)}%</span>
-          <button className="btn" onClick={() => zoomBy(1.2)}><Icon name="plus" />
+          <button className="btn" onClick={() => zoomBy(1.2)} title="მიახლოება"><Icon name="plus" />
           </button>
           <button className="btn" onClick={fitToContent} title="ჩატევა"><Icon name="fit" /> <span className="btn-label">ცენტრი</span>
           </button>

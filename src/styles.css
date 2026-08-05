@@ -1620,6 +1620,98 @@ kbd {
   }
 }
 
+/* --------------------------------------------------------------- error log */
+.error-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Long enough to scan a bad afternoon, short enough that the footer with
+     the clear button stays reachable without scrolling the whole dialog. */
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.error-row {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.error-head {
+  display: grid;
+  /* chevron · message (takes the slack) · source · when */
+  grid-template-columns: auto 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 9px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.error-head:hover {
+  background: var(--panel2);
+}
+
+.error-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.error-source,
+.error-when {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.error-detail {
+  border-top: 1px solid var(--line);
+  padding: 9px;
+}
+
+.error-detail pre {
+  margin: 0 0 8px;
+  padding: 8px;
+  background: var(--panel);
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #ffb3b3;
+  /* A stack trace has no natural wrap point, so it scrolls rather than
+     stretching the dialog to the width of the longest frame. */
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.error-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.error-meta dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.error-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------------- users */
 .table-scroll {
   overflow-x: auto;

@@ -40,6 +40,7 @@ export type IconName =
   | 'wall'
   | 'chevron-left'
   | 'chevron-right'
+  | 'chevron-down'
   | 'arrow-right'
   | 'arrow-down'
   | 'arrow-left'
@@ -83,6 +84,7 @@ const PATHS: Record<IconName, string> = {
   'arrow-right': 'M4 12h15 M13 6l6 6-6 6',
   'arrow-down': 'M12 4v15 M6 13l6 6 6-6',
   'arrow-left': 'M20 12H5 M11 6l-6 6 6 6',
+  'chevron-down': 'M5 9l7 7 7-7',
   'arrow-up': 'M12 20V5 M6 11l6-6 6 6',
   // Double-headed rule: elevation, as distinct from a one-way nudge.
   height: 'M12 4v16 M8 7l4-3 4 3 M8 17l4 3 4-3',

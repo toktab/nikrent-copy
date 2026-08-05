@@ -198,14 +198,25 @@ export function ProfileMenu() {
 
           <div className="profile-actions">
             {profile.role === 'admin' && (
-              <button
-                className="btn full"
-                onClick={() => {
-                  setOpen(false);
-                  openDialog({ kind: 'users' });
-                }}
-              ><Icon name="users" /> გუნდის მართვა
-              </button>
+              <>
+                <button
+                  className="btn full"
+                  onClick={() => {
+                    setOpen(false);
+                    openDialog({ kind: 'users' });
+                  }}
+                ><Icon name="users" /> გუნდის მართვა
+                </button>
+                <button
+                  className="btn full"
+                  onClick={() => {
+                    setOpen(false);
+                    openDialog({ kind: 'errors' });
+                  }}
+                  title="რა იშლება პროგრამაში — ავტომატურად აღრიცხული"
+                ><Icon name="warning" /> შეცდომების ჟურნალი
+                </button>
+              </>
             )}
             <button
               className="btn full"

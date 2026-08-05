@@ -17,6 +17,7 @@ import { TemplatesDialog } from './components/TemplatesDialog';
 import { WarehousesDialog } from './components/WarehousesDialog';
 import { TitleBlockDialog } from './components/TitleBlockDialog';
 import { UsersDialog } from './components/UsersDialog';
+import { ErrorLogDialog } from './components/ErrorLogDialog';
 import { PasswordDialog } from './components/PasswordDialog';
 import { Icon } from './components/Icon';
 
@@ -115,6 +116,7 @@ export default function App() {
       {dialog?.kind === 'warehouses' && <WarehousesDialog />}
       {dialog?.kind === 'title-block' && <TitleBlockDialog />}
       {dialog?.kind === 'users' && <UsersDialog />}
+      {dialog?.kind === 'errors' && <ErrorLogDialog />}
       {dialog?.kind === 'password' && <PasswordDialog />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
