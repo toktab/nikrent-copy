@@ -22,7 +22,16 @@
 #     The host should read `…pooler.supabase.com`, never `db.….supabase.co`.
 #
 # ── Restoring ──────────────────────────────────────────────────────────────
-#   gunzip -c backup.sql.gz | psql "$SUPABASE_DB_URL"
+# Order matters. The accounts have to exist before anything that references
+# them, or every insert fails on a foreign key:
+#
+#   1. create a project and run supabase/migrations/0001…0008 against it
+#   2. gunzip -c auth.sql.gz   | psql "$TARGET_DB_URL"
+#   3. gunzip -c public.sql.gz | psql "$TARGET_DB_URL"
+#
+# Uploaded avatars are not in here: storage.objects holds the metadata but the
+# files themselves live in object storage. They are re-uploadable and nothing
+# depends on them, so they are deliberately out of scope.
 #
 # A backup nobody has ever restored is a guess, not a backup. Restore one into
 # a scratch Supabase project once, so the procedure is known before it matters.
@@ -43,7 +52,7 @@ jobs:
     # comes from the matching major version rather than from Ubuntu's default.
     container: postgres:17-alpine
     steps:
-      - name: Dump the database
+      - name: Dump the company's data
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
@@ -57,25 +66,69 @@ jobs:
           pg_dump "$SUPABASE_DB_URL" \
             --no-owner --no-privileges \
             --schema=public --schema=storage \
-            | gzip -9 > backup.sql.gz
-          ls -lh backup.sql.gz
+            | gzip -9 > public.sql.gz
+          ls -lh public.sql.gz
 
-      - name: Fail if the dump is suspiciously small
+      - name: Dump the accounts
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
-          size=$(stat -c %s backup.sql.gz)
-          echo "dump is ${size} bytes"
-          # An empty or error-only dump still exits 0 and still uploads, which
-          # would look like a working backup for months.
-          if [ "$size" -lt 2000 ]; then
-            echo "Dump is too small to be real — treating as a failure." >&2
-            exit 1
+          # Without this the rest of the backup does not restore at all.
+          #
+          # `profiles.id` IS a reference to auth.users(id), and four other
+          # columns point there too, so into a fresh project every profile row
+          # violates its foreign key and takes the restore down with it. The
+          # auth schema is Supabase's to manage, so only the rows are taken —
+          # the tables already exist in any project worth restoring into.
+          #
+          # These rows include password hashes. They are no more sensitive than
+          # the drawings sitting beside them in the same artifact, but it is
+          # worth knowing that anyone who can read this repository can download
+          # both.
+          pg_dump "$SUPABASE_DB_URL" \
+            --no-owner --no-privileges --data-only \
+            --table=auth.users --table=auth.identities \
+            | gzip -9 > auth.sql.gz
+          ls -lh auth.sql.gz
+
+      - name: Refuse to publish a backup that is not real
+        run: |
+          set -euo pipefail
+          fail=0
+          for f in public.sql.gz auth.sql.gz; do
+            size=$(stat -c %s "$f")
+            echo "$f is ${size} bytes"
+            # An empty or error-only dump still exits 0 and still uploads,
+            # which would look like a working backup for months.
+            case "$f" in
+              public.sql.gz) floor=2000 ;;
+              # A dump of an empty table is still a few hundred bytes of
+              # preamble, so this floor only catches a genuinely absent one.
+              auth.sql.gz)   floor=400  ;;
+            esac
+            if [ "$size" -lt "$floor" ]; then
+              echo "  ^ below ${floor} bytes — treating as a failure." >&2
+              fail=1
+            fi
+          done
+          # Prove the data is actually in there rather than trusting the size.
+          if ! gunzip -c public.sql.gz | grep -q 'COPY public.materials'; then
+            echo "public.sql.gz contains no materials data." >&2
+            fail=1
           fi
+          if ! gunzip -c auth.sql.gz | grep -q 'COPY auth.users'; then
+            echo "auth.sql.gz contains no accounts." >&2
+            fail=1
+          fi
+          exit $fail
 
       - uses: actions/upload-artifact@v4
         with:
           name: db-backup-${{ github.run_id }}
-          path: backup.sql.gz
+          path: |
+            public.sql.gz
+            auth.sql.gz
           # GitHub's ceiling for artifacts is 90 days. Anything longer needs
           # somewhere else to put them.
           retention-days: 90
