@@ -3,33 +3,105 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ArrayOptions,
   ColumnSpec,
+  WallSpec,
   DialogState,
   DocSnapshot,
   DrawingDoc,
+  HiddenLineMode,
   Material,
   MaterialDraft,
   Piece,
   Warehouse,
 } from '../types';
-import { SEED_MATERIALS, createSeedMaterials } from '../data/seedCatalog';
+import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { sanitizeMaterial } from '../lib/catalogFile';
 import {
   clampZoom,
   computeEdgeSnap,
-  contentBounds,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
-  pieceBounds,
   snapValue,
   unionRect,
 } from '../lib/geometry';
 import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
+import { planWall } from '../lib/wallWizard';
+import {
+  projectPiece,
+  projectedContentBounds,
+  unprojectDelta,
+  type ViewAxis,
+} from '../lib/projection';
+import { isConfigured } from '../lib/supabase';
+import type { DataSnapshot } from '../lib/syncDiff';
 
 export const STORAGE_KEY = 'du-formwork-v2';
+
+/**
+ * Where preferences go once the backend is in use.
+ *
+ * Deliberately a different key from `STORAGE_KEY`. With a server, company data
+ * is no longer persisted locally, so writing preferences back to the old key
+ * would overwrite the saved catalog and drawings with a file containing
+ * nothing but zoom and toggle states — destroying the very data the migration
+ * exists to import. Leaving that key untouched also keeps it as an on-disk
+ * backup of everything from before the move.
+ */
+export const PREFS_KEY = 'du-formwork-prefs';
+
 const HISTORY_LIMIT = 80;
+
+/** Settings that belong to one person on one machine, not to the company. */
+const PREF_KEYS = [
+  'zoom',
+  'panX',
+  'panY',
+  'snap',
+  'snapStep',
+  'edgeSnap',
+  'showDims',
+  'showNames',
+  'forceLabels',
+  'showOverlaps',
+  'viewMode',
+  'surfaceView',
+  'hiddenLines',
+  'paletteOpen',
+  'inspectorOpen',
+] as const;
+
+/**
+ * One-off corrections to built-in sizes that were wrong in the v1 port.
+ *
+ * Applied only where the stored value still matches the wrong one, so a company
+ * that has already entered its own size keeps it. Without this, a saved catalog
+ * would carry the broken dimension forever — stored materials always win over
+ * the seed, which is what makes user edits stick.
+ *
+ * Must stay ABOVE `create()`: rehydration runs while the store is being built,
+ * so anything it reaches has to be initialised by then. A `const` declared
+ * further down the file is still in its temporal dead zone at that moment, and
+ * the ReferenceError is swallowed by the persist middleware — the saved drawing
+ * is silently dropped and then overwritten with an empty one.
+ */
+const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number }> = [
+  // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
+  // concrete face. The mismatch left a hole beside every corner and made the
+  // column wizard lay panels that did not reach the corner profile.
+  { id: 'corner-outer-300', fromW: 15, toW: 24 },
+];
+
+/** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
+export function applySizeFixes(materials: Material[]): void {
+  for (const fix of BUILTIN_SIZE_FIXES) {
+    const m = materials.find((x) => x.id === fix.id);
+    if (!m || !m.builtin || m.w !== fix.fromW) continue;
+    m.w = fix.toW;
+    m.depth = defaultDepth(m.category, m.w, m.h);
+  }
+}
 
 export interface EditorState {
   // ── data ──
@@ -40,6 +112,12 @@ export interface EditorState {
   documents: DrawingDoc[];
   activeDocId: string;
   warehouses: Warehouse[];
+  /**
+   * False until the server's data has been loaded. The sync engine watches
+   * this: pushing before it is true would upload the seed catalog and the
+   * empty starter drawing over whatever the company actually has.
+   */
+  dataLoaded: boolean;
 
   // ── history ──
   past: DocSnapshot[];
@@ -62,8 +140,12 @@ export interface EditorState {
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
   showOverlaps: boolean;
-  /** what a plain wheel / two-finger scroll does; the modifier does the other */
-  wheelMode: 'pan' | 'zoom';
+  /** 2D plan editor, or the read-only 3D visualisation */
+  viewMode: '2d' | '3d';
+  /** Which orthographic view the 2D surface is showing. */
+  surfaceView: ViewAxis;
+  /** what the 3D view does with edges that sit behind other pieces */
+  hiddenLines: HiddenLineMode;
   /** side panels can be folded away to give the canvas room on small screens */
   paletteOpen: boolean;
   inspectorOpen: boolean;
@@ -81,6 +163,12 @@ export interface EditorState {
   /** material being dragged in from the palette, for the drop preview */
   draggingMaterialId: string | null;
 
+  // ── actions: data ──
+  /** Replace all company data with what the server holds. */
+  hydrateFromServer: (snapshot: DataSnapshot) => void;
+  /** Mark the local-only path as ready, when there is no server to wait for. */
+  markLoadedOffline: () => void;
+
   // ── actions: view ──
   setStageSize: (w: number, h: number) => void;
   setPan: (panX: number, panY: number) => void;
@@ -96,12 +184,28 @@ export interface EditorState {
   selectAll: () => void;
 
   // ── actions: pieces ──
-  addPiece: (materialId: string, worldX: number, worldY: number) => void;
+  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number) => void;
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
-  moveSelectionBy: (dxCm: number, dyCm: number, baseline: Piece[]) => void;
+  /**
+   * Live drag on the 2D surface, in surface centimetres. Which world axes
+   * those are is `surfaceView`'s business, not the caller's.
+   */
+  moveSelectionBy: (duCm: number, dvCm: number, baseline: Piece[]) => void;
+  /** Arrow-key nudge, also in surface centimetres. */
+  nudgeSelection: (duCm: number, dvCm: number) => void;
+  /** Live drag from the 3D view, which can also move a piece up and down. */
+  moveSelectionSpatially: (
+    dxCm: number,
+    dyCm: number,
+    dzCm: number,
+    baseline: Piece[],
+  ) => void;
   endDrag: () => void;
-  nudgeSelection: (dxCm: number, dyCm: number) => void;
+  /** Put the selection at an exact elevation, from the inspector field. */
+  setElevation: (zCm: number) => void;
+  /** Raise or lower the selection, from a keyboard nudge. */
+  nudgeElevation: (dzCm: number) => void;
   rotateSelected: (step?: number) => void;
   setRotation: (deg: number) => void;
   deleteSelected: () => void;
@@ -110,6 +214,9 @@ export interface EditorState {
   pasteClipboard: () => void;
   arraySelection: (options: ArrayOptions) => void;
   generateColumn: (spec: ColumnSpec) => { added: number; warnings: string[] };
+  generateWall: (spec: WallSpec) => { added: number; warnings: string[] };
+  /** Drop a saved assembly's pieces onto the surface, already positioned. */
+  insertPieces: (pieces: Piece[]) => void;
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
 
@@ -138,7 +245,10 @@ export interface EditorState {
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
-  setWheelMode: (mode: 'pan' | 'zoom') => void;
+  setViewMode: (mode: '2d' | '3d') => void;
+  /** Switch the surface between plan, front and side, reframing as it goes. */
+  setSurfaceView: (view: ViewAxis) => void;
+  setHiddenLines: (mode: HiddenLineMode) => void;
   setPaletteOpen: (on: boolean) => void;
   setInspectorOpen: (on: boolean) => void;
   setPaletteQuery: (q: string) => void;
@@ -253,6 +363,8 @@ export const useEditorStore = create<EditorState>()(
         documents: [firstDoc],
         activeDocId: firstDoc.id,
         warehouses: [{ ...DEFAULT_WAREHOUSE }],
+        // With a server, nothing here is real until it has been loaded.
+        dataLoaded: !isConfigured,
 
         past: [],
         future: [],
@@ -268,7 +380,9 @@ export const useEditorStore = create<EditorState>()(
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
-        wheelMode: 'pan',
+        viewMode: '2d',
+        surfaceView: 'plan',
+        hiddenLines: 'hide',
         // Start folded on a phone-ish window so the canvas is usable at all.
         paletteOpen: typeof window === 'undefined' || window.innerWidth > 900,
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
@@ -282,6 +396,51 @@ export const useEditorStore = create<EditorState>()(
         guideX: null,
         guideY: null,
         draggingMaterialId: null,
+
+        // ── data ──────────────────────────────────────────────────────────
+        /**
+         * Adopt the server's data wholesale.
+         *
+         * Gaps are filled rather than left empty so a brand-new project is
+         * usable immediately: no warehouse means the default store, no catalog
+         * means the built-in Du materials, no drawings means one blank sheet.
+         * Whatever is filled in here is pushed up by the next sync, so the
+         * server ends up holding it too.
+         */
+        hydrateFromServer: (snapshot) =>
+          set((s) => {
+            const materials = snapshot.materials.length
+              ? snapshot.materials
+              : createSeedMaterials();
+            applySizeFixes(materials);
+
+            const warehouses = snapshot.warehouses.length
+              ? snapshot.warehouses
+              : [{ ...DEFAULT_WAREHOUSE }];
+
+            const documents = snapshot.documents.length
+              ? snapshot.documents
+              : [newDoc('ნახაზი 1')];
+
+            // Stay on the same drawing across a reload where possible.
+            const active =
+              documents.find((d) => d.id === s.activeDocId) ?? documents[0];
+
+            return {
+              materials,
+              warehouses,
+              documents,
+              activeDocId: active.id,
+              pieces: active.pieces,
+              removedBuiltins: [],
+              dataLoaded: true,
+              selectedIds: [],
+              past: [],
+              future: [],
+            };
+          }),
+
+        markLoadedOffline: () => set({ dataLoaded: true }),
 
         // ── view ──────────────────────────────────────────────────────────
         setStageSize: (w, h) => set({ stageW: w, stageH: h }),
@@ -307,7 +466,9 @@ export const useEditorStore = create<EditorState>()(
         fitToContent: () =>
           set((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
-            const b = contentBounds(s.pieces, byId);
+            // In an elevation the model sits above the ground line, at negative
+            // surface y — the plan's bounds would frame empty floor.
+            const b = projectedContentBounds(s.pieces, byId, s.surfaceView);
             if (!b) return { ...DEFAULT_VIEW };
             const pad = 60;
             const zoom = Math.min(
@@ -343,10 +504,17 @@ export const useEditorStore = create<EditorState>()(
          * caller's job (see `dropPosition` in StageCanvas) so that the drop
          * preview and the placed piece can never disagree.
          */
-        addPiece: (materialId, worldX, worldY) =>
+        addPiece: (materialId, worldX, worldY, worldZ = 0) =>
           commit((s) => {
             if (!s.materials.some((m) => m.id === materialId)) return {};
-            const piece: Piece = { id: uid(), materialId, x: worldX, y: worldY, rot: 0 };
+            const piece: Piece = {
+              id: uid(),
+              materialId,
+              x: worldX,
+              y: worldY,
+              rot: 0,
+              z: Math.max(0, worldZ),
+            };
             return { pieces: [...s.pieces, piece], selectedIds: [piece.id] };
           }),
 
@@ -360,35 +528,52 @@ export const useEditorStore = create<EditorState>()(
           })),
 
         /**
-         * Live drag. `baseline` is the piece list as it was when the drag
-         * started, so the delta always applies to the original positions and
-         * repeated snapping cannot creep.
+         * Live drag on the surface, whichever view it is showing.
+         *
+         * `baseline` is the piece list as it was when the drag started, so the
+         * delta always applies to the original positions and repeated snapping
+         * cannot creep.
+         *
+         * The snapping runs entirely in surface coordinates and only becomes
+         * world movement at the very end. That is what lets one path serve all
+         * three views — and it means edge snapping, which is what actually
+         * makes panels butt together, works in an elevation too: courses land
+         * on each other instead of near each other.
          */
-        moveSelectionBy: (dxCm, dyCm, baseline) =>
+        moveSelectionBy: (duCm, dvCm, baseline) =>
           apply((s) => {
             const selected = new Set(s.selectedIds);
             const origin = new Map(baseline.map((p) => [p.id, p]));
             const byId = new Map(s.materials.map((m) => [m.id, m]));
+            const view = s.surfaceView;
 
             // 1. grid snap, applied to the drag delta so repeated snapping
             //    cannot creep away from the original positions
-            const gridDx = snapValue(dxCm, s.snapStep, s.snap);
-            const gridDy = snapValue(dyCm, s.snapStep, s.snap);
+            const gridDu = snapValue(duCm, s.snapStep, s.snap);
+            const gridDv = snapValue(dvCm, s.snapStep, s.snap);
 
             // 2. edge snap: nudge the whole selection so its bounding box lines
             //    up with a nearby piece. Panel widths are not grid multiples,
             //    so this is what actually makes panels butt together.
-            let extraDx = 0;
-            let extraDy = 0;
+            let extraDu = 0;
+            let extraDv = 0;
             let guideX: number | null = null;
             let guideY: number | null = null;
 
             if (s.edgeSnap) {
+              const shift = unprojectDelta(gridDu, gridDv, view);
               const movingRects = baseline
                 .filter((p) => selected.has(p.id))
                 .map((p) => {
                   const m = byId.get(p.materialId);
-                  return m ? pieceBounds({ ...p, x: p.x + gridDx, y: p.y + gridDy }, m) : null;
+                  if (!m) return null;
+                  const moved: Piece = {
+                    ...p,
+                    x: p.x + shift.dx,
+                    y: p.y + shift.dy,
+                    z: (p.z ?? 0) + shift.dz,
+                  };
+                  return projectPiece(moved, m, view);
                 })
                 .filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -398,19 +583,20 @@ export const useEditorStore = create<EditorState>()(
                   .filter((p) => !selected.has(p.id))
                   .map((p) => {
                     const m = byId.get(p.materialId);
-                    return m ? pieceBounds(p, m) : null;
+                    return m ? projectPiece(p, m, view) : null;
                   })
                   .filter((r): r is NonNullable<typeof r> => r !== null);
 
                 // tolerance in cm, ~8 screen px so it feels the same at any zoom
                 const snapResult = computeEdgeSnap(movingBox, targets, 8 / s.zoom);
-                extraDx = snapResult.dx;
-                extraDy = snapResult.dy;
+                extraDu = snapResult.dx;
+                extraDv = snapResult.dy;
                 guideX = snapResult.guideX;
                 guideY = snapResult.guideY;
               }
             }
 
+            const move = unprojectDelta(gridDu + extraDu, gridDv + extraDv, view);
             return {
               guideX,
               guideY,
@@ -419,8 +605,45 @@ export const useEditorStore = create<EditorState>()(
                 const base = origin.get(p.id) ?? p;
                 return {
                   ...p,
-                  x: base.x + gridDx + extraDx,
-                  y: base.y + gridDy + extraDy,
+                  x: base.x + move.dx,
+                  y: base.y + move.dy,
+                  // Nothing sits below the slab it is poured on.
+                  z: Math.max(0, (base.z ?? 0) + move.dz),
+                };
+              }),
+            };
+          }),
+
+        /**
+         * Live drag from the 3D view.
+         *
+         * Deliberately simpler than `moveSelectionBy`: no edge snapping. That
+         * aid works off a tolerance in 2D screen pixels and lines up bounding
+         * boxes in plan, neither of which means anything while orbiting in 3D.
+         * The grid still applies, per axis, against the drag baseline so
+         * repeated snapping cannot creep.
+         *
+         * Elevation is clamped at the ground — formwork does not hang in a pit,
+         * and a piece dragged below zero would vanish under the grid.
+         */
+        moveSelectionSpatially: (dxCm, dyCm, dzCm, baseline) =>
+          apply((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const origin = new Map(baseline.map((p) => [p.id, p]));
+            const gridDx = snapValue(dxCm, s.snapStep, s.snap);
+            const gridDy = snapValue(dyCm, s.snapStep, s.snap);
+            const gridDz = snapValue(dzCm, s.snapStep, s.snap);
+
+            return {
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const base = origin.get(p.id) ?? p;
+                return {
+                  ...p,
+                  x: base.x + gridDx,
+                  y: base.y + gridDy,
+                  z: Math.max(0, (base.z ?? 0) + gridDz),
                 };
               }),
             };
@@ -428,13 +651,47 @@ export const useEditorStore = create<EditorState>()(
 
         endDrag: () => set({ guideX: null, guideY: null }),
 
-        nudgeSelection: (dxCm, dyCm) =>
+        setElevation: (zCm) =>
+          commit((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const z = Math.max(0, zCm);
+            return {
+              pieces: s.pieces.map((p) => (selected.has(p.id) ? { ...p, z } : p)),
+            };
+          }),
+
+        /**
+         * Relative, so a selection spanning several courses keeps its spacing
+         * instead of collapsing onto one level.
+         */
+        nudgeElevation: (dzCm) =>
           commit((s) => {
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
             return {
               pieces: s.pieces.map((p) =>
-                selected.has(p.id) ? { ...p, x: p.x + dxCm, y: p.y + dyCm } : p,
+                selected.has(p.id) ? { ...p, z: Math.max(0, (p.z ?? 0) + dzCm) } : p,
+              ),
+            };
+          }),
+
+        /** Arrow keys, in surface centimetres — so they follow the view too. */
+        nudgeSelection: (duCm, dvCm) =>
+          commit((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const move = unprojectDelta(duCm, dvCm, s.surfaceView);
+            return {
+              pieces: s.pieces.map((p) =>
+                selected.has(p.id)
+                  ? {
+                      ...p,
+                      x: p.x + move.dx,
+                      y: p.y + move.dy,
+                      z: Math.max(0, (p.z ?? 0) + move.dz),
+                    }
+                  : p,
               ),
             };
           }),
@@ -524,6 +781,9 @@ export const useEditorStore = create<EditorState>()(
                   id: uid(),
                   x: axis === 'x' ? p.x + pitch * i : p.x,
                   y: axis === 'y' ? p.y + pitch * i : p.y,
+                  // Stacking upward keeps the plan position, so the copies sit
+                  // exactly above the original — the point of a course.
+                  z: axis === 'z' ? Math.max(0, (p.z ?? 0) + pitch * i) : p.z,
                 });
               }
             }
@@ -543,6 +803,25 @@ export const useEditorStore = create<EditorState>()(
             }));
           }
           return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        generateWall: (spec) => {
+          const plan = planWall(spec, get().materials);
+          if (plan.pieces.length) {
+            commit((s) => ({
+              pieces: [...s.pieces, ...plan.pieces],
+              selectedIds: plan.pieces.map((p) => p.id),
+            }));
+          }
+          return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        insertPieces: (incoming) => {
+          if (!incoming.length) return;
+          commit((s) => ({
+            pieces: [...s.pieces, ...incoming],
+            selectedIds: incoming.map((p) => p.id),
+          }));
         },
 
         clearPieces: () => commit(() => ({ pieces: [], selectedIds: [] })),
@@ -702,7 +981,23 @@ export const useEditorStore = create<EditorState>()(
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
-        setWheelMode: (mode) => set({ wheelMode: mode }),
+        setViewMode: (mode) => set({ viewMode: mode }),
+
+        /**
+         * Switch which orthographic view the surface shows, then reframe.
+         *
+         * The reframe is not a convenience. A plan sits around the origin
+         * while an elevation sits entirely above the ground line, at negative
+         * surface y, so keeping the pan would leave the model off-screen and
+         * the surface looking empty.
+         */
+        setSurfaceView: (view) => {
+          if (get().surfaceView === view) return;
+          set({ surfaceView: view, guideX: null, guideY: null });
+          get().fitToContent();
+        },
+
+        setHiddenLines: (mode) => set({ hiddenLines: mode }),
         setPaletteOpen: (on) => set({ paletteOpen: on }),
         setInspectorOpen: (on) => set({ inspectorOpen: on }),
         setPaletteQuery: (q) => set({ paletteQuery: q }),
@@ -792,36 +1087,53 @@ export const useEditorStore = create<EditorState>()(
       };
     },
     {
-      name: STORAGE_KEY,
+      // With a backend, only preferences are kept locally, and under their own
+      // key — see PREFS_KEY for why sharing the old one would destroy data.
+      name: isConfigured ? PREFS_KEY : STORAGE_KEY,
       version: 3,
       storage: safeStorage,
       // v2 stored a single top-level `pieces` array instead of named drawings.
       // `merge` normalises either shape, so migration just passes state through.
       migrate: (persisted) => persisted as Partial<EditorState>,
-      // Autosave: catalog + inventory + every drawing + settings.
-      // Selection, history and dialogs stay transient.
-      partialize: (s) => ({
-        materials: s.materials,
-        removedBuiltins: s.removedBuiltins,
-        documents: s.documents,
-        activeDocId: s.activeDocId,
-        warehouses: s.warehouses,
-        zoom: s.zoom,
-        panX: s.panX,
-        panY: s.panY,
-        snap: s.snap,
-        snapStep: s.snapStep,
-        edgeSnap: s.edgeSnap,
-        showDims: s.showDims,
-        showNames: s.showNames,
-        forceLabels: s.forceLabels,
-        showOverlaps: s.showOverlaps,
-        wheelMode: s.wheelMode,
-        paletteOpen: s.paletteOpen,
-        inspectorOpen: s.inspectorOpen,
-      }),
+      /**
+       * The persist middleware swallows anything `merge` throws: the store is
+       * left on its empty defaults and the next autosave writes those over the
+       * user's saved work. That is the worst possible failure mode and it is
+       * completely silent, so it gets reported here instead — loudly, and
+       * before the banner tells the user to export what is left.
+       */
+      onRehydrateStorage: () => (_state, error) => {
+        if (!error) return;
+        console.error('შენახული მონაცემების წაკითხვა ვერ მოხერხდა', error);
+        onStorageFailure(
+          'შენახული ნახაზი ვერ ჩაიტვირთა და შესაძლოა დაიკარგოს. გააკეთე ექსპორტი და გადატვირთე გვერდი.',
+        );
+      },
+      /**
+       * With a backend, company data belongs to the server and only the
+       * per-device preferences are written locally. Without one, everything is
+       * saved exactly as before so the offline path is unchanged.
+       */
+      partialize: (s) => {
+        const prefs = Object.fromEntries(
+          PREF_KEYS.map((key) => [key, s[key]]),
+        ) as Partial<EditorState>;
+        if (isConfigured) return prefs;
+        return {
+          ...prefs,
+          materials: s.materials,
+          removedBuiltins: s.removedBuiltins,
+          documents: s.documents,
+          activeDocId: s.activeDocId,
+          warehouses: s.warehouses,
+        };
+      },
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<EditorState> & { pieces?: Piece[] };
+
+        // Preferences only; the catalog and drawings arrive from the server.
+        if (isConfigured) return { ...current, ...saved, dataLoaded: false };
+
         const { documents, activeDocId, pieces } = restoreDocuments(saved);
         const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
@@ -858,7 +1170,7 @@ onStorageFailure = (message) => {
  * Restores the drawing list. Handles state saved before named drawings existed,
  * where a single `pieces` array lived at the top level.
  */
-function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
+export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
   documents: DrawingDoc[];
   activeDocId: string;
   pieces: Piece[];
@@ -891,7 +1203,7 @@ function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
  * Restores the warehouse list, inventing entries for any store id that stock
  * still references — otherwise counted quantities would become unreachable.
  */
-function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[]): Warehouse[] {
+export function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[]): Warehouse[] {
   const warehouses: Warehouse[] = Array.isArray(stored)
     ? stored
         .filter((w): w is Warehouse => !!w && typeof w.id === 'string')
@@ -921,7 +1233,7 @@ function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[
  *  - re-adds built-ins that a newer app version introduced,
  *  - respects built-ins the user deleted on purpose.
  */
-function mergeCatalog(
+export function mergeCatalog(
   stored: Material[] | undefined,
   removedBuiltins: string[] | undefined,
 ): Material[] {
@@ -935,6 +1247,7 @@ function mergeCatalog(
     taken.add(m.id);
     materials.push(m);
   }
+  applySizeFixes(materials);
 
   const removed = new Set(removedBuiltins ?? []);
   for (const seed of createSeedMaterials()) {

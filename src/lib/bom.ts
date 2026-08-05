@@ -20,12 +20,8 @@ export interface BomRow {
   lengthM: number;
   /** total area in m² (non-linear materials only) */
   areaM2: number;
-  /** used × unit price */
-  cost: number;
   /** used × unit weight, kg */
   weightKg: number;
-  /** true when the material has no price set, so the total is understated */
-  priceMissing: boolean;
   weightMissing: boolean;
 }
 
@@ -37,7 +33,6 @@ export interface BomGroup {
   pieces: number;
   lengthM: number;
   areaM2: number;
-  cost: number;
   weightKg: number;
   shortages: number;
 }
@@ -47,22 +42,43 @@ export interface Bom {
   totalPieces: number;
   totalLengthM: number;
   totalAreaM2: number;
-  totalCost: number;
   totalWeightKg: number;
   shortageCount: number;
-  /** rows whose price/weight is unset, so the totals are lower bounds */
-  unpricedRows: number;
+  /** rows whose weight is unset, so the total is a lower bound */
   unweighedRows: number;
   /** pieces whose material no longer exists in the catalog */
   orphanPieces: number;
 }
 
 /**
+ * Length in metres for one piece of this material.
+ *
+ * Every structural element has a real length: a "პანელი 30*300" is 3 m long,
+ * exactly like a 3 m waler. Length used to be counted only for `shape: 'line'`
+ * materials, so panels, corners and fillers — most of a real order — reported
+ * nothing and the total read far too low.
+ *
+ * Accessories are the exception: a nut or a clamp is ordered by the piece, and
+ * neither a length nor an area means anything for it.
+ */
+export function unitLengthM(m: Material): number {
+  return m.category === 'acc' ? 0 : lengthCm(m) / 100;
+}
+
+/**
+ * Formwork face area in m² for one piece — only the materials that actually
+ * form the concrete face (panels, fillers, corners). Linear members have a
+ * profile, not a face, and accessories have neither.
+ */
+export function unitAreaM2(m: Material): number {
+  return isLinear(m) || m.category === 'acc' ? 0 : (m.w * m.h) / 10000;
+}
+
+/**
  * Live bill of materials for the pieces passed in (normally the active drawing).
  *
- * Length is summed for linear materials (shape `line`: walers, tie rods, posts)
- * using their longer side; area is summed for everything else (panels, fillers,
- * corners, accessories) as w × h.
+ * Each row carries both a length and an area; see `unitLengthM` / `unitAreaM2`
+ * for which materials get which.
  *
  * `documents` is optional: when supplied, each row also reports how much of the
  * stock is committed across every drawing, not just this one.
@@ -92,10 +108,8 @@ export function buildBom(
   let totalPieces = 0;
   let totalLengthM = 0;
   let totalAreaM2 = 0;
-  let totalCost = 0;
   let totalWeightKg = 0;
   let shortageCount = 0;
-  let unpricedRows = 0;
   let unweighedRows = 0;
 
   for (const category of CATEGORY_ORDER) {
@@ -103,7 +117,6 @@ export function buildBom(
     let pieceCount = 0;
     let lengthM = 0;
     let areaM2 = 0;
-    let cost = 0;
     let weightKg = 0;
     let shortages = 0;
 
@@ -112,11 +125,10 @@ export function buildBom(
       const count = used.get(m.id) ?? 0;
       if (count === 0) continue; // BOM only lists what is actually used
 
-      const rowLength = isLinear(m) ? (count * lengthCm(m)) / 100 : 0;
-      const rowArea = isLinear(m) ? 0 : (count * m.w * m.h) / 10000;
+      const rowLength = count * unitLengthM(m);
+      const rowArea = count * unitAreaM2(m);
       const stock = totalStock(m);
       const commitment = commitments.get(m.id) ?? emptyCommitment();
-      const rowCost = count * m.price;
       const rowWeight = count * m.weight;
       const shortage = count > stock;
 
@@ -130,19 +142,15 @@ export function buildBom(
         shortage,
         lengthM: rowLength,
         areaM2: rowArea,
-        cost: rowCost,
         weightKg: rowWeight,
-        priceMissing: m.price <= 0,
         weightMissing: m.weight <= 0,
       });
 
       pieceCount += count;
       lengthM += rowLength;
       areaM2 += rowArea;
-      cost += rowCost;
       weightKg += rowWeight;
       if (shortage) shortages++;
-      if (m.price <= 0) unpricedRows++;
       if (m.weight <= 0) unweighedRows++;
     }
 
@@ -157,7 +165,6 @@ export function buildBom(
       pieces: pieceCount,
       lengthM,
       areaM2,
-      cost,
       weightKg,
       shortages,
     });
@@ -165,7 +172,6 @@ export function buildBom(
     totalPieces += pieceCount;
     totalLengthM += lengthM;
     totalAreaM2 += areaM2;
-    totalCost += cost;
     totalWeightKg += weightKg;
     shortageCount += shortages;
   }
@@ -175,10 +181,8 @@ export function buildBom(
     totalPieces,
     totalLengthM,
     totalAreaM2,
-    totalCost,
     totalWeightKg,
     shortageCount,
-    unpricedRows,
     unweighedRows,
     orphanPieces,
   };
@@ -210,8 +214,3 @@ export function fmtNum(n: number, digits = 2): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(digits);
 }
 
-/** Money with thousands separators, e.g. "12 480.50". */
-export function fmtMoney(n: number): string {
-  if (!Number.isFinite(n)) return '0';
-  return n.toLocaleString('ka-GE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}

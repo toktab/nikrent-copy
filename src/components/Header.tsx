@@ -8,6 +8,13 @@ import {
   parseLayoutFile,
 } from '../lib/catalogFile';
 import { pickFile, readFileAsText } from '../lib/files';
+import { combo } from '../lib/platform';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
+import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
+import { PresenceBar } from './PresenceBar';
+import { SyncBadge } from './SyncBadge';
+import { ProfileMenu } from './ProfileMenu';
+import { Icon } from './Icon';
 
 const SNAP_STEPS = [1, 5, 10, 25];
 
@@ -20,7 +27,8 @@ export function Header() {
   const forceLabels = useEditorStore((s) => s.forceLabels);
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
-  const wheelMode = useEditorStore((s) => s.wheelMode);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
   const selectedIds = useEditorStore((s) => s.selectedIds);
@@ -38,7 +46,8 @@ export function Header() {
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
-  const setWheelMode = useEditorStore((s) => s.setWheelMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
+  const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
@@ -49,6 +58,7 @@ export function Header() {
   const switchDocument = useEditorStore((s) => s.switchDocument);
   const openDialog = useEditorStore((s) => s.openDialog);
   const setToast = useEditorStore((s) => s.setToast);
+  const canManage = useCanManageCatalog();
 
   const shortages = useMemo(
     () => buildBom(materials, pieces).shortageCount,
@@ -201,20 +211,41 @@ export function Header() {
           >
             ნახაზები…
           </button>
+          <PresenceBar />
+        </div>
+
+        <div className="view-switch" role="group" aria-label="ხედი">
+          {VIEW_ORDER.map((v) => (
+            <button
+              key={v}
+              className={`btn small${viewMode === '2d' && surfaceView === v ? ' active' : ''}`}
+              onClick={() => {
+                setViewMode('2d');
+                setSurfaceView(v);
+              }}
+              title={VIEW_HINT[v]}
+            >
+              {VIEW_LABEL[v]}
+            </button>
+          ))}
+          <button
+            className={`btn small${viewMode === '3d' ? ' active' : ''}`}
+            onClick={() => setViewMode('3d')}
+            title="სივრცითი ხედი — რედაქტირებადი"
+          >
+            3D
+          </button>
         </div>
 
         {shortages > 0 && (
-          <span className="shortage-badge" title="კომპონენტი, რომლის მარაგიც არ ჰყოფნის">
-            ⚠ დეფიციტი: {shortages}
+          <span className="shortage-badge" title="კომპონენტი, რომლის მარაგიც არ ჰყოფნის"><Icon name="warning" /> დეფიციტი: {shortages}
           </span>
         )}
 
         <div className="toolbar">
-          <button className="btn" onClick={undo} disabled={!canUndo} title="დაბრუნება (Ctrl/⌘+Z)">
-            ↩
+          <button className="btn" onClick={undo} disabled={!canUndo} title={`დაბრუნება (${combo(['mod', 'Z'])})`}><Icon name="undo" />
           </button>
-          <button className="btn" onClick={redo} disabled={!canRedo} title="გამეორება (Ctrl/⌘+Shift+Z)">
-            ↪
+          <button className="btn" onClick={redo} disabled={!canRedo} title={`გამეორება (${combo(['mod', 'shift', 'Z'])})`}><Icon name="redo" />
           </button>
 
           <span className="sep" />
@@ -223,8 +254,7 @@ export function Header() {
             className={`btn${snap ? ' active' : ''}`}
             onClick={() => setSnap(!snap)}
             title="ბადეზე მიბმა"
-          >
-            ⊞ მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
+          ><Icon name="grid" /> მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
           </button>
           <select
             value={snapStep}
@@ -244,8 +274,19 @@ export function Header() {
             className="btn"
             onClick={() => openDialog({ kind: 'column-wizard' })}
             title="კოლონის ავტომატური აწყობა"
-          >
-            🏛 კოლონა
+          ><Icon name="column" /> <span className="btn-label">კოლონა</span>
+          </button>
+          <button
+            className="btn"
+            onClick={() => openDialog({ kind: 'wall-wizard' })}
+            title="კედლის ავტომატური აწყობა"
+          ><Icon name="wall" /> <span className="btn-label">კედელი</span>
+          </button>
+          <button
+            className="btn"
+            onClick={() => openDialog({ kind: 'templates' })}
+            title="შენახული შაბლონები — მონიშნულის შენახვა და ჩასმა"
+          ><Icon name="copy" /> <span className="btn-label">შაბლონი</span>
           </button>
 
           <span className="sep" />
@@ -255,46 +296,44 @@ export function Header() {
             onClick={() => rotateSelected(90)}
             disabled={!hasSelection}
             title="მოტრიალება 90° (R). ზუსტი კუთხე — „დეტალები“ ჩანართში."
-          >
-            ⟳ 90°
+          ><Icon name="rotate-cw" /> <span className="btn-label">90°</span>
           </button>
           <button
             className="btn"
             onClick={duplicateSelected}
             disabled={!hasSelection}
-            title="დუბლირება (Ctrl/⌘+D)"
-          >
-            ⧉
+            title={`დუბლირება (${combo(['mod', 'D'])})`}
+          ><Icon name="copy" />
           </button>
           <button
             className="btn"
             onClick={() => openDialog({ kind: 'array' })}
             disabled={!hasSelection}
             title="მასივი — ასლების გამრავლება"
-          >
-            ⋮⋮ მასივი
+          ><Icon name="array" /> <span className="btn-label">მასივი</span>
           </button>
           <button
             className="btn danger"
             onClick={deleteSelected}
             disabled={!hasSelection}
-            title="წაშლა (Del)"
-          >
-            🗑
+            title={`წაშლა (${combo(['del'])})`}
+          ><Icon name="trash" />
           </button>
 
           <span className="sep" />
 
-          <button className="btn" onClick={() => zoomBy(1 / 1.2)}>
-            −
+          <button className="btn" onClick={() => zoomBy(1 / 1.2)}><Icon name="minus" />
           </button>
           <span className="zoomlabel">{Math.round(zoom * 100)}%</span>
-          <button className="btn" onClick={() => zoomBy(1.2)}>
-            ＋
+          <button className="btn" onClick={() => zoomBy(1.2)}><Icon name="plus" />
           </button>
-          <button className="btn" onClick={fitToContent} title="ჩატევა">
-            ⤢ ცენტრი
+          <button className="btn" onClick={fitToContent} title="ჩატევა"><Icon name="fit" /> <span className="btn-label">ცენტრი</span>
           </button>
+        </div>
+
+        <div className="header-right">
+          <SyncBadge />
+          <ProfileMenu />
         </div>
       </div>
 
@@ -339,29 +378,37 @@ export function Header() {
             გადაფარება
           </button>
 
-          <span className="sep" />
-          <button
-            className="btn small"
-            onClick={() => setWheelMode(wheelMode === 'pan' ? 'zoom' : 'pan')}
-            title={
-              wheelMode === 'pan'
-                ? 'ორი თითით — ხედის გადაწევა, ⌘/Ctrl+სქროლი — მასშტაბი (ტაჩპედი)'
-                : 'სქროლი — მასშტაბი, ⌘/Ctrl+სქროლი — გადაწევა (მაუსი)'
-            }
-          >
-            {wheelMode === 'pan' ? '🖐 ტაჩპედი' : '🖱 მაუსი'}
-          </button>
         </div>
 
         <div className="toolbar">
           <span className="group-label">კატალოგი</span>
-          <button className="btn small" onClick={() => exportCatalogFile(materials, warehouses)}>
-            ⤓ ექსპორტი
+          <button
+            className="btn small"
+            onClick={() => exportCatalogFile(materials, warehouses)}
+            title="მასალები, ფასები და მარაგები ერთ ფაილად — სარეზერვო ასლი და სხვა კომპიუტერზე გადატანა"
+          ><Icon name="download" /> <span className="btn-label">ექსპორტი</span>
           </button>
-          <button className="btn small" onClick={() => void importCatalog()}>
-            ⤒ იმპორტი
+          <button
+            className="btn small"
+            disabled={!canManage}
+            onClick={() => void importCatalog()}
+            title={
+              canManage
+                ? 'ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)'
+                : ADMIN_ONLY_TITLE
+            }
+          ><Icon name="upload" /> <span className="btn-label">იმპორტი</span>
           </button>
-          <button className="btn small danger" onClick={resetCatalog}>
+          <button
+            className="btn small danger"
+            disabled={!canManage}
+            onClick={resetCatalog}
+            title={
+              canManage
+                ? '41 ჩაშენებული Du მასალის დაბრუნება — დამატებული კომპონენტები და მარაგები წაიშლება'
+                : ADMIN_ONLY_TITLE
+            }
+          >
             აღდგენა
           </button>
 
@@ -381,21 +428,35 @@ export function Header() {
             disabled={!pieces.length || printing}
             title="მასშტაბური ნახაზი შტამპით (PDF)"
           >
-            {printing ? '…' : '🖨 ბეჭდვა'}
+            {printing ? '…' : <>
+              <Icon name="print" /> <span className="btn-label">ბეჭდვა</span>
+            </>}
           </button>
-          <button className="btn small" onClick={() => exportLayoutFile(pieces)} disabled={!pieces.length}>
-            ⤓ ექსპორტი
+          <button
+            className="btn small"
+            onClick={() => exportLayoutFile(pieces)}
+            disabled={!pieces.length}
+            title="მიმდინარე ნახაზი ფაილად — არქივი ან კოლეგისთვის გასაგზავნად"
+          ><Icon name="download" /> <span className="btn-label">ექსპორტი</span>
           </button>
-          <button className="btn small" onClick={() => void importLayout()}>
-            ⤒ იმპორტი
+          <button
+            className="btn small"
+            onClick={() => void importLayout()}
+            title="ნახაზის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარე ნახაზს)"
+          ><Icon name="upload" /> <span className="btn-label">იმპორტი</span>
           </button>
-          <button className="btn small danger" onClick={clearAll} disabled={!pieces.length}>
+          <button
+            className="btn small danger"
+            onClick={clearAll}
+            disabled={!pieces.length}
+            title="ყველა ელემენტის წაშლა ზედაპირიდან — კატალოგი და მარაგები რჩება"
+          >
             გასუფთავება
           </button>
         </div>
       </div>
 
-      {storageError && <div className="storage-banner">⚠ {storageError}</div>}
+      {storageError && <div className="storage-banner"><Icon name="warning" /> {storageError}</div>}
     </header>
   );
 }

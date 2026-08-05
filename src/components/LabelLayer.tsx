@@ -24,6 +24,8 @@ interface Placed {
   lines: string[];
   font: number;
   inside: boolean;
+  /** label rotation in degrees; -90 makes text run up a tall thin piece */
+  angle: number;
   selected: boolean;
 }
 
@@ -85,7 +87,12 @@ export function LabelLayer() {
         <div
           key={l.key}
           className={`plabel ${l.inside ? 'inside' : 'outside'}${l.selected ? ' sel' : ''}`}
-          style={{ left: l.x, top: l.y, fontSize: l.font }}
+          style={{
+            left: l.x,
+            top: l.y,
+            fontSize: l.font,
+            transform: `translate(-50%, -50%) rotate(${l.angle}deg)`,
+          }}
         >
           {l.lines.map((line, i) => (
             <span key={i} className={i === 0 && l.lines.length > 1 ? 'nm' : 'dim'}>
@@ -143,27 +150,56 @@ function place(p: Piece, m: Material, ctx: Ctx): Placed | null {
   if (ctx.showDims) full.push(size);
   if (!full.length) return null;
 
-  // Try to fit the label inside the piece, largest font first: at each size
-  // prefer name + size, then fall back to the size alone. The dimension is the
-  // information that must survive, so a legible size beats a cramped name.
+  // Candidate line-sets, most informative first. The dimension is the piece of
+  // information that must survive, so name+size gives way to size-only.
+  const candidates = full.length > 1 && ctx.showDims ? [full, [size]] : [full];
+
+  // Run the label along the piece's longer on-screen axis. A tall thin piece
+  // (a vertical panel, a vertical waler) gets a label rotated to read up the
+  // bar so it fits INSIDE, exactly like the horizontal ones — instead of being
+  // shoved outside where it piles up with its neighbours.
+  const vertical = sh > sw * 1.15;
+  const alongPx = vertical ? sh : sw; // space along the text baseline
+  const acrossPx = vertical ? sw : sh; // space across the line stack
+
   for (const step of FONT_STEPS) {
-    for (const lines of full.length > 1 && ctx.showDims ? [full, [size]] : [full]) {
+    for (const lines of candidates) {
       const t = measure(lines, step.size);
-      if (t.w + step.pad <= sw && t.h + step.pad <= sh) {
-        return { key: p.id, x: cx, y: cy, lines, font: step.size, inside: true, selected: ctx.selected.has(p.id) };
+      if (t.w + step.pad <= alongPx && t.h + step.pad <= acrossPx) {
+        return {
+          key: p.id,
+          x: cx,
+          y: cy,
+          lines,
+          font: step.size,
+          inside: true,
+          angle: vertical ? -90 : 0,
+          selected: ctx.selected.has(p.id),
+        };
       }
     }
   }
 
   if (longest < MIN_OUTSIDE_PX && !forceLabels) return null;
 
-  // Outside labels stay short so a dense drawing does not turn into confetti.
-  const lines = ctx.showDims ? [size] : full;
+  // Too small for an inside label (e.g. the little L-corners): park it just
+  // outside, on whichever side has room, and keep the name when it is the only
+  // thing asked for so titles are not silently dropped.
+  const lines = candidates[candidates.length - 1];
   const font = FONT_STEPS[0].size;
   const t = measure(lines, font);
-  const above = cy - sh / 2 - 5 - t.h / 2;
-  // Flip below when the label would collide with the ruler strip.
-  const y = above < 26 ? cy + sh / 2 + 5 + t.h / 2 : above;
+  // Place along the short side of the piece so the label hugs it closely.
+  const above = cy - sh / 2 - 4 - t.h / 2;
+  const y = above < 26 ? cy + sh / 2 + 4 + t.h / 2 : above;
 
-  return { key: p.id, x: cx, y, lines, font, inside: false, selected: ctx.selected.has(p.id) };
+  return {
+    key: p.id,
+    x: cx,
+    y,
+    lines,
+    font,
+    inside: false,
+    angle: 0,
+    selected: ctx.selected.has(p.id),
+  };
 }

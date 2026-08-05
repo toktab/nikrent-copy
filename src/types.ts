@@ -5,6 +5,13 @@ export type Category = 'panel' | 'waler' | 'corner' | 'post' | 'filler' | 'rod' 
 export type Shape = 'rect' | 'L' | 'line';
 
 /**
+ * What the 3D view does with edges that are behind other pieces:
+ * drop them entirely, draw them dashed, or show everything (x-ray, handy for
+ * checking ties buried inside a column).
+ */
+export type HiddenLineMode = 'hide' | 'dashed' | 'show';
+
+/**
  * Stock is held per warehouse: `{ [warehouseId]: quantity }`. Companies that
  * only ever use one store see a single number in the UI and never meet the
  * concept. See `lib/inventory.ts` for the helpers.
@@ -40,11 +47,9 @@ export interface Material {
   builtin: boolean;
   /** inventory: how many the company owns, per warehouse */
   stock: StockByWarehouse;
-  /** unit price in the project currency (0 = not priced yet) */
-  price: number;
   /** unit weight in kg (0 = unknown) — drives crane and truck loads */
   weight: number;
-  /** supplier article / catalogue number */
+  /** supplier's own designation for the part (აღნიშვნა) */
   article: string;
   supplier: string;
 }
@@ -56,8 +61,17 @@ export interface Piece {
   /** cm, top-left of the un-rotated box in world coordinates */
   x: number;
   y: number;
-  /** 0 | 90 | 180 | 270 */
+  /** rotation in degrees, any angle */
   rot: number;
+  /**
+   * Elevation of the piece's underside in cm, 0 = on the ground.
+   *
+   * The 2D surface is a plan view and ignores this entirely — two pieces at
+   * different heights sit on top of each other in plan, which is correct. It
+   * exists so stacked courses and waler rings are real, counted pieces rather
+   * than a multiplier, and so the 3D view can show them at the right height.
+   */
+  z?: number;
 }
 
 /** Everything a material needs except its identity flags. */
@@ -98,7 +112,11 @@ export interface ArrayOptions {
   count: number;
   /** centre-to-centre spacing in cm */
   pitch: number;
-  axis: 'x' | 'y';
+  /**
+   * 'z' stacks the copies upward instead of across the plan — how a column is
+   * built course by course without the wizard.
+   */
+  axis: 'x' | 'y' | 'z';
 }
 
 /** Input for the column formwork assembly generator. */
@@ -116,6 +134,30 @@ export interface ColumnSpec {
   includeWalers: boolean;
   includeTies: boolean;
   includeCorners: boolean;
+}
+
+/** Input for the wall formwork assembly generator. */
+export interface WallSpec {
+  /** wall run in cm, along the X axis */
+  length: number;
+  /** concrete thickness in cm */
+  thickness: number;
+  /** pour height in cm */
+  height: number;
+  /** vertical spacing between waler runs, cm */
+  walerSpacing: number;
+  /** spacing between tie rods along the wall, cm */
+  tieSpacing: number;
+  /** where to drop the assembly, world cm */
+  originX: number;
+  originY: number;
+  includeWalers: boolean;
+  includeTies: boolean;
+  /**
+   * Close both ends. Off when the run continues into another pour or an
+   * existing structure, where an end panel would be wrong.
+   */
+  includeStopEnds: boolean;
 }
 
 /** Shape of an exported catalog file (materials + stock, no drawing). */
@@ -143,9 +185,13 @@ export type DialogState =
   | { kind: 'sheet-import' }
   | { kind: 'array' }
   | { kind: 'column-wizard' }
+  | { kind: 'wall-wizard' }
+  | { kind: 'templates' }
   | { kind: 'warehouses' }
   | { kind: 'title-block' }
   | { kind: 'documents' }
+  | { kind: 'users' }
+  | { kind: 'password' }
   | {
       kind: 'confirm';
       title: string;

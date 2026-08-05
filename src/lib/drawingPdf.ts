@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import type { DrawingDoc, Material, Piece } from '../types';
 import { contentBounds, pieceBounds, planH, planW } from './geometry';
 import { drawingSizeLabel } from './bom';
-import { barRect, lPoints } from './shapePath';
+import { barRect, scaledOutline } from './shapePath';
 import { stampedName } from './files';
 
 /**
@@ -152,7 +152,7 @@ function drawPiece(
   ctx.lineWidth = Math.max(1, cmToPx(0.4));
 
   if (m.shape === 'L') {
-    const pts = lPoints(w, h);
+    const pts = scaledOutline(m, w, h);
     ctx.beginPath();
     pts.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
     ctx.closePath();
@@ -185,18 +185,56 @@ function drawPieceLabel(
   const boxW = cmToPx(upright ? planW(m) : planH(m));
   const boxH = cmToPx(upright ? planH(m) : planW(m));
   const text = drawingSizeLabel(m);
-  const font = mm(2.2); // ≈ 6.2 pt, a normal drawing annotation size
+  const cx = tx(p.x + planW(m) / 2);
+  const cy = ty(p.y + planH(m) / 2);
+  const vertical = boxH > boxW;
+  const along = vertical ? boxH : boxW;
+  const across = vertical ? boxW : boxH;
+  const font = (px: number) =>
+    `600 ${px}px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif`;
 
   ctx.save();
-  ctx.font = `600 ${font}px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const width = ctx.measureText(text).width;
+  ctx.fillStyle = '#11151a';
 
-  if (width + mm(1) <= boxW && font * 1.4 <= boxH) {
-    ctx.fillStyle = '#11151a';
-    ctx.fillText(text, tx(p.x + planW(m) / 2), ty(p.y + planH(m) / 2));
+  // A long thin bar (rod, waler, panel edge) carries its dimension ALONG its
+  // length — the text may overflow the thin dimension, that is normal. A
+  // compact piece (a corner, a stubby filler) must hold the text within both
+  // sides, so we shrink the font to try to fit it before giving up.
+  // Smallest font is a readable ~4.5 pt floor; anything that still will not fit
+  // gets a leadered label rather than a microscopic one crammed inside.
+  const bar = m.shape === 'line' || along >= across * 4;
+  const sizes = [mm(2.4), mm(2.0), mm(1.6)];
+
+  for (const px of sizes) {
+    ctx.font = font(px);
+    const w = ctx.measureText(text).width;
+    const fitsAlong = w + mm(0.6) <= along;
+    const fitsAcross = px * 1.15 <= across;
+    if (fitsAlong && (bar || fitsAcross)) {
+      ctx.translate(cx, cy);
+      if (vertical) ctx.rotate(-Math.PI / 2);
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+      return;
+    }
   }
+
+  // Genuinely too small even at the smallest font (little fillers): place the
+  // label just outside in clear space and draw a thin leader to the piece, so
+  // it is unmistakably that piece's dimension rather than floating loose.
+  const px = mm(1.9);
+  ctx.font = font(px);
+  const gap = mm(1.4);
+  const ly = cy - boxH / 2 - gap - px / 2;
+  ctx.strokeStyle = '#4a5560';
+  ctx.lineWidth = mm(0.18);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - boxH / 2);
+  ctx.lineTo(cx, ly + px / 2);
+  ctx.stroke();
+  ctx.fillText(text, cx, ly);
   ctx.restore();
 }
 

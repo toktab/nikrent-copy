@@ -1,0 +1,62 @@
+# Keep the Supabase project awake.
+#
+# A free project pauses after a week with no activity, and a paused project has
+# to be restored by hand from the dashboard before anyone can sign in. For a
+# tool used in bursts — busy during a pour, quiet for a fortnight — that pause
+# arrives exactly when the site is least able to wait for it.
+#
+# One cheap read every few days is enough to count as activity.
+#
+# ── Setup ──────────────────────────────────────────────────────────────────
+# Add two repository secrets (Settings → Secrets and variables → Actions):
+#
+#   SUPABASE_URL       https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY  Project Settings → API → anon / publishable key
+#
+# The anon key is public by design — it ships inside the browser bundle, and
+# row-level security is what actually protects the data. It lives in a secret
+# here only to keep it out of the logs. The service_role key must never be
+# used for this, or for anything else outside an Edge Function.
+
+name: Keepalive
+
+on:
+  schedule:
+    # 06:00 UTC every third day, comfortably inside the one-week window.
+    - cron: '0 6 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Touch the database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "SUPABASE_URL / SUPABASE_ANON_KEY are not set — see the header of this file." >&2
+            exit 1
+          fi
+          # Calls public.keepalive() from migration 0008 — a function the
+          # anonymous role is allowed to execute, which reads no application
+          # data and returns a timestamp.
+          #
+          # Reading a real table instead would be refused by row-level security
+          # and answered at the auth layer, possibly without ever executing SQL.
+          # That would look like a working ping while leaving the project free
+          # to pause, which is the one outcome this job exists to prevent.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "${SUPABASE_URL}/rest/v1/rpc/keepalive")
+          echo "rpc/keepalive returned ${code}"
+          if [ "$code" != "200" ]; then
+            echo "Expected 200. If this is 404, migration 0008 has not been run yet." >&2
+            exit 1
+          fi
+          echo "project is awake"

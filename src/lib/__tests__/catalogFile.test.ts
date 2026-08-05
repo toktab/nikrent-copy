@@ -21,10 +21,9 @@ describe('seed catalog', () => {
     expect(byName('ჭანჭიკი (შტირი 150 სმ)')).toMatchObject({ w: 150, h: 3, category: 'rod' });
   });
 
-  it('starts with no stock, price or weight — those are company data', () => {
+  it('starts with no stock or weight — those are company data', () => {
     for (const m of createSeedMaterials()) {
       expect(totalStock(m)).toBe(0);
-      expect(m.price).toBe(0);
       expect(m.weight).toBe(0);
     }
   });

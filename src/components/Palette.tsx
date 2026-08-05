@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import type { Material } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { usageByMaterial } from '../lib/bom';
 import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
 import { Swatch } from './ShapeSvg';
+import { Icon } from './Icon';
 
 /** Left-hand material palette: search, grouped list, drag source, inline stock. */
 export function Palette() {
@@ -13,6 +15,7 @@ export function Palette() {
   const query = useEditorStore((s) => s.paletteQuery);
   const setQuery = useEditorStore((s) => s.setPaletteQuery);
   const openDialog = useEditorStore((s) => s.openDialog);
+  const canManage = useCanManageCatalog();
 
   const used = useMemo(() => usageByMaterial(pieces), [pieces]);
 
@@ -32,23 +35,30 @@ export function Palette() {
     <aside className="palette">
       <div className="panel-head">
         <span>მასალები</span>
-        <button className="btn icon" title="დაკეცვა" onClick={() => setPaletteOpen(false)}>
-          ◂
+        <button className="btn icon" title="დაკეცვა" onClick={() => setPaletteOpen(false)}><Icon name="chevron-left" />
         </button>
       </div>
       <div className="palette-top">
-        <button className="btn primary full" onClick={() => openDialog({ kind: 'material' })}>
-          ＋ ახალი კომპონენტი
+        <button
+          className="btn primary full"
+          disabled={!canManage}
+          title={canManage ? undefined : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'material' })}
+        ><Icon name="plus" /> ახალი კომპონენტი
         </button>
-        <button className="btn full" onClick={() => openDialog({ kind: 'sheet-import' })}>
-          📊 იმპორტი ცხრილიდან
+        <button
+          className="btn full"
+          disabled={!canManage}
+          title={canManage ? undefined : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'sheet-import' })}
+        ><Icon name="sheet" /> იმპორტი ცხრილიდან
         </button>
         <input
           className="search"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="🔍 მასალის ძებნა..."
+          placeholder="მასალის ძებნა…"
         />
       </div>
 
@@ -77,6 +87,7 @@ export function Palette() {
 
 function PaletteRow({ material: m, used }: { material: Material; used: number }) {
   const setStock = useEditorStore((s) => s.setStock);
+  const canManage = useCanManageCatalog();
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteMaterial = useEditorStore((s) => s.deleteMaterial);
   const warehouses = useEditorStore((s) => s.warehouses);
@@ -147,13 +158,22 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
               ? `მარაგი: ${warehouses[0].name} (სულ ${stock})`
               : 'მარაგი (ცალი)'
           }
+          disabled={!canManage}
           onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
         />
-        <button className="btn icon" title="რედაქტირება" onClick={() => openDialog({ kind: 'material', materialId: m.id })}>
-          ✎
+        <button
+          className="btn icon"
+          disabled={!canManage}
+          title={canManage ? 'რედაქტირება' : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'material', materialId: m.id })}
+        ><Icon name="pencil" />
         </button>
-        <button className="btn icon danger" title="წაშლა" onClick={askDelete}>
-          🗑
+        <button
+          className="btn icon danger"
+          disabled={!canManage}
+          title={canManage ? 'წაშლა' : ADMIN_ONLY_TITLE}
+          onClick={askDelete}
+        ><Icon name="trash" />
         </button>
       </div>
     </div>

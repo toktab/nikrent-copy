@@ -4,6 +4,7 @@ import { buildBom } from '../lib/bom';
 import { DetailsPanel } from './DetailsPanel';
 import { BomPanel } from './BomPanel';
 import { InventoryPanel } from './InventoryPanel';
+import { Icon } from './Icon';
 
 type Tab = 'details' | 'bom' | 'inventory';
 
@@ -19,8 +20,7 @@ export function SidePanel() {
   return (
     <aside className="inspector">
       <div className="panel-head">
-        <button className="btn icon" title="დაკეცვა" onClick={() => setInspectorOpen(false)}>
-          ▸
+        <button className="btn icon" title="დაკეცვა" onClick={() => setInspectorOpen(false)}><Icon name="chevron-right" />
         </button>
       </div>
       <div className="tabs">

@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { STORAGE_KEY } from '../store/useEditorStore';
+import { captureError } from '../lib/errorLog';
+import { Icon } from './Icon';
 
 interface Props {
   children: ReactNode;
@@ -22,7 +24,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Editor crashed:', error, info.componentStack);
+    // The component stack says which part of the tree blew up, which the raw
+    // stack trace usually does not after minification.
+    void captureError(error, 'render', { componentStack: info.componentStack });
   }
 
   private downloadState = () => {
@@ -54,8 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <button className="btn primary" onClick={() => window.location.reload()}>
             გვერდის განახლება
           </button>
-          <button className="btn" onClick={this.downloadState}>
-            ⤓ შენახული მონაცემების ჩამოტვირთვა
+          <button className="btn" onClick={this.downloadState}><Icon name="download" /> შენახული მონაცემების ჩამოტვირთვა
           </button>
         </div>
       </div>

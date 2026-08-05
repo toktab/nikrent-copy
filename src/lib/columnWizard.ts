@@ -1,6 +1,20 @@
 import type { ColumnSpec, Material, Piece } from '../types';
 import { uid } from './ids';
-import { lengthCm, planH, planW, rotatedExtent } from './geometry';
+import { planH, planW } from './geometry';
+import {
+  coverExact,
+  coverFace,
+  optionsAt,
+  panelDepthFor,
+  panelHeights,
+  pickByLength,
+  placeAt,
+  type PanelOption,
+} from './formwork';
+
+// Re-exported: the cover search was tested here before it moved to ./formwork,
+// and it is still the natural place to look for it from a wizard's tests.
+export { coverExact, type CoverResult } from './formwork';
 
 /**
  * Generates the formwork for a rectangular column from its cross-section and
@@ -30,6 +44,8 @@ export interface ColumnPlan {
   warnings: string[];
   summary: {
     panels: number;
+    /** ჩაკერება used to close what the panel widths could not */
+    fillers: number;
     corners: number;
     walers: number;
     ties: number;
@@ -41,78 +57,12 @@ export interface ColumnPlan {
   };
 }
 
-interface PanelOption {
-  material: Material;
-  w: number;
-  h: number;
-}
-
-function panelsByHeight(materials: Material[]): Map<number, PanelOption[]> {
-  const map = new Map<number, PanelOption[]>();
-  for (const m of materials) {
-    if (m.category !== 'panel') continue;
-    const list = map.get(m.h) ?? [];
-    list.push({ material: m, w: m.w, h: m.h });
-    map.set(m.h, list);
-  }
-  for (const list of map.values()) list.sort((a, b) => b.w - a.w);
-  return map;
-}
-
-/** Greedy largest-first cover of `target` cm using the given panel widths. */
-function coverWidth(
-  target: number,
-  options: PanelOption[],
-): { used: PanelOption[]; remainder: number } {
-  const used: PanelOption[] = [];
-  let left = target;
-  for (const option of options) {
-    while (left >= option.w - 0.01) {
-      used.push(option);
-      left -= option.w;
-    }
-  }
-  return { used, remainder: Math.max(0, Math.round(left * 100) / 100) };
-}
-
-/** Split the pour height into courses using the available panel heights. */
-function planCourses(height: number, heights: number[]): { courses: number[]; remainder: number } {
-  const sorted = [...heights].sort((a, b) => b - a);
-  const courses: number[] = [];
-  let left = height;
-  for (const h of sorted) {
-    while (left >= h - 0.01) {
-      courses.push(h);
-      left -= h;
-    }
-  }
-  return { courses, remainder: Math.max(0, Math.round(left * 100) / 100) };
-}
-
-/**
- * `Piece.x/y` is the top-left of the UN-rotated box, and rotation happens about
- * the centre — so a turned piece does not start where its footprint starts.
- * This converts "I want the footprint's top-left corner here" into the x/y to
- * store. Without it, every rotated face lands offset from the column.
- */
-function placeAt(left: number, top: number, pw: number, ph: number, rot: number) {
-  const { w, h } = rotatedExtent(pw, ph, rot);
-  return { x: left + w / 2 - pw / 2, y: top + h / 2 - ph / 2 };
-}
-
-/** Smallest material of a category whose length reaches `needed` cm. */
-function pickByLength(materials: Material[], category: Material['category'], needed: number) {
-  const candidates = materials
-    .filter((m) => m.category === category)
-    .sort((a, b) => lengthCm(a) - lengthCm(b));
-  return candidates.find((m) => lengthCm(m) >= needed - 0.01) ?? candidates[candidates.length - 1];
-}
-
 export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan {
   const warnings: string[] = [];
   const pieces: Piece[] = [];
   const empty = {
     panels: 0,
+    fillers: 0,
     corners: 0,
     walers: 0,
     ties: 0,
@@ -121,53 +71,63 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
     outerY: 0,
   };
 
-  const byHeight = panelsByHeight(materials);
-  if (!byHeight.size) {
+  const heights = panelHeights(materials);
+  if (!heights.length) {
     return { pieces: [], warnings: ['კატალოგში პანელები ვერ მოიძებნა.'], summary: empty };
   }
 
   // ── Vertical: how many panel courses stack up the pour height ────────────
-  const { courses, remainder: heightRemainder } = planCourses(spec.height, [...byHeight.keys()]);
+  const stack = coverExact(spec.height, heights);
+  const courses = stack.picks.map((i) => heights[i]);
   if (!courses.length) {
     warnings.push(
-      `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია — უმცირესი პანელია ${Math.min(...byHeight.keys())} სმ.`,
+      `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია — უმცირესი პანელია ${Math.min(...heights)} სმ.`,
     );
   }
-  if (heightRemainder > 0.01) {
+  if (stack.remainder > 0.01) {
     warnings.push(
-      `სიმაღლეში დარჩა ${heightRemainder} სმ — საჭიროა ჩაკერება ან სპეციალური ელემენტი.`,
+      `სიმაღლეში დარჩა ${stack.remainder} სმ — საჭიროა ჩაკერება ან სპეციალური ელემენტი.`,
     );
   }
 
-  // Courses stack in the vertical direction, which is out of the page in plan.
-  // Everything below is therefore drawn once and multiplied by the course count.
   const courseCount = Math.max(1, courses.length);
-  const courseHeight = courses[0] ?? Math.min(...byHeight.keys());
-  const options = byHeight.get(courseHeight) ?? [];
+  const courseHeight = courses[0] ?? Math.min(...heights);
 
   // ── Plan: the panel thickness sets how far the formwork stands off ───────
-  const panelDepth = options.length ? planH(options[0].material) : 9;
+  const firstCoursePanels = optionsAt(materials, 'panel', courseHeight);
+  const panelDepth = firstCoursePanels.length ? planH(firstCoursePanels[0].material) : 9;
   const { sectionX, sectionY } = spec;
 
-  /** Lay panels along one face, left to right, starting at (x, y). */
+  /**
+   * Lay one face at a given elevation. Every stacked course emits real pieces,
+   * so the bill of materials counts what will actually be delivered rather
+   * than a multiplier applied after the fact.
+   */
   const layFace = (
     startX: number,
     startY: number,
     faceLength: number,
     horizontal: boolean,
-  ): number => {
-    const { used, remainder } = coverWidth(faceLength, options);
+    panelOptions: PanelOption[],
+    fillerOptions: PanelOption[],
+    z: number,
+  ): { panels: number; fillers: number } => {
+    const { used, remainder } = coverFace(faceLength, panelOptions, fillerOptions);
+
     if (!used.length) {
       warnings.push(
         `${faceLength} სმ სიგრძის მხარე ვერ დაიფარა — ყველაზე ვიწრო პანელია ${
-          options.length ? Math.min(...options.map((o) => o.w)) : '—'
+          panelOptions.length ? Math.min(...panelOptions.map((o) => o.w)) : '—'
         } სმ.`,
       );
-    }
-    if (remainder > 0.01) {
-      warnings.push(`${faceLength} სმ მხარეზე დარჩა ${remainder} სმ — საჭიროა ჩაკერება.`);
+    } else if (remainder > 0.01) {
+      warnings.push(
+        `${faceLength} სმ მხარეზე დარჩა ${remainder} სმ — ამ ზომის ელემენტი კატალოგში არ არის.`,
+      );
     }
 
+    let panels = 0;
+    let fillers = 0;
     let offset = 0;
     for (const option of used) {
       const pw = planW(option.material);
@@ -181,61 +141,121 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
         ph,
         rot,
       );
-      pieces.push({ id: uid(), materialId: option.material.id, x, y, rot });
+      pieces.push({ id: uid(), materialId: option.material.id, x, y, rot, z });
+      if (option.material.category === 'filler') fillers++;
+      else panels++;
       offset += pw;
     }
-    return used.length;
+    return { panels, fillers };
   };
 
   const originX = spec.originX;
   const originY = spec.originY;
 
-  // Corner profiles occupy the ends of each face, so the panels only have to
-  // cover what is left between them — getting this wrong over-orders panels.
   const cornerMaterials = materials.filter((m) => m.category === 'corner' && m.shape === 'L');
-  const useCorners = spec.includeCorners && cornerMaterials.length > 0;
-  const corner = useCorners
-    ? (cornerMaterials.find((m) => m.h === courseHeight) ?? cornerMaterials[0])
-    : null;
-  const inset = corner ? planW(corner) : 0;
-
-  const clearX = sectionX - inset * 2;
-  const clearY = sectionY - inset * 2;
-  if (useCorners && (clearX <= 0 || clearY <= 0)) {
-    warnings.push(
-      `კვეთა ${sectionX}×${sectionY} სმ ძალიან პატარაა ${inset} სმ კუთხეებისთვის — პანელი აღარ ეტევა.`,
-    );
+  if (spec.includeCorners && !cornerMaterials.length) {
+    warnings.push('კატალოგში კუთხის პროფილი ვერ მოიძებნა.');
   }
 
-  // Top and bottom faces run along X; left and right run along Y, set in by the
-  // panel thickness so the four faces close a rectangle around the concrete.
+  /**
+   * The corner profile for a course must be as tall as that course — a 300 cm
+   * corner on a 150 cm course would stand 150 cm proud of the pour. The wizard
+   * used to choose one corner for the whole column and repeat it at every
+   * course elevation, which did exactly that.
+   */
+  const cornerFor = (height: number): Material | null =>
+    spec.includeCorners ? (cornerMaterials.find((m) => m.h === height) ?? null) : null;
+
+  // Stack the courses up the pour. Each one is placed for real at its own
+  // elevation, so the BOM counts every panel that has to be delivered.
   let panelCount = 0;
-  if (clearX > 0) {
-    panelCount += layFace(originX + inset, originY - panelDepth, clearX, true); // top
-    panelCount += layFace(originX + inset, originY + sectionY, clearX, true); // bottom
-  }
-  if (clearY > 0) {
-    panelCount += layFace(originX - panelDepth, originY + inset, clearY, false); // left
-    panelCount += layFace(originX + sectionX, originY + inset, clearY, false); // right
-  }
-
-  // ── Corners ──────────────────────────────────────────────────────────────
+  let fillerCount = 0;
   let cornerCount = 0;
-  if (corner) {
-    const cw = planW(corner);
-    const ch = planH(corner);
-    // One at each concrete corner, each turned to face outwards.
-    const spots: Array<[number, number, number]> = [
-      [originX - panelDepth, originY - panelDepth, 0],
-      [originX + sectionX + panelDepth - cw, originY - panelDepth, 90],
-      [originX + sectionX + panelDepth - cw, originY + sectionY + panelDepth - ch, 180],
-      [originX - panelDepth, originY + sectionY + panelDepth - ch, 270],
-    ];
-    for (const [left, top, rot] of spots) {
-      const { x, y } = placeAt(left, top, cw, ch, rot);
-      pieces.push({ id: uid(), materialId: corner.id, x, y, rot });
-      cornerCount++;
+  let elevation = 0;
+
+  for (let c = 0; c < courseCount; c++) {
+    const thisHeight = courses[c] ?? courseHeight;
+    const panelOptions = optionsAt(materials, 'panel', thisHeight);
+    const fillerOptions = optionsAt(materials, 'filler', thisHeight);
+    const corner = cornerFor(thisHeight);
+    const first = c === 0;
+
+    if (first && spec.includeCorners && cornerMaterials.length && !corner) {
+      warnings.push(`${thisHeight} სმ სიმაღლის კუთხის პროფილი კატალოგში არ არის.`);
     }
+
+    /**
+     * How much of the concrete face the corner profile itself covers.
+     *
+     * A corner's leg is measured from the OUTSIDE of the formwork box, so a leg
+     * standing off a 9 cm panel reaches `leg − 9` along the concrete. Using the
+     * bare leg here left a panel-thickness hole between every corner and the
+     * panel beside it — visible on the drawing and short on the order.
+     */
+    const inset = corner ? Math.max(0, planW(corner) - panelDepth) : 0;
+
+    /**
+     * Face lengths. With corner profiles all four faces sit between them.
+     * Without corners the two X faces wrap the ends instead: four faces each
+     * spanning only their own section leaves a panel-thickness hole at every
+     * box corner, so the box has to close pinwheel-fashion, as it does on site.
+     */
+    const xFaceLength = corner ? sectionX - inset * 2 : sectionX + panelDepth * 2;
+    const xFaceStart = corner ? originX + inset : originX - panelDepth;
+    const yFaceLength = sectionY - inset * 2;
+    const yFaceStart = originY + inset;
+
+    if (first && !corner && spec.includeCorners === false) {
+      warnings.push(
+        `კუთხის პროფილების გარეშე ორი მხარე ${panelDepth * 2} სმ-ით გრძელდება (${xFaceLength} სმ), რომ ყუთის კუთხეები დაიხუროს.`,
+      );
+    }
+    if (first && corner && (xFaceLength <= 0 || yFaceLength <= 0)) {
+      warnings.push(
+        `კვეთა ${sectionX}×${sectionY} სმ ძალიან პატარაა ${planW(corner)} სმ კუთხეებისთვის — პანელი აღარ ეტევა.`,
+      );
+    }
+
+    const tally = (r: { panels: number; fillers: number }) => {
+      panelCount += r.panels;
+      fillerCount += r.fillers;
+    };
+
+    const lay = (x: number, y: number, len: number, horizontal: boolean) =>
+      tally(layFace(x, y, len, horizontal, panelOptions, fillerOptions, elevation));
+
+    if (xFaceLength > 0) {
+      lay(xFaceStart, originY - panelDepth, xFaceLength, true);
+      lay(xFaceStart, originY + sectionY, xFaceLength, true);
+    }
+    if (yFaceLength > 0) {
+      lay(originX - panelDepth, yFaceStart, yFaceLength, false);
+      lay(originX + sectionX, yFaceStart, yFaceLength, false);
+    }
+
+    // ── Corners, one at each concrete corner, turned to face outwards ──────
+    if (corner) {
+      const cw = planW(corner);
+      const ch = planH(corner);
+      // An L is drawn with its legs on the LEFT and the BOTTOM, so the notch
+      // starts out facing up-right. The top-left corner of the column needs its
+      // legs on the top and the left — a quarter turn on from that. Every spot
+      // used to be one turn short, which pointed each notch outwards and buried
+      // a leg in the concrete.
+      const spots: Array<[number, number, number]> = [
+        [originX - panelDepth, originY - panelDepth, 90],
+        [originX + sectionX + panelDepth - cw, originY - panelDepth, 180],
+        [originX + sectionX + panelDepth - cw, originY + sectionY + panelDepth - ch, 270],
+        [originX - panelDepth, originY + sectionY + panelDepth - ch, 0],
+      ];
+      for (const [left, top, rot] of spots) {
+        const { x, y } = placeAt(left, top, cw, ch, rot);
+        pieces.push({ id: uid(), materialId: corner.id, x, y, rot, z: elevation });
+        cornerCount++;
+      }
+    }
+
+    elevation += thisHeight;
   }
 
   const outerX = sectionX + panelDepth * 2;
@@ -249,78 +269,79 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
   if (spec.includeWalers && spec.walerSpacing > 0 && totalHeight > 0) {
     const levels = Math.max(1, Math.floor(totalHeight / spec.walerSpacing));
     if (!materials.some((m) => m.category === 'waler')) {
-      warnings.push('კატალოგში ვალერები ვერ მოიძებნა.');
+      warnings.push('კატალოგში ვოლერები ვერ მოიძებნა.');
     } else {
       // One run per side of the ring, sized to that side — never one long bar
       // spanning the whole column, which would over-order several times over.
       // Sit just outside the panel faces, hugging the formwork box.
       const walerDepth = planH(pickByLength(materials, 'waler', outerX) ?? materials[0]);
-      const runs: Array<{ x: number; y: number; span: number; horizontal: boolean }> = [
-        { x: originX - panelDepth, y: originY - panelDepth - walerDepth, span: outerX, horizontal: true },
-        { x: originX - panelDepth, y: originY + sectionY + panelDepth, span: outerX, horizontal: true },
-        { x: originX - panelDepth - walerDepth, y: originY - panelDepth, span: outerY, horizontal: false },
-        { x: originX + sectionX + panelDepth, y: originY - panelDepth, span: outerY, horizontal: false },
+      const runs = [
+        { along: originX - panelDepth, cross: originY - panelDepth - walerDepth, span: outerX, horizontal: true },
+        { along: originX - panelDepth, cross: originY + sectionY + panelDepth, span: outerX, horizontal: true },
+        { along: originY - panelDepth, cross: originX - panelDepth - walerDepth, span: outerY, horizontal: false },
+        { along: originY - panelDepth, cross: originX + sectionX + panelDepth, span: outerY, horizontal: false },
       ];
 
-      // In plan all levels sit on top of each other, so one ring is drawn and
-      // the rest are counted — stacking them would just be visual noise.
-      for (const run of runs) {
-        const waler = pickByLength(materials, 'waler', run.span);
-        if (!waler) continue;
-        const pw = planW(waler);
-        const ph = planH(waler);
-        const rot = run.horizontal ? 0 : 90;
-        const perRun = Math.max(1, Math.ceil(run.span / pw));
-        for (let i = 0; i < perRun; i++) {
-          const { x, y } = placeAt(
-            run.horizontal ? run.x + i * pw : run.x,
-            run.horizontal ? run.y : run.y + i * pw,
-            pw,
-            ph,
-            rot,
-          );
-          pieces.push({ id: uid(), materialId: waler.id, x, y, rot });
-          walerCount++;
-        }
-      }
-      // Remaining levels are counted, not drawn (they coincide in plan).
-      walerCount *= levels;
+      const tie = spec.includeTies
+        ? pickByLength(materials, 'rod', Math.max(sectionX, sectionY) + panelDepth * 2 + 10)
+        : null;
+      if (spec.includeTies && !tie) warnings.push('კატალოგში ჭანჭიკები ვერ მოიძებნა.');
 
-      if (spec.includeTies) {
-        const tie = pickByLength(materials, 'rod', Math.max(sectionX, sectionY) + panelDepth * 2 + 10);
+      // Every ring is placed for real at its own height. They coincide in plan
+      // — which is correct for a plan view — but they are separate pieces on
+      // the order, and the 3D view shows them at their true elevations.
+      for (let level = 0; level < levels; level++) {
+        const ringZ = spec.walerSpacing * level + spec.walerSpacing / 2;
+
+        for (const run of runs) {
+          const waler = pickByLength(materials, 'waler', run.span);
+          if (!waler) continue;
+          const pw = planW(waler);
+          const ph = planH(waler);
+          const rot = run.horizontal ? 0 : 90;
+          const perRun = Math.max(1, Math.ceil(run.span / pw));
+          // Stock lengths rarely match the side exactly; centre the overhang so
+          // the ring stays symmetric instead of jutting out on one side only.
+          const start = run.along - (perRun * pw - run.span) / 2;
+          for (let i = 0; i < perRun; i++) {
+            const at = start + i * pw;
+            const { x, y } = placeAt(
+              run.horizontal ? at : run.cross,
+              run.horizontal ? run.cross : at,
+              pw,
+              ph,
+              rot,
+            );
+            pieces.push({ id: uid(), materialId: waler.id, x, y, rot, z: ringZ });
+            walerCount++;
+          }
+        }
+
+        // Two ties per ring, one across each axis, both centred on the column.
         if (tie) {
-          // Two ties per ring, one across each axis.
-          pieces.push({
-            id: uid(),
-            materialId: tie.id,
-            x: originX - panelDepth,
-            y: originY + sectionY / 2,
-            rot: 0,
-          });
-          pieces.push({
-            id: uid(),
-            materialId: tie.id,
-            x: originX + sectionX / 2,
-            y: originY - panelDepth,
-            rot: 90,
-          });
-          tieCount = 2 * levels;
-        } else {
-          warnings.push('კატალოგში ჭანჭიკები ვერ მოიძებნა.');
+          const tw = planW(tie);
+          const th = planH(tie);
+          const cx = originX + sectionX / 2;
+          const cy = originY + sectionY / 2;
+          const across = placeAt(cx - tw / 2, cy - th / 2, tw, th, 0);
+          const along = placeAt(cx - th / 2, cy - tw / 2, tw, th, 90);
+          pieces.push({ id: uid(), materialId: tie.id, ...across, rot: 0, z: ringZ });
+          pieces.push({ id: uid(), materialId: tie.id, ...along, rot: 90, z: ringZ });
+          tieCount += 2;
         }
       }
     }
   }
 
-  // Panels and corners repeat per course as well.
-  panelCount *= courseCount;
-  cornerCount *= courseCount;
-
   return {
     pieces,
-    warnings,
+    // Each face of each course reports for itself, so the four sides of one
+    // course produce the same sentence four times. Courses with different
+    // geometry say different things and are kept.
+    warnings: [...new Set(warnings)],
     summary: {
       panels: panelCount,
+      fillers: fillerCount,
       corners: cornerCount,
       walers: walerCount,
       ties: tieCount,

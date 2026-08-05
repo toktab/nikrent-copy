@@ -1,5 +1,6 @@
 import { useEditorStore } from '../store/useEditorStore';
 import { niceStep } from '../lib/geometry';
+import { isElevation } from '../lib/projection';
 
 const GUTTER = 22; // px reserved for the ruler strips
 
@@ -10,8 +11,15 @@ export function Rulers() {
   const panY = useEditorStore((s) => s.panY);
   const width = useEditorStore((s) => s.stageW);
   const height = useEditorStore((s) => s.stageH);
+  const surfaceView = useEditorStore((s) => s.surfaceView);
 
   const step = niceStep(zoom);
+  /**
+   * Height grows up while surface y grows down, so in an elevation the vertical
+   * ruler has to be read the other way round — otherwise a piece standing
+   * 300 cm tall is labelled −300.
+   */
+  const flipY = isElevation(surfaceView);
 
   // First tick at or before the left/top edge of the visible area: world = (screen - pan) / zoom
   const ticksX: number[] = [];
@@ -37,7 +45,7 @@ export function Rulers() {
       <div className="ruler ruler-y">
         {ticksY.map((cm) => (
           <div key={cm} className="tick" style={{ top: cm * zoom + panY - GUTTER }}>
-            {cm}
+            {flipY ? -cm : cm}
           </div>
         ))}
       </div>

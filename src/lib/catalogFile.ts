@@ -69,7 +69,6 @@ export function sanitizeMaterial(raw: unknown, taken: Set<string>): Material | n
     builtin: r.builtin === true,
     // handles both the legacy `stock: number` and the per-warehouse map
     stock: normalizeStock(r.stock),
-    price: Math.max(0, num(r.price, 0)),
     weight: Math.max(0, num(r.weight, 0)),
     article: String(r.article ?? '').trim(),
     supplier: String(r.supplier ?? '').trim(),
@@ -183,6 +182,8 @@ export function parseLayoutFile(text: string): Piece[] {
       x: num(r.x, 0),
       y: num(r.y, 0),
       rot,
+      // elevation is optional; files written before it existed sit on the ground
+      z: Math.max(0, num(r.z, 0)),
     });
   }
   if (!pieces.length) throw new Error('ფაილში ვალიდური ელემენტი არ არის.');

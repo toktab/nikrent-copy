@@ -34,7 +34,12 @@ const SEEDS: Seed[] = [
   ['waler-600', 'waler 600', 'waler', 600, 12, 'line'],
 
   // ---- Corners -------------------------------------------------------------
-  ['corner-outer-300', 'გარე კუთხე 300', 'corner', 15, 300, 'L'],
+  // 24 cm plan leg: an outer corner wraps the OUTSIDE of the box, so with a
+  // 9 cm panel it covers 24 − 9 = 15 cm of concrete face. The name carries only
+  // the 300 (height), so the leg was a guess in the v1 port — and the original
+  // 15 was geometrically impossible: it cannot both wrap a 9 cm panel and cover
+  // 15 cm of face, which is what left holes between corners and panels.
+  ['corner-outer-300', 'გარე კუთხე 300', 'corner', 24, 300, 'L'],
   ['corner-inner-20x20x150', 'შიდა კუთხე 20*20*150', 'corner', 20, 150, 'L'],
   ['corner-inner-20x20x300', 'შიდა კუთხე 20*20*300', 'corner', 20, 300, 'L'],
   ['corner-inner-20x20x300-joni', 'შიდა კუთხე 20*20*300 ჯონი', 'corner', 20, 300, 'L'],
@@ -116,7 +121,6 @@ export function createSeedMaterials(): Material[] {
     color: categoryColor(category),
     builtin: true,
     stock: { [DEFAULT_WAREHOUSE.id]: 0 },
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',

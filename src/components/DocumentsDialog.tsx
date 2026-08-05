@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 /** Manage the saved drawings: switch, rename, duplicate, delete, create. */
 export function DocumentsDialog() {
@@ -50,8 +51,7 @@ export function DocumentsDialog() {
               newDocument();
               closeDialog();
             }}
-          >
-            ＋ ახალი ნახაზი
+          ><Icon name="plus" /> ახალი ნახაზი
           </button>
           <span className="flex-spacer" />
           <button className="btn" onClick={closeDialog}>
@@ -104,8 +104,7 @@ export function DocumentsDialog() {
                   className="btn icon"
                   title="სახელის შეცვლა"
                   onClick={() => startRename(doc.id, doc.name)}
-                >
-                  ✎
+                ><Icon name="pencil" />
                 </button>
                 <button
                   className="btn icon"
@@ -114,16 +113,14 @@ export function DocumentsDialog() {
                     duplicateDocument(doc.id);
                     closeDialog();
                   }}
-                >
-                  ⧉
+                ><Icon name="copy" />
                 </button>
                 <button
                   className="btn icon danger"
                   title={documents.length <= 1 ? 'ბოლო ნახაზი ვერ წაიშლება' : 'წაშლა'}
                   disabled={documents.length <= 1}
                   onClick={() => askDelete(doc.id, doc.name)}
-                >
-                  🗑
+                ><Icon name="trash" />
                 </button>
               </div>
             </div>

@@ -107,6 +107,9 @@ body {
 select,
 input[type='number'],
 input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='search'],
 textarea {
   background: var(--panel2);
   color: var(--text);
@@ -147,6 +150,10 @@ input[type='color'] {
   align-items: center;
   gap: 12px;
   padding: 7px 14px;
+  /* Last resort. Once the toolbar has wrapped as far as it can, a narrow
+     window pushes whole groups onto another row instead of off the screen —
+     the header is allowed to get taller, never to hide a control. */
+  flex-wrap: wrap;
 }
 .bar-sub {
   border-top: 1px solid var(--line);
@@ -169,6 +176,10 @@ input[type='color'] {
   gap: 6px;
   margin-left: auto;
   flex-wrap: wrap;
+  /* Without this a flex item refuses to go below its min-content width, so a
+     full toolbar shoved the account menu clean off the right edge instead of
+     wrapping. The toolbar is the part that should give — it wraps for free. */
+  min-width: 0;
 }
 .toolbar.left {
   margin-left: 0;
@@ -186,6 +197,84 @@ input[type='color'] {
   min-width: 46px;
   text-align: center;
 }
+/* 2D / 3D switch */
+.view-switch {
+  display: flex;
+  gap: 2px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px;
+}
+.view-switch .btn {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  font-weight: 600;
+}
+.view-switch .btn.active {
+  background: var(--accent);
+  color: #1c1c1c;
+}
+
+/* ---------------------------------------------------------------- 3D view */
+.view3d {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  background: var(--surface);
+}
+.view3d:active {
+  cursor: grabbing;
+}
+.view3d-bar {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 34, 40, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.view3d-select {
+  font-size: 11px;
+  padding: 4px 5px;
+}
+/* Which way a drag moves the selection — a pair, so it reads as one choice
+   rather than two unrelated buttons. */
+.view3d-axis {
+  display: flex;
+  gap: 2px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px;
+}
+.view3d-axis .btn {
+  border: none;
+  background: transparent;
+}
+.view3d-axis .btn.active {
+  background: var(--accent);
+  color: #1c1c1c;
+}
+.view3d-hint {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* The camera is pointed somewhere the requested movement cannot be read from.
+   Louder than the usual hint, because a drag is about to do nothing. */
+.view3d-hint.warn {
+  color: var(--accent);
+  white-space: normal;
+}
+
 /* drawing picker in the title bar */
 .doc-picker {
   display: flex;
@@ -423,10 +512,34 @@ input[type='color'] {
     linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 20px 20px;
   outline: 1px solid #4a5560;
 }
+/**
+ * Clicks land on the drawn shape, not on its bounding box.
+ *
+ * An L-corner's notch is inside its box but outside the piece, and the box is
+ * transparent there — so a click on the panel showing through that notch was
+ * caught by the corner sitting on top of it, and selected the wrong piece.
+ *
+ * Handing the hit test to the SVG geometry fixes it exactly: `visiblePainted`
+ * counts fill and stroke, so the notch stops being clickable while everything
+ * that is actually drawn stays so. Events still bubble to this div, which owns
+ * the pointer handler — `pointer-events: none` suppresses hit-testing, not
+ * propagation.
+ *
+ * Thin bars keep their generous target: `ShapeSvg` paints a faint full-box
+ * rectangle behind them on purpose, and a faint fill is still a painted one.
+ */
 .piece {
   position: absolute;
   cursor: move;
   transform-origin: center center;
+  pointer-events: none;
+}
+.piece .shape > * {
+  pointer-events: visiblePainted;
+}
+/* An elevation piece is a solid rectangle: box and shape are the same thing. */
+.piece.elevation {
+  pointer-events: auto;
 }
 .piece .shape {
   width: 100%;
@@ -443,6 +556,43 @@ input[type='color'] {
 .piece.overlap {
   outline: calc(1.5px / var(--z, 1)) dashed var(--bad);
   outline-offset: 0;
+}
+
+/* A piece seen from the front or the side: a flat silhouette, filled in the
+   material's own colour so a course still reads as panels-and-walers. The
+   border keeps neighbouring pieces of the same colour apart. */
+.piece.elevation {
+  border: calc(1px / var(--z, 1)) solid rgba(10, 13, 17, 0.55);
+  box-sizing: border-box;
+}
+
+/* Ground level, and the reason a height is readable at a glance. Sits under
+   the pieces but over the grid. */
+.ground-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  border-top: calc(2px / var(--z, 1)) solid var(--accent);
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Which view the surface is showing, and what a drag will do in it.
+   Clear of the 22px ruler gutter, which is drawn over the stage. */
+.surface-hint {
+  position: absolute;
+  left: 32px;
+  bottom: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(30, 34, 40, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 9px;
+  pointer-events: none;
+  max-width: calc(100% - 20px);
 }
 
 /* drop preview — shows exactly where a dragged material will land */
@@ -1295,4 +1445,663 @@ kbd {
   cursor: pointer;
   max-width: 70vw;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------------------- auth */
+.login-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.login-card h1 span {
+  color: var(--accent);
+}
+
+.login-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.login-card .field {
+  gap: 4px;
+}
+
+.login-card input {
+  width: 100%;
+}
+
+.login-error {
+  margin: 0;
+  background: var(--badBg);
+  border: 1px solid var(--bad);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.login-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------- user chip */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  /* Never squeezed. The save state and the account menu are the two things in
+     the header that must stay whole — a half-drawn avatar reads as a broken
+     app, and a clipped save state is actively misleading. */
+  flex: 0 0 auto;
+}
+
+.user-role {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.user-role.role-admin {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.user-role.role-editor {
+  color: var(--accent2);
+  border-color: var(--accent2);
+}
+
+/* The role chip is used inside the profile panel and the role legend, so it
+   must never be hidden by width — the header no longer renders one directly. */
+
+/* --------------------------------------------------------------- sync state */
+.sync-badge {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-badge.ok {
+  color: var(--ok);
+}
+
+.sync-badge.bad {
+  color: var(--bad);
+}
+
+.sync-conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  background: var(--badBg);
+  border: 1px solid var(--bad);
+  border-radius: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.login-card.wide-card {
+  max-width: 420px;
+}
+
+.import-summary {
+  margin: 0;
+  padding: 10px 12px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+
+.import-summary b {
+  color: var(--text);
+}
+
+/* The save state is the one thing in the header that must never be hidden:
+   with write-behind saving, silence is indistinguishable from success, and
+   someone could draw for an hour against a dead connection. It shrinks to a
+   coloured dot rather than disappearing, and the tooltip carries the word.
+
+   The failure and conflict states keep their full form at every width — they
+   own buttons, and they are exactly the moments worth spending header on. */
+@media (max-width: 1150px) {
+  .sync-badge:not(.bad) {
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    border-radius: 50%;
+    background: currentColor;
+    overflow: hidden;
+    text-indent: -999px;
+    flex: 0 0 auto;
+  }
+  .sync-conflict {
+    white-space: normal;
+  }
+}
+
+/* ------------------------------------------------------------------- users */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  /* An email, a name, a role picker and two buttons do not compress below
+     this. Below it the table scrolls on its own rather than squeezing the
+     address into an unreadable column. */
+  min-width: 430px;
+}
+
+.users-table th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.users-table td {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.you-tag {
+  font-size: 10px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+
+.section-title {
+  margin: 16px 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.user-add {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.user-add .field {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+.temp-password {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+
+.temp-password code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  word-break: break-all;
+  flex: 1;
+}
+
+.role-legend {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.role-legend li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.role-legend .user-role {
+  flex: 0 0 auto;
+  min-width: 120px;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- presence */
+.presence {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+}
+
+/* Overlapped like a stack of chips, newest on top. */
+.presence-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #1c1c1c;
+  border: 2px solid var(--panel);
+  margin-left: -7px;
+  cursor: default;
+  user-select: none;
+  animation: presence-in 180ms ease-out;
+}
+
+.presence-dot:first-child {
+  margin-left: 0;
+}
+
+.presence-dot.more {
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@keyframes presence-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-dot {
+    animation: none;
+  }
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.check-row input[type='checkbox'] {
+  margin: 1px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent2);
+  width: 14px;
+  height: 14px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent2);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 2px;
+  text-align: center;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------- profile menu */
+.profile-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.avatar-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.avatar-button:hover {
+  border-color: var(--accent);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-fallback {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.profile-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+  z-index: 400;
+}
+
+.profile-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.profile-avatar-large {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.profile-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-large span {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.profile-id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.profile-id b {
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-id .user-role {
+  align-self: flex-start;
+}
+
+.profile-role-hint {
+  font-size: 10.5px;
+}
+
+.profile-row {
+  display: flex;
+  gap: 6px;
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.presence-dot {
+  overflow: hidden;
+}
+
+.presence-dot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@media (max-width: 760px) {
+  .profile-panel {
+    position: fixed;
+    top: 54px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+  }
+}
+
+/* -------------------------------------------------------------------- icons */
+.icon {
+  flex: 0 0 auto;
+  /* Nudged up so a 24-grid glyph sits on the Georgian x-height rather than
+     riding the baseline of the label beside it. */
+  vertical-align: -0.15em;
+}
+
+.link-button .icon,
+.btn .icon {
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   On-site tablet layout.
+
+   Measured at 768×1024 before this block: header 210px + footer 86px = 29%
+   of the screen given over to chrome, both header bars wrapping onto extra
+   rows. The canvas is the tool; everything else is overhead.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* The footer is entirely keyboard shortcuts, which mean nothing without a
+   keyboard. On touch it is 86px of pure waste. */
+@media (pointer: coarse) {
+  .footer {
+    display: none;
+  }
+}
+
+/* Measured at 1024×768 — an iPad landscape or a half-screen laptop window —
+   before this breakpoint moved: the toolbar wrapped onto three rows, 232px of
+   header against 481px of canvas. 37% of the screen spent on chrome.
+
+   1150 rather than 900 because no real laptop is that narrow (1280 is the
+   floor), so a desktop keeps its labels while a tablet gets its canvas. */
+@media (max-width: 1150px) {
+  /* Icon-only toolbar: the labels repeat what the icon and tooltip already
+     say, and dropping them roughly halves the number of wrapped rows. */
+  .bar .btn-label {
+    display: none;
+  }
+  .bar .btn {
+    padding: 6px 8px;
+  }
+  .bar {
+    gap: 6px;
+    padding: 5px 8px;
+  }
+  .bar-sub {
+    padding: 4px 8px;
+  }
+  .toolbar {
+    gap: 4px;
+  }
+  /* Group labels ("წარწერები", "დახმარება") are guidance for a first-time
+     desktop user and cost a whole row here. */
+  .group-label {
+    display: none;
+  }
+  .doc-picker select {
+    max-width: 120px;
+  }
+  .zoomlabel {
+    min-width: 38px;
+    font-size: 11px;
+  }
+  /* Give the toolbar a row of its own rather than letting it elbow the save
+     state and the account menu onto a third row of their own — measured at
+     768px, that alone was 36px of header. */
+  .bar-main > .toolbar {
+    order: 2;
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}
+
+/* Portrait tablet and below: the side panels take more than half the width,
+   so they open over the canvas instead of squeezing it. */
+@media (max-width: 820px) {
+  .palette,
+  .inspector {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 120;
+    width: 280px;
+    max-width: 82vw;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.55);
+  }
+  .palette {
+    left: 0;
+  }
+  .inspector {
+    right: 0;
+  }
+  .body {
+    position: relative;
+  }
+}
+
+/* Phone and small split-screen. The sub-bar's toggles wrapped onto four rows
+   at 390px — 95px of header on an 844px screen, for controls that are all
+   secondary. One scrollable strip instead, the same shape the footer uses.
+
+   Scrolling to reach a toggle is worse than seeing it, so this stays off at
+   any width where the toggles genuinely fit. */
+@media (max-width: 700px) {
+  .bar-sub {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  .bar-sub::-webkit-scrollbar {
+    display: none;
+  }
+  .bar-sub > .toolbar {
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Keep the hints available on a narrow window with a keyboard, but as one
+     scrollable row rather than three wrapped ones — they were costing 86px,
+     more than the drawing toolbar above them. */
+  .footer {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 14px;
+    padding: 4px 10px;
+    scrollbar-width: none;
+  }
+  .footer::-webkit-scrollbar {
+    display: none;
+  }
+  .footer span {
+    flex: 0 0 auto;
+  }
 }

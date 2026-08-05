@@ -29,7 +29,6 @@ function material(over: Partial<Material> = {}): Material {
     color: '#fff',
     builtin: false,
     stock: {},
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',

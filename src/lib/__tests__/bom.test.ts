@@ -14,7 +14,6 @@ function material(over: Partial<Material> = {}): Material {
     color: '#c9a36a',
     builtin: true,
     stock: { main: 10 },
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',
@@ -30,7 +29,7 @@ const piece = (materialId: string, id: string): Piece => ({
   rot: 0,
 });
 
-const panel = material({ id: 'panel', price: 100, weight: 40 });
+const panel = material({ id: 'panel', weight: 40 });
 const waler = material({
   id: 'waler',
   name: 'waler 300',
@@ -40,7 +39,6 @@ const waler = material({
   depth: 9,
   shape: 'line',
   stock: { main: 1 },
-  price: 50,
   weight: 12,
 });
 
@@ -74,25 +72,41 @@ describe('buildBom', () => {
     expect(bom.shortageCount).toBe(1);
   });
 
-  it('sums length for linear items and area for the rest', () => {
+  it('sums the length of every structural item, not just the linear ones', () => {
+    // A "პანელი 45*300" is 3 m long exactly like a 3 m waler. Counting length
+    // only for `shape: 'line'` left panels, corners and fillers — most of a
+    // real order — reporting nothing at all.
     const bom = buildBom([panel, waler], [piece('panel', 'a'), piece('waler', 'b')]);
-    // panel 45×300 cm = 1.35 m², waler length 300 cm = 3 m
-    expect(bom.totalAreaM2).toBeCloseTo(1.35);
-    expect(bom.totalLengthM).toBeCloseTo(3);
+    expect(bom.totalLengthM).toBeCloseTo(6); // 3 m panel + 3 m waler
+    expect(bom.groups.find((g) => g.category === 'panel')!.rows[0].lengthM).toBeCloseTo(3);
   });
 
-  it('totals cost and weight', () => {
+  it('counts face area only for what actually forms the concrete face', () => {
+    const bom = buildBom([panel, waler], [piece('panel', 'a'), piece('waler', 'b')]);
+    // panel 45×300 cm = 1.35 m²; a waler has a profile, not a face
+    expect(bom.totalAreaM2).toBeCloseTo(1.35);
+    expect(bom.groups.find((g) => g.category === 'waler')!.rows[0].areaM2).toBe(0);
+  });
+
+  it('gives accessories neither a length nor an area', () => {
+    // A nut is ordered by the piece; 8 cm of "length" per nut is noise in the
+    // metres total and 0.0064 m² is noise in the area total.
+    const nut = material({ id: 'nut', name: 'ქანჩი', category: 'acc', w: 8, h: 8 });
+    const bom = buildBom([nut], [piece('nut', 'a')]);
+    expect(bom.totalLengthM).toBe(0);
+    expect(bom.totalAreaM2).toBe(0);
+    expect(bom.totalPieces).toBe(1);
+  });
+
+  it('totals weight', () => {
     const bom = buildBom([panel, waler], [piece('panel', 'a'), piece('panel', 'b'), piece('waler', 'c')]);
-    expect(bom.totalCost).toBe(250); // 2×100 + 1×50
     expect(bom.totalWeightKg).toBe(92); // 2×40 + 1×12
   });
 
-  it('reports rows with no price so the total is not read as complete', () => {
-    const free = material({ id: 'free', price: 0, weight: 0 });
+  it('reports rows with no weight so the total is not read as complete', () => {
+    const free = material({ id: 'free', weight: 0 });
     const bom = buildBom([free], [piece('free', 'a')]);
-    expect(bom.unpricedRows).toBe(1);
     expect(bom.unweighedRows).toBe(1);
-    expect(bom.totalCost).toBe(0);
   });
 
   it('counts pieces whose material was deleted as orphans', () => {
