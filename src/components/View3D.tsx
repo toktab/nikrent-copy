@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { HiddenLineMode } from '../types';
+import type { HiddenLineMode, Piece } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
+import { useCanEditDrawings } from '../store/useAuthStore';
 import {
-  piecePrism,
+  canDragOnGround,
+  canDragOnHeight,
   contentBounds3,
   DEFAULT_CAMERA,
+  dragOnGround,
+  dragOnHeight,
   faceShade,
   fitZoom,
   isFrontFacing,
+  piecePrism,
   project,
   type Camera,
   type Vec3,
@@ -16,6 +21,7 @@ import {
   classifyEdge,
   createRaster,
   fillFace,
+  pickAt,
   rasterMatches,
   resetRaster,
   type DepthRaster,
@@ -34,42 +40,98 @@ function shade(hex: string, factor: number): Rgb {
   return { r: channel(16), g: channel(8), b: channel(0) };
 }
 
+const ACCENT = { r: 245, g: 166, b: 35 };
+const ACCENT_CSS = '#f5a623';
+
+/** Pull a colour toward the accent so a selected piece reads at a glance. */
+function tint(base: Rgb, amount: number): Rgb {
+  return {
+    r: Math.round(base.r + (ACCENT.r - base.r) * amount),
+    g: Math.round(base.g + (ACCENT.g - base.g) * amount),
+    b: Math.round(base.b + (ACCENT.b - base.b) * amount),
+  };
+}
+
 const HIDDEN_LINE_LABEL: Record<HiddenLineMode, string> = {
   hide: 'ფარული ხაზები — დამალული',
   dashed: 'ფარული ხაზები — წყვეტილი',
   show: 'ფარული ხაზები — გამჭვირვალე',
 };
 
+/** Which way a drag moves the selection. */
+type MoveAxis = 'ground' | 'height';
+
+const AXIS_LABEL: Record<MoveAxis, string> = {
+  ground: 'გეგმაზე',
+  height: 'სიმაღლეზე',
+};
+
+type Gesture =
+  | { kind: 'orbit'; x: number; y: number }
+  | { kind: 'pan'; x: number; y: number }
+  | {
+      kind: 'move';
+      /** where the drag started, so the delta is always against the origin */
+      startX: number;
+      startY: number;
+      x: number;
+      y: number;
+      baseline: Piece[];
+      axis: MoveAxis;
+      /** true once the pointer has travelled far enough to count as a drag */
+      moved: boolean;
+      /** the piece under the cursor when the gesture began */
+      hitId: string;
+      /** it was already part of the selection before this press */
+      wasSelected: boolean;
+    };
+
+/** A press has to travel this far before it stops counting as a click. */
+const DRAG_THRESHOLD_PX = 3;
+
 /**
- * Read-only 3D visualisation.
+ * Editable 3D view.
  *
- * The 2D surface is a plan view, so it can only ever show footprints. This
- * extrudes every piece to its real height so the formwork can be seen standing
- * up. Deliberately not editable — it exists to check how the assembly looks.
+ * The 2D surface is a plan, so it can only ever show footprints and it cannot
+ * show elevation at all — two pieces on different courses sit exactly on top of
+ * each other there. This view extrudes every piece to its real height and lets
+ * the selection be picked up and moved, including up and down, which is the
+ * only place that last part is possible.
  *
  * Rendering goes through a software depth buffer rather than sorting faces:
- * see `lib/raster3d.ts` for why sorting cannot get formwork right.
+ * see `lib/raster3d.ts` for why sorting cannot get formwork right. Picking
+ * reads that same buffer, so what gets selected is exactly what is visible.
  */
 export function View3D() {
   const pieces = useEditorStore((s) => s.pieces);
   const materials = useEditorStore((s) => s.materials);
   const hiddenLines = useEditorStore((s) => s.hiddenLines);
   const setHiddenLines = useEditorStore((s) => s.setHiddenLines);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
+  const setSelection = useEditorStore((s) => s.setSelection);
+  const toggleSelect = useEditorStore((s) => s.toggleSelect);
+  const canEdit = useCanEditDrawings();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const wheel = useRef(createWheelClassifier());
-  const drag = useRef<{ x: number; y: number; mode: 'orbit' | 'pan' } | null>(null);
+  const gesture = useRef<Gesture | null>(null);
   const rasterRef = useRef<DepthRaster | null>(null);
   const blitRef = useRef<HTMLCanvasElement | null>(null);
+  /** Piece ids in the order they were stamped into the pick buffer. */
+  const pickMap = useRef<string[]>([]);
+  const spaceDown = useRef(false);
 
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [cam, setCam] = useState<Camera>(DEFAULT_CAMERA);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [centre, setCentre] = useState<Vec3>({ x: 0, y: 0, z: 0 });
+  const [axis, setAxis] = useState<MoveAxis>('ground');
+  const [blocked, setBlocked] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const fit = useCallback(() => {
     const result = fitZoom(pieces, byId, cam, size.w, size.h);
@@ -79,7 +141,8 @@ export function View3D() {
     setPan({ x: 0, y: 0 });
   }, [pieces, byId, cam, size.w, size.h]);
 
-  // Frame the model on entry and whenever the drawing changes underneath.
+  // Frame the model on entry and whenever pieces are added or removed. Not on
+  // every change: refitting mid-drag would move the model under the cursor.
   useEffect(() => {
     const result = fitZoom(pieces, byId, DEFAULT_CAMERA, size.w, size.h);
     if (!result) return;
@@ -88,6 +151,33 @@ export function View3D() {
     setPan({ x: 0, y: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieces.length, size.w, size.h]);
+
+  /** The axis a drag would use right now, Alt flipping it for one gesture. */
+  const axisFor = useCallback(
+    (altKey: boolean): MoveAxis => {
+      if (!altKey) return axis;
+      return axis === 'ground' ? 'height' : 'ground';
+    },
+    [axis],
+  );
+
+  // The camera can be pointed somewhere that cannot express the movement being
+  // asked for. Say so up front rather than at the moment of a dead drag.
+  const axisUnavailable = useMemo(() => {
+    if (axis === 'ground' && !canDragOnGround(cam)) {
+      return 'გეგმაზე გადასაწევად ხედი დახარე — თითქმის გვერდიდან ვერ გაირჩევა.';
+    }
+    if (axis === 'height' && !canDragOnHeight(cam)) {
+      return 'სიმაღლეზე გადასაწევად ხედი დახარე — ზუსტად ზემოდან სიმაღლე არ ჩანს.';
+    }
+    return null;
+  }, [axis, cam]);
+
+  // A refusal describes one camera angle, so tilting the view or picking the
+  // other axis answers it. Without this the complaint outlives the problem.
+  useEffect(() => {
+    setBlocked(null);
+  }, [cam, axis]);
 
   // ── Viewport size ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -120,16 +210,117 @@ export function View3D() {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // ── Orbit / pan by dragging ─────────────────────────────────────────────
+  // ── Keyboard ─────────────────────────────────────────────────────────────
+  // The 2D canvas owns the app's shortcuts and is unmounted while this view is
+  // showing, so the few that make sense in 3D are bound here. Arrow up/down is
+  // elevation, which is the one thing the plan view cannot offer.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      const s = useEditorStore.getState();
+
+      if (e.code === 'Space' && !spaceDown.current) {
+        spaceDown.current = true;
+        e.preventDefault();
+        return;
+      }
+
+      if (e.metaKey || e.ctrlKey) {
+        switch (e.code) {
+          case 'KeyZ':
+            e.preventDefault();
+            if (e.shiftKey) s.redo();
+            else s.undo();
+            return;
+          case 'KeyD':
+            e.preventDefault();
+            s.duplicateSelected();
+            return;
+          case 'KeyA':
+            e.preventDefault();
+            s.selectAll();
+            return;
+          default:
+            return;
+        }
+      }
+
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        if (!s.selectedIds.length) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : s.snap ? s.snapStep : 1;
+        s.nudgeElevation(e.key === 'ArrowUp' ? step : -step);
+        return;
+      }
+
+      if (e.code === 'KeyR' || e.key.toLowerCase() === 'r') s.rotateSelected();
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        s.deleteSelected();
+      }
+      if (e.key === 'Escape') s.setSelection([]);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceDown.current = false;
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  // ── Pointer: orbit, pan, and moving the selection ───────────────────────
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      const dx = e.clientX - d.x;
-      const dy = e.clientY - d.y;
-      drag.current = { ...d, x: e.clientX, y: e.clientY };
+      const g = gesture.current;
+      if (!g) return;
 
-      if (d.mode === 'pan') {
+      if (g.kind === 'move') {
+        const totalX = e.clientX - g.startX;
+        const totalY = e.clientY - g.startY;
+        if (!g.moved && Math.hypot(totalX, totalY) < DRAG_THRESHOLD_PX) return;
+        if (!g.moved) {
+          // Opened here rather than on press, so clicking around to inspect
+          // pieces does not fill the undo stack with steps that changed
+          // nothing.
+          useEditorStore.getState().beginDrag();
+          g.moved = true;
+        }
+
+        const delta =
+          g.axis === 'height'
+            ? (() => {
+                const dz = dragOnHeight(totalY, cam, zoom);
+                return dz === null ? null : { dx: 0, dy: 0, dz };
+              })()
+            : (() => {
+                const ground = dragOnGround(totalX, totalY, cam, zoom);
+                return ground === null ? null : { ...ground, dz: 0 };
+              })();
+
+        if (!delta) {
+          setBlocked(
+            g.axis === 'height'
+              ? 'ამ კუთხიდან სიმაღლე არ ჩანს — ხედი დახარე.'
+              : 'ამ კუთხიდან გეგმა არ ჩანს — ხედი დახარე.',
+          );
+          return;
+        }
+        useEditorStore
+          .getState()
+          .moveSelectionSpatially(delta.dx, delta.dy, delta.dz, g.baseline);
+        return;
+      }
+
+      const dx = e.clientX - g.x;
+      const dy = e.clientY - g.y;
+      g.x = e.clientX;
+      g.y = e.clientY;
+
+      if (g.kind === 'pan') {
         setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
         return;
       }
@@ -140,9 +331,22 @@ export function View3D() {
         elevation: Math.max(0.05, Math.min(Math.PI / 2, c.elevation + dy * 0.006)),
       }));
     };
+
     const onUp = () => {
-      drag.current = null;
+      const g = gesture.current;
+      gesture.current = null;
+      if (!g || g.kind !== 'move') return;
+
+      if (g.moved) {
+        useEditorStore.getState().endDrag();
+        return;
+      }
+      // A click, not a drag. Pressing on a piece that was already part of a
+      // multi-selection must not shrink it — otherwise a group could never be
+      // picked up — so the narrowing happens here, on release.
+      if (g.wasSelected) setSelection([g.hitId]);
     };
+
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
@@ -151,7 +355,59 @@ export function View3D() {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, []);
+  }, [cam, zoom, setSelection]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0 && e.button !== 1) return;
+    setBlocked(null);
+
+    if (e.button === 1 || spaceDown.current) {
+      gesture.current = { kind: 'pan', x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    const raster = rasterRef.current;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const hitIndex = raster ? pickAt(raster, e.clientX - rect.left, e.clientY - rect.top) : -1;
+    const hitId = hitIndex >= 0 ? pickMap.current[hitIndex] : undefined;
+
+    if (!hitId) {
+      // Empty space: clear the selection and orbit.
+      if (!e.shiftKey && selectedIds.length) setSelection([]);
+      gesture.current = { kind: 'orbit', x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    if (e.shiftKey) {
+      toggleSelect(hitId);
+      gesture.current = { kind: 'orbit', x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    const wasSelected = selectedSet.has(hitId);
+    if (!canEdit) {
+      // A viewer may still inspect what a piece is; they just cannot move it.
+      setSelection([hitId]);
+      gesture.current = { kind: 'orbit', x: e.clientX, y: e.clientY };
+      return;
+    }
+    if (!wasSelected) setSelection([hitId]);
+
+    const state = useEditorStore.getState();
+    gesture.current = {
+      kind: 'move',
+      startX: e.clientX,
+      startY: e.clientY,
+      x: e.clientX,
+      y: e.clientY,
+      // The selection the store will have once React flushes the click above.
+      baseline: state.pieces,
+      axis: axisFor(e.altKey),
+      moved: false,
+      hitId,
+      wasSelected,
+    };
+  };
 
   // ── Render ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -178,6 +434,7 @@ export function View3D() {
 
     const bounds = contentBounds3(pieces, byId);
     if (!bounds) {
+      pickMap.current = [];
       ctx.fillStyle = '#9aa4b1';
       ctx.font = '14px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif';
       ctx.textAlign = 'center';
@@ -202,9 +459,16 @@ export function View3D() {
 
     // Every visible face into the depth buffer, plus the edges bounding them.
     const edges: Array<[ScreenPoint, ScreenPoint]> = [];
+    const selectedEdges: Array<[ScreenPoint, ScreenPoint]> = [];
+    const map: string[] = [];
+
     for (const piece of pieces) {
       const m = byId.get(piece.materialId);
       if (!m) continue;
+      const pickId = map.length;
+      map.push(piece.id);
+      const chosen = selectedSet.has(piece.id);
+
       const { vertices, faces } = piecePrism(piece, m);
       const projected = vertices.map(toScreen);
       const stride = vertices.length;
@@ -212,11 +476,8 @@ export function View3D() {
 
       for (const face of faces) {
         if (!isFrontFacing(vertices, face, cam)) continue;
-        fillFace(
-          raster,
-          face.map((i) => projected[i]),
-          shade(m.color, faceShade(vertices, face)),
-        );
+        const lit = shade(m.color, faceShade(vertices, face));
+        fillFace(raster, face.map((i) => projected[i]), chosen ? tint(lit, 0.4) : lit, pickId);
         for (let i = 0; i < face.length; i++) {
           const a = face[i];
           const b = face[(i + 1) % face.length];
@@ -224,10 +485,11 @@ export function View3D() {
           const key = Math.min(a, b) * stride + Math.max(a, b);
           if (seen.has(key)) continue;
           seen.add(key);
-          edges.push([projected[a], projected[b]]);
+          (chosen ? selectedEdges : edges).push([projected[a], projected[b]]);
         }
       }
     }
+    pickMap.current = map;
 
     // Blit the shaded solid.
     const blit = blitRef.current ?? (blitRef.current = document.createElement('canvas'));
@@ -240,25 +502,22 @@ export function View3D() {
       ctx.drawImage(blit, 0, 0, size.w, size.h);
     }
 
-    drawEdges(ctx, raster, edges, hiddenLines, zoom);
+    drawEdges(ctx, raster, edges, hiddenLines, zoom, 'rgba(10,13,17,.5)', 1);
+    // Selected outlines last and heavier, so the selection survives being
+    // surrounded by other pieces.
+    drawEdges(ctx, raster, selectedEdges, hiddenLines, zoom, ACCENT_CSS, 1.8);
     drawHeightMarker(ctx, bounds, toScreen);
-  }, [pieces, byId, cam, zoom, pan, centre, size, hiddenLines]);
+  }, [pieces, byId, cam, zoom, pan, centre, size, hiddenLines, selectedSet]);
 
   const hasPieces = pieces.length > 0;
+  const hint = blocked ?? axisUnavailable;
 
   return (
     <main className="stage view3d" ref={wrapRef}>
       <canvas
         ref={canvasRef}
         style={{ width: size.w, height: size.h, display: 'block', touchAction: 'none' }}
-        onPointerDown={(e) => {
-          if (e.button !== 0 && e.button !== 1) return;
-          drag.current = {
-            x: e.clientX,
-            y: e.clientY,
-            mode: e.button === 1 || e.shiftKey ? 'pan' : 'orbit',
-          };
-        }}
+        onPointerDown={onPointerDown}
       />
 
       <div className="view3d-bar">
@@ -276,6 +535,29 @@ export function View3D() {
           title="ზუსტად ზემოდან — ემთხვევა 2D გეგმას"
         ><Icon name="grid" /> გეგმა
         </button>
+
+        {canEdit && (
+          <span className="view3d-axis" role="group" aria-label="გადაწევის მიმართულება">
+            {(['ground', 'height'] as MoveAxis[]).map((a) => (
+              <button
+                key={a}
+                className={`btn small${axis === a ? ' active' : ''}`}
+                onClick={() => {
+                  setAxis(a);
+                  setBlocked(null);
+                }}
+                title={
+                  a === 'ground'
+                    ? 'თრევა გადაწევს გეგმაზე (Alt — სიმაღლეზე)'
+                    : 'თრევა გადაწევს ზემოთ/ქვემოთ (Alt — გეგმაზე)'
+                }
+              >
+                <Icon name={a === 'ground' ? 'array' : 'height'} /> {AXIS_LABEL[a]}
+              </button>
+            ))}
+          </span>
+        )}
+
         <select
           className="view3d-select"
           value={hiddenLines}
@@ -288,7 +570,12 @@ export function View3D() {
             </option>
           ))}
         </select>
-        <span className="view3d-hint">თრევა — ბრუნვა · Shift+თრევა — გადაწევა</span>
+        <span className={`view3d-hint${hint ? ' warn' : ''}`}>
+          {hint ??
+            (canEdit
+              ? 'დაწკაპუნება — მონიშვნა · თრევა — გადაწევა · ცარიელზე თრევა — ბრუნვა'
+              : 'თრევა — ბრუნვა · Space+თრევა — გადაწევა')}
+        </span>
       </div>
     </main>
   );
@@ -305,10 +592,13 @@ function drawEdges(
   edges: Array<[ScreenPoint, ScreenPoint]>,
   mode: HiddenLineMode,
   zoom: number,
+  colour: string,
+  width: number,
 ): void {
+  if (!edges.length) return;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = width;
 
   const stroke = (runs: EdgeRun[]) => {
     ctx.beginPath();
@@ -321,7 +611,7 @@ function drawEdges(
 
   // X-ray: no depth test at all, every edge solid.
   if (mode === 'show') {
-    ctx.strokeStyle = 'rgba(10,13,17,.5)';
+    ctx.strokeStyle = colour;
     ctx.setLineDash([]);
     stroke(edges.map(([a, b]) => ({ from: a, to: b, visible: true })));
     return;
@@ -341,13 +631,13 @@ function drawEdges(
   }
 
   if (mode === 'dashed' && hidden.length) {
-    ctx.strokeStyle = 'rgba(190,201,214,.42)';
+    ctx.strokeStyle = colour === ACCENT_CSS ? 'rgba(245,166,35,.5)' : 'rgba(190,201,214,.42)';
     ctx.setLineDash([3, 4]);
     stroke(hidden);
     ctx.setLineDash([]);
   }
 
-  ctx.strokeStyle = 'rgba(10,13,17,.5)';
+  ctx.strokeStyle = colour;
   ctx.setLineDash([]);
   stroke(visible);
 }

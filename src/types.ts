@@ -112,7 +112,11 @@ export interface ArrayOptions {
   count: number;
   /** centre-to-centre spacing in cm */
   pitch: number;
-  axis: 'x' | 'y';
+  /**
+   * 'z' stacks the copies upward instead of across the plan — how a column is
+   * built course by course without the wizard.
+   */
+  axis: 'x' | 'y' | 'z';
 }
 
 /** Input for the column formwork assembly generator. */

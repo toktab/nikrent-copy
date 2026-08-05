@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { Material, Piece } from '../../types';
 import {
   boundsCentre,
+  canDragOnGround,
+  canDragOnHeight,
   contentBounds3,
+  DEFAULT_CAMERA,
+  dragOnGround,
+  dragOnHeight,
   faceNormal,
   faceShade,
   fitZoom,
@@ -10,6 +15,7 @@ import {
   piecePrism,
   project,
   viewDirection,
+  type Vec3,
 } from '../iso3d';
 import { planOutline, shoelace } from '../shapePath';
 
@@ -352,5 +358,96 @@ describe('fitZoom', () => {
       600,
     )!;
     expect(large.zoom).toBeLessThan(small.zoom);
+  });
+});
+
+/**
+ * The drag inverses are checked against `project` itself rather than against a
+ * hand-computed number. A test that restates the formula would pass just as
+ * happily if both copies were wrong the same way; a round trip through the
+ * real projection cannot.
+ */
+describe('drag inverses', () => {
+  const CAMERAS = [
+    { name: 'default', cam: DEFAULT_CAMERA },
+    { name: 'azimuth 0', cam: { azimuth: 0, elevation: 0.5 } },
+    { name: 'negative azimuth', cam: { azimuth: -2.2, elevation: 0.9 } },
+    { name: 'steep', cam: { azimuth: 1.1, elevation: 1.3 } },
+  ];
+
+  /** Screen delta the renderer would produce for a world delta. */
+  const toScreen = (d: Vec3, cam: typeof DEFAULT_CAMERA, zoom: number) => {
+    const a = project({ x: 0, y: 0, z: 0 }, cam);
+    const b = project(d, cam);
+    return { dx: (b.x - a.x) * zoom, dy: (b.y - a.y) * zoom };
+  };
+
+  describe.each(CAMERAS)('$name', ({ cam }) => {
+    it('recovers a ground movement from the pixels it would produce', () => {
+      const zoom = 2.5;
+      for (const move of [
+        { x: 30, y: 0, z: 0 },
+        { x: 0, y: -45, z: 0 },
+        { x: 17.5, y: 62.5, z: 0 },
+      ]) {
+        const { dx, dy } = toScreen(move, cam, zoom);
+        const back = dragOnGround(dx, dy, cam, zoom)!;
+        expect(back.dx).toBeCloseTo(move.x, 6);
+        expect(back.dy).toBeCloseTo(move.y, 6);
+      }
+    });
+
+    it('recovers a height change from the pixels it would produce', () => {
+      const zoom = 1.8;
+      for (const dz of [50, -125, 7.25]) {
+        const { dy } = toScreen({ x: 0, y: 0, z: dz }, cam, zoom);
+        expect(dragOnHeight(dy, cam, zoom)!).toBeCloseTo(dz, 6);
+      }
+    });
+  });
+
+  it('moves a piece up when the pointer is dragged up the screen', () => {
+    // Screen y grows downward, so a negative dy is an upward drag.
+    expect(dragOnHeight(-40, DEFAULT_CAMERA, 1)!).toBeGreaterThan(0);
+  });
+
+  it('scales with zoom: the same pixels mean less world when zoomed in', () => {
+    const far = dragOnHeight(-40, DEFAULT_CAMERA, 0.5)!;
+    const near = dragOnHeight(-40, DEFAULT_CAMERA, 4)!;
+    expect(Math.abs(near)).toBeLessThan(Math.abs(far));
+  });
+
+  /**
+   * The "გეგმა" button sets exactly this camera. cos(π/2) is 6e-17 rather than
+   * 0, so an unguarded divide returns ~1e16 instead of throwing — the piece
+   * would silently leave the drawing.
+   */
+  it('refuses to change height from straight overhead', () => {
+    const overhead = { azimuth: 0, elevation: Math.PI / 2 };
+    expect(canDragOnHeight(overhead)).toBe(false);
+    expect(dragOnHeight(-40, overhead, 1)).toBeNull();
+    // Ground movement is exactly what that view is good for.
+    expect(canDragOnGround(overhead)).toBe(true);
+    expect(dragOnGround(10, 10, overhead, 1)).not.toBeNull();
+  });
+
+  it('refuses to move along the ground from eye level', () => {
+    // The renderer clamps elevation to 0.05, so this is reachable.
+    const eyeLevel = { azimuth: 0.4, elevation: 0.05 };
+    expect(canDragOnGround(eyeLevel)).toBe(false);
+    expect(dragOnGround(10, 10, eyeLevel, 1)).toBeNull();
+    expect(dragOnHeight(-40, eyeLevel, 1)).not.toBeNull();
+  });
+
+  it('always allows at least one of the two, at every reachable angle', () => {
+    for (let e = 0.05; e <= Math.PI / 2 + 1e-9; e += 0.01) {
+      const cam = { azimuth: 0.3, elevation: e };
+      expect(canDragOnGround(cam) || canDragOnHeight(cam)).toBe(true);
+    }
+  });
+
+  it('treats a nonsense zoom as undraggable rather than dividing by it', () => {
+    expect(dragOnGround(5, 5, DEFAULT_CAMERA, 0)).toBeNull();
+    expect(dragOnHeight(5, DEFAULT_CAMERA, 0)).toBeNull();
   });
 });

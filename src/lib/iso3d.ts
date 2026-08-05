@@ -255,4 +255,79 @@ export function fitZoom(
   return { zoom: Math.max(0.05, Math.min(20, zoom)), centre };
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   Dragging: screen pixels back to world centimetres.
+
+   Because the projection is parallel, a screen displacement maps to a world
+   displacement exactly — there is no ray to cast and no depth to guess. But a
+   screen delta on its own is ambiguous in 3D (a point could have moved along
+   the ground or straight up), so the caller picks which plane the motion is
+   constrained to and gets a closed-form answer for it.
+
+   Both directions have a camera angle where the answer genuinely does not
+   exist, and at those angles these return null rather than a huge number:
+
+   - Ground motion is unreadable from eye level. Distance away from the camera
+     projects to almost no vertical screen movement, so a pixel of drag means
+     metres of world.
+   - Height is unreadable from straight overhead — and the "გეგმა" button puts
+     the camera at exactly that angle, where cos(elevation) is 6e-17 and an
+     unguarded divide would fling the piece into orbit.
+
+   Refusing is the honest response: the view cannot express the movement being
+   asked for, and the fix is to tilt it.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/** Below this the divide stops being meaningful — about 7° from the extreme. */
+const DRAG_SINGULARITY = 0.12;
+
+/** True when the camera is tilted enough to read movement across the ground. */
+export function canDragOnGround(cam: Camera): boolean {
+  return Math.abs(Math.sin(cam.elevation)) >= DRAG_SINGULARITY;
+}
+
+/** True when the camera is tilted enough to read movement up and down. */
+export function canDragOnHeight(cam: Camera): boolean {
+  return Math.abs(Math.cos(cam.elevation)) >= DRAG_SINGULARITY;
+}
+
+/**
+ * World movement in the ground plane (z unchanged) that a screen drag means.
+ *
+ * `dxScreen`/`dyScreen` are in CSS pixels and `zoom` is px per cm, matching
+ * what the renderer applies.
+ */
+export function dragOnGround(
+  dxScreen: number,
+  dyScreen: number,
+  cam: Camera,
+  zoom: number,
+): { dx: number; dy: number } | null {
+  if (!canDragOnGround(cam) || !(zoom > 0)) return null;
+  const ca = Math.cos(cam.azimuth);
+  const sa = Math.sin(cam.azimuth);
+  const se = Math.sin(cam.elevation);
+
+  // Undo the renderer's zoom, then the foreshortening of distance, leaving a
+  // plain rotation by the azimuth — which inverts by transposing it.
+  const across = dxScreen / zoom;
+  const along = dyScreen / (zoom * se);
+
+  return {
+    dx: ca * across + sa * along,
+    dy: -sa * across + ca * along,
+  };
+}
+
+/**
+ * World height change that a vertical screen drag means.
+ *
+ * Only the vertical component matters: height never moves a point sideways on
+ * screen. Dragging up the screen raises the piece.
+ */
+export function dragOnHeight(dyScreen: number, cam: Camera, zoom: number): number | null {
+  if (!canDragOnHeight(cam) || !(zoom > 0)) return null;
+  return -dyScreen / (zoom * Math.cos(cam.elevation));
+}
+
 export { sub as subtract };

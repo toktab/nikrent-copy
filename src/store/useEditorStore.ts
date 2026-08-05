@@ -181,8 +181,19 @@ export interface EditorState {
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
   moveSelectionBy: (dxCm: number, dyCm: number, baseline: Piece[]) => void;
+  /** Live drag from the 3D view, which can also move a piece up and down. */
+  moveSelectionSpatially: (
+    dxCm: number,
+    dyCm: number,
+    dzCm: number,
+    baseline: Piece[],
+  ) => void;
   endDrag: () => void;
   nudgeSelection: (dxCm: number, dyCm: number) => void;
+  /** Put the selection at an exact elevation, from the inspector field. */
+  setElevation: (zCm: number) => void;
+  /** Raise or lower the selection, from a keyboard nudge. */
+  nudgeElevation: (dzCm: number) => void;
   rotateSelected: (step?: number) => void;
   setRotation: (deg: number) => void;
   deleteSelected: () => void;
@@ -559,7 +570,67 @@ export const useEditorStore = create<EditorState>()(
             };
           }),
 
+        /**
+         * Live drag from the 3D view.
+         *
+         * Deliberately simpler than `moveSelectionBy`: no edge snapping. That
+         * aid works off a tolerance in 2D screen pixels and lines up bounding
+         * boxes in plan, neither of which means anything while orbiting in 3D.
+         * The grid still applies, per axis, against the drag baseline so
+         * repeated snapping cannot creep.
+         *
+         * Elevation is clamped at the ground — formwork does not hang in a pit,
+         * and a piece dragged below zero would vanish under the grid.
+         */
+        moveSelectionSpatially: (dxCm, dyCm, dzCm, baseline) =>
+          apply((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const origin = new Map(baseline.map((p) => [p.id, p]));
+            const gridDx = snapValue(dxCm, s.snapStep, s.snap);
+            const gridDy = snapValue(dyCm, s.snapStep, s.snap);
+            const gridDz = snapValue(dzCm, s.snapStep, s.snap);
+
+            return {
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const base = origin.get(p.id) ?? p;
+                return {
+                  ...p,
+                  x: base.x + gridDx,
+                  y: base.y + gridDy,
+                  z: Math.max(0, (base.z ?? 0) + gridDz),
+                };
+              }),
+            };
+          }),
+
         endDrag: () => set({ guideX: null, guideY: null }),
+
+        setElevation: (zCm) =>
+          commit((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const z = Math.max(0, zCm);
+            return {
+              pieces: s.pieces.map((p) => (selected.has(p.id) ? { ...p, z } : p)),
+            };
+          }),
+
+        /**
+         * Relative, so a selection spanning several courses keeps its spacing
+         * instead of collapsing onto one level.
+         */
+        nudgeElevation: (dzCm) =>
+          commit((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            return {
+              pieces: s.pieces.map((p) =>
+                selected.has(p.id) ? { ...p, z: Math.max(0, (p.z ?? 0) + dzCm) } : p,
+              ),
+            };
+          }),
 
         nudgeSelection: (dxCm, dyCm) =>
           commit((s) => {
@@ -657,6 +728,9 @@ export const useEditorStore = create<EditorState>()(
                   id: uid(),
                   x: axis === 'x' ? p.x + pitch * i : p.x,
                   y: axis === 'y' ? p.y + pitch * i : p.y,
+                  // Stacking upward keeps the plan position, so the copies sit
+                  // exactly above the original — the point of a course.
+                  z: axis === 'z' ? Math.max(0, (p.z ?? 0) + pitch * i) : p.z,
                 });
               }
             }

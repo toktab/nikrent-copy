@@ -1,7 +1,27 @@
 import { useState } from 'react';
+import type { ArrayOptions } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
+
+type Axis = ArrayOptions['axis'];
+
+/**
+ * Named by axis rather than by "horizontal"/"vertical". Once height is one of
+ * the choices those words stop meaning anything: in a plan view "vertical" is
+ * down the page, which is horizontal in the world.
+ */
+const AXIS_LABEL: Record<Axis, string> = {
+  x: 'გვერდით (X)',
+  y: 'სიღრმეში (Y)',
+  z: 'სიმაღლეში (Z)',
+};
+
+const AXIS_HINT: Record<Axis, string> = {
+  x: 'ასლები გეგმაზე, მარჯვნივ',
+  y: 'ასლები გეგმაზე, ქვემოთ',
+  z: 'ასლები ერთმანეთის თავზე — რიგები სიმაღლეში',
+};
 
 /**
  * Repeat the selection along one axis — the fast way to lay out a run of
@@ -15,14 +35,27 @@ export function ArrayDialog() {
   const closeDialog = useEditorStore((s) => s.closeDialog);
 
   // Sensible default pitch: the width of the first selected piece, so panels
-  // placed side by side simply butt together.
+  // placed side by side simply butt together. Stacking upward is different —
+  // there the courses meet at the piece's standing height.
   const first = pieces.find((p) => p.id === selectedIds[0]);
   const firstMat = first ? materials.find((m) => m.id === first.materialId) : undefined;
-  const defaultPitch = firstMat ? (first!.rot % 180 === 0 ? firstMat.w : firstMat.h) : 50;
+  const planPitch = firstMat ? (first!.rot % 180 === 0 ? firstMat.w : firstMat.h) : 50;
+  const heightPitch = firstMat ? firstMat.h : 300;
 
   const [count, setCount] = useState('3');
-  const [pitch, setPitch] = useState(String(defaultPitch));
-  const [axis, setAxis] = useState<'x' | 'y'>('x');
+  const [pitch, setPitch] = useState(String(planPitch));
+  const [axis, setAxis] = useState<Axis>('x');
+
+  /**
+   * Switching axis re-suggests the pitch, but only while the field still holds
+   * the previous suggestion — a number the user typed is theirs to keep.
+   */
+  const chooseAxis = (next: Axis) => {
+    const suggested = next === 'z' ? heightPitch : planPitch;
+    const previous = axis === 'z' ? heightPitch : planPitch;
+    if (pitch === String(previous)) setPitch(String(suggested));
+    setAxis(next);
+  };
 
   const countNum = Math.floor(Number(count));
   const pitchNum = Number(String(pitch).replace(',', '.'));
@@ -85,22 +118,25 @@ export function ArrayDialog() {
         <label className="field span2">
           <span>მიმართულება</span>
           <div className="row-actions" style={{ marginTop: 0 }}>
-            <button
-              className={`btn small${axis === 'x' ? ' active' : ''}`}
-              onClick={() => setAxis('x')}
-            ><Icon name="arrow-right" /> ჰორიზონტალურად
-            </button>
-            <button
-              className={`btn small${axis === 'y' ? ' active' : ''}`}
-              onClick={() => setAxis('y')}
-            ><Icon name="arrow-down" /> ვერტიკალურად
-            </button>
+            {(['x', 'y', 'z'] as Axis[]).map((a) => (
+              <button
+                key={a}
+                className={`btn small${axis === a ? ' active' : ''}`}
+                onClick={() => chooseAxis(a)}
+                title={AXIS_HINT[a]}
+              >
+                <Icon name={a === 'x' ? 'arrow-right' : a === 'y' ? 'arrow-down' : 'arrow-up'} />{' '}
+                {AXIS_LABEL[a]}
+              </button>
+            ))}
           </div>
         </label>
       </div>
 
       <p className="hint-note">
-        უარყოფითი ბიჯი ასლებს საპირისპირო მიმართულებით განათავსებს.
+        {axis === 'z'
+          ? 'ასლები დაეწყობა ერთმანეთის თავზე, გეგმაზე იმავე ადგილას. ბიჯი — რიგის სიმაღლე.'
+          : 'უარყოფითი ბიჯი ასლებს საპირისპირო მიმართულებით განათავსებს.'}
       </p>
 
       {errors.length > 0 && (

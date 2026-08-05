@@ -38,6 +38,17 @@ export interface DepthRaster {
   depth: Float32Array;
   /** pinned to a plain ArrayBuffer so it can be handed straight to ImageData */
   rgba: Uint8ClampedArray<ArrayBuffer>;
+  /**
+   * Whose face won each pixel, or -1 for background.
+   *
+   * Picking in 3D could be done by projecting every piece and hit-testing the
+   * polygons under the cursor, but that has to re-solve occlusion to decide
+   * which of the overlapping hits is the one on top — which is exactly what
+   * this buffer already worked out while drawing. Reading it is O(1) and
+   * agrees with the picture by construction, including through the notch of
+   * an L-corner, where a bounding-box test would claim a hit on empty space.
+   */
+  id: Int32Array;
 }
 
 export function createRaster(cssW: number, cssH: number, scale: number): DepthRaster {
@@ -51,6 +62,7 @@ export function createRaster(cssW: number, cssH: number, scale: number): DepthRa
     cssH,
     depth: new Float32Array(w * h),
     rgba: new Uint8ClampedArray(w * h * 4),
+    id: new Int32Array(w * h),
   };
   resetRaster(raster);
   return raster;
@@ -60,6 +72,7 @@ export function createRaster(cssW: number, cssH: number, scale: number): DepthRa
 export function resetRaster(raster: DepthRaster): void {
   raster.depth.fill(-Infinity);
   raster.rgba.fill(0);
+  raster.id.fill(-1);
 }
 
 /** True when the buffer already matches this viewport, so it can be reused. */
@@ -78,6 +91,7 @@ function fillTriangle(
   b: ScreenPoint,
   c: ScreenPoint,
   colour: Rgb,
+  id: number,
 ): void {
   let area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   if (!Number.isFinite(area) || Math.abs(area) < 1e-12) return;
@@ -95,7 +109,7 @@ function fillTriangle(
   const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y)));
   const maxY = Math.min(raster.h - 1, Math.ceil(Math.max(a.y, b.y, c.y)));
 
-  const { depth, rgba, w } = raster;
+  const { depth, rgba, id: ids, w } = raster;
 
   for (let y = minY; y <= maxY; y++) {
     const py = y + 0.5;
@@ -113,6 +127,7 @@ function fillTriangle(
       if (d <= depth[idx]) continue;
 
       depth[idx] = d;
+      ids[idx] = id;
       const o = idx * 4;
       rgba[o] = colour.r;
       rgba[o + 1] = colour.g;
@@ -201,13 +216,57 @@ export function triangulate(poly: Point2[]): Array<[number, number, number]> {
   return out;
 }
 
-/** Rasterise one planar face given in CSS pixels. Concave outlines are fine. */
-export function fillFace(raster: DepthRaster, pts: ScreenPoint[], colour: Rgb): void {
+/**
+ * Rasterise one planar face given in CSS pixels. Concave outlines are fine.
+ *
+ * `id` is stamped into the pick buffer wherever this face ends up visible;
+ * leave it out for scenery that should never be selectable.
+ */
+export function fillFace(
+  raster: DepthRaster,
+  pts: ScreenPoint[],
+  colour: Rgb,
+  id = -1,
+): void {
   if (pts.length < 3) return;
   const p = pts.map((q) => toRaster(raster, q));
   for (const [a, b, c] of triangulate(p)) {
-    fillTriangle(raster, p[a], p[b], p[c], colour);
+    fillTriangle(raster, p[a], p[b], p[c], colour, id);
   }
+}
+
+/**
+ * Whose face is visible at a CSS-pixel location, or -1 for background.
+ *
+ * A small square is searched rather than the single pixel under the cursor:
+ * the raster runs coarser than the display, and a waler seen edge-on can be
+ * barely a pixel wide, which would make it unclickable. The nearest hit to the
+ * exact cursor position wins so the search never overrides an unambiguous one.
+ */
+export function pickAt(raster: DepthRaster, x: number, y: number, radiusPx = 3): number {
+  const cx = x * raster.scale;
+  const cy = y * raster.scale;
+  const r = Math.max(0, Math.round(radiusPx * raster.scale));
+
+  let best = -1;
+  let bestDistance = Infinity;
+
+  for (let dy = -r; dy <= r; dy++) {
+    const iy = Math.floor(cy) + dy;
+    if (iy < 0 || iy >= raster.h) continue;
+    for (let dx = -r; dx <= r; dx++) {
+      const ix = Math.floor(cx) + dx;
+      if (ix < 0 || ix >= raster.w) continue;
+      const hit = raster.id[iy * raster.w + ix];
+      if (hit < 0) continue;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = hit;
+      }
+    }
+  }
+  return best;
 }
 
 /** Depth already written at a CSS-pixel location; -Infinity where nothing is. */

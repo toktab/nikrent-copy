@@ -4,6 +4,7 @@ import {
   createRaster,
   depthAt,
   fillFace,
+  pickAt,
   rasterMatches,
   resetRaster,
   type ScreenPoint,
@@ -228,5 +229,92 @@ describe('classifyEdge', () => {
       0.5,
     );
     expect(runs).toHaveLength(1);
+  });
+});
+
+describe('pickAt', () => {
+  it('reports nothing on empty background', () => {
+    const raster = createRaster(60, 60, 1);
+    expect(pickAt(raster, 30, 30)).toBe(-1);
+  });
+
+  it('reports the face under the cursor', () => {
+    const raster = createRaster(60, 60, 1);
+    fillFace(raster, quad(10, 10, 30, 30, 5), WHITE, 7);
+    expect(pickAt(raster, 25, 25)).toBe(7);
+  });
+
+  /**
+   * The whole reason to reuse the depth buffer: whichever piece the user can
+   * actually see is the one that gets picked, with no extra sorting.
+   */
+  it('picks the nearer piece where two overlap, whichever was drawn first', () => {
+    const near = createRaster(60, 60, 1);
+    fillFace(near, quad(10, 10, 30, 30, 1), WHITE, 1); // far, drawn first
+    fillFace(near, quad(20, 20, 30, 30, 9), RED, 2); // near, drawn second
+    expect(pickAt(near, 25, 25)).toBe(2);
+
+    const reversed = createRaster(60, 60, 1);
+    fillFace(reversed, quad(20, 20, 30, 30, 9), RED, 2); // near, drawn first
+    fillFace(reversed, quad(10, 10, 30, 30, 1), WHITE, 1); // far, drawn second
+    expect(pickAt(reversed, 25, 25)).toBe(2);
+  });
+
+  /**
+   * An L-corner's notch is inside its bounding box but outside the piece. A
+   * box hit-test would claim it; going through the rasterised outline cannot.
+   */
+  it('does not pick the empty notch of a concave outline', () => {
+    const raster = createRaster(60, 60, 1);
+    const L: ScreenPoint[] = [
+      { x: 10, y: 10, depth: 5 },
+      { x: 40, y: 10, depth: 5 },
+      { x: 40, y: 20, depth: 5 },
+      { x: 20, y: 20, depth: 5 },
+      { x: 20, y: 40, depth: 5 },
+      { x: 10, y: 40, depth: 5 },
+    ];
+    fillFace(raster, L, WHITE, 3);
+    expect(pickAt(raster, 14, 14)).toBe(3); // on the piece
+    // Well inside the bounding box, well outside the L. Radius 0 so the
+    // forgiving search cannot wander back onto the arm.
+    expect(pickAt(raster, 34, 34, 0)).toBe(-1);
+  });
+
+  it('forgives a near miss, but prefers an exact hit', () => {
+    const raster = createRaster(60, 60, 1);
+    fillFace(raster, quad(20, 20, 4, 20, 5), WHITE, 4); // a thin, edge-on waler
+    expect(pickAt(raster, 26, 30, 0)).toBe(-1); // strictly beside it
+    expect(pickAt(raster, 26, 30, 4)).toBe(4); // within reach
+
+    // Two candidates near the cursor: the one actually under it wins.
+    fillFace(raster, quad(30, 20, 4, 20, 5), RED, 5);
+    expect(pickAt(raster, 31, 30, 6)).toBe(5);
+  });
+
+  it('is cleared by a reset, so a stale pick cannot outlive its frame', () => {
+    const raster = createRaster(60, 60, 1);
+    fillFace(raster, quad(10, 10, 30, 30, 5), WHITE, 7);
+    resetRaster(raster);
+    expect(pickAt(raster, 25, 25)).toBe(-1);
+  });
+
+  it('leaves unidentified scenery unpickable', () => {
+    const raster = createRaster(60, 60, 1);
+    fillFace(raster, quad(10, 10, 30, 30, 5), WHITE); // no id passed
+    expect(pickAt(raster, 25, 25)).toBe(-1);
+  });
+
+  it('stays inside the buffer when the cursor leaves the viewport', () => {
+    const raster = createRaster(60, 60, 1);
+    fillFace(raster, quad(10, 10, 30, 30, 5), WHITE, 7);
+    expect(pickAt(raster, -50, -50)).toBe(-1);
+    expect(pickAt(raster, 500, 500)).toBe(-1);
+  });
+
+  it('works at a raster coarser than the display', () => {
+    const raster = createRaster(60, 60, 0.5);
+    fillFace(raster, quad(10, 10, 30, 30, 5), WHITE, 8);
+    expect(pickAt(raster, 25, 25)).toBe(8);
   });
 });

@@ -54,11 +54,29 @@ export function DetailsPanel() {
     const counts = new Map<string, number>();
     for (const p of selectedPieces) counts.set(p.materialId, (counts.get(p.materialId) ?? 0) + 1);
 
+    // Stacked courses sit exactly on top of each other in plan, so without
+    // this a selection of four levels looks identical to one.
+    const levels = [...new Set(selectedPieces.map((p) => Math.round(p.z ?? 0)))].sort(
+      (a, b) => a - b,
+    );
+
     return (
       <div className="details">
         <div className="kv">
           <span className="k">მონიშნულია</span>
           <b>{selectedPieces.length} ელემენტი</b>
+        </div>
+        <div className="kv">
+          <span className="k">სიმაღლე ძირიდან</span>
+          <span>
+            {levels.length === 1
+              ? `${levels[0]} სმ`
+              : `${levels.length} რიგი · ${levels[0]}–${levels[levels.length - 1]} სმ`}
+          </span>
+        </div>
+        <div className="kv">
+          <span className="k">გადაწევა სიმაღლეზე</span>
+          <NudgeElevation />
         </div>
         {[...counts.entries()].map(([materialId, n]) => {
           const m = materials.find((x) => x.id === materialId);
@@ -111,6 +129,10 @@ export function DetailsPanel() {
         <RotationField rot={piece.rot} />
       </div>
       <div className="kv">
+        <span className="k">სიმაღლე ძირიდან</span>
+        <ElevationField z={piece.z ?? 0} />
+      </div>
+      <div className="kv">
         <span className="k">მარაგი</span>
         <span>{totalStock(material)} ცალი</span>
       </div>
@@ -131,6 +153,73 @@ export function DetailsPanel() {
       ><Icon name="pencil" /> კომპონენტის რედაქტირება
       </button>
     </div>
+  );
+}
+
+/**
+ * Elevation of the piece's underside.
+ *
+ * The plan cannot show this — two pieces at different heights occupy the same
+ * footprint — so this field and the 3D view are the only places a stack is
+ * visible at all. Committed on blur and Enter like the rotation field, so
+ * typing "300" does not pass through 3, then 30.
+ */
+function ElevationField({ z }: { z: number }) {
+  const setElevation = useEditorStore((s) => s.setElevation);
+  const snapStep = useEditorStore((s) => s.snapStep);
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? String(Math.round(z * 10) / 10);
+
+  const commit = (raw: string) => {
+    const n = Number(raw.replace(',', '.'));
+    if (Number.isFinite(n)) setElevation(n);
+    setDraft(null);
+  };
+
+  return (
+    <span className="rot-field">
+      <input
+        type="number"
+        step={snapStep}
+        min={0}
+        value={value}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+        }}
+      />
+      <span className="deg">სმ</span>
+    </span>
+  );
+}
+
+/**
+ * Raising a mixed selection has to be relative — setting one elevation on four
+ * courses would collapse them into each other.
+ */
+function NudgeElevation() {
+  const nudgeElevation = useEditorStore((s) => s.nudgeElevation);
+  const snapStep = useEditorStore((s) => s.snapStep);
+  const step = Math.max(1, snapStep);
+
+  return (
+    <span className="row-actions" style={{ marginTop: 0 }}>
+      <button
+        className="btn small"
+        onClick={() => nudgeElevation(step)}
+        title={`ყველა მონიშნული ${step} სმ-ით მაღლა`}
+      >
+        <Icon name="arrow-up" /> +{step}
+      </button>
+      <button
+        className="btn small"
+        onClick={() => nudgeElevation(-step)}
+        title={`ყველა მონიშნული ${step} სმ-ით დაბლა`}
+      >
+        <Icon name="arrow-down" /> −{step}
+      </button>
+    </span>
   );
 }
 
