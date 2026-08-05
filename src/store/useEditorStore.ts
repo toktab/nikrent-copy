@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ArrayOptions,
   ColumnSpec,
+  WallSpec,
   DialogState,
   DocSnapshot,
   DrawingDoc,
@@ -28,6 +29,7 @@ import {
 import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
+import { planWall } from '../lib/wallWizard';
 import { isConfigured } from '../lib/supabase';
 import type { DataSnapshot } from '../lib/syncDiff';
 
@@ -189,6 +191,7 @@ export interface EditorState {
   pasteClipboard: () => void;
   arraySelection: (options: ArrayOptions) => void;
   generateColumn: (spec: ColumnSpec) => { added: number; warnings: string[] };
+  generateWall: (spec: WallSpec) => { added: number; warnings: string[] };
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
 
@@ -664,6 +667,17 @@ export const useEditorStore = create<EditorState>()(
         /** Build a whole column assembly from its cross-section and height. */
         generateColumn: (spec) => {
           const plan = planColumn(spec, get().materials);
+          if (plan.pieces.length) {
+            commit((s) => ({
+              pieces: [...s.pieces, ...plan.pieces],
+              selectedIds: plan.pieces.map((p) => p.id),
+            }));
+          }
+          return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        generateWall: (spec) => {
+          const plan = planWall(spec, get().materials);
           if (plan.pieces.length) {
             commit((s) => ({
               pieces: [...s.pieces, ...plan.pieces],

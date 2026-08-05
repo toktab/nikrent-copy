@@ -267,6 +267,12 @@ export function Header() {
             title="კოლონის ავტომატური აწყობა"
           ><Icon name="column" /> კოლონა
           </button>
+          <button
+            className="btn"
+            onClick={() => openDialog({ kind: 'wall-wizard' })}
+            title="კედლის ავტომატური აწყობა"
+          ><Icon name="wall" /> კედელი
+          </button>
 
           <span className="sep" />
 

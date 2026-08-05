@@ -37,6 +37,7 @@ export type IconName =
   | 'reset'
   | 'fit'
   | 'column'
+  | 'wall'
   | 'chevron-left'
   | 'chevron-right'
   | 'arrow-right'
@@ -72,6 +73,9 @@ const PATHS: Record<IconName, string> = {
   reset: 'M4 12a8 8 0 1 0 2.3-5.6 M4 4v5h5 M12 8v4l3 2',
   fit: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
   column: 'M5 20h14 M7 20V6h10v14 M4 6h16 M10 10v6 M14 10v6',
+  // Coursed brickwork: reads as a wall at 15px where a plain
+  // rectangle would not.
+  wall: 'M3 5h18v14H3z M3 9.7h18 M3 14.3h18 M11 5v4.7 M7 9.7v4.6 M15 9.7v4.6 M11 14.3V19',
   'chevron-left': 'M15 5l-7 7 7 7',
   'chevron-right': 'M9 5l7 7-7 7',
   'arrow-right': 'M4 12h15 M13 6l6 6-6 6',

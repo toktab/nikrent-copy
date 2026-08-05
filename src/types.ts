@@ -132,6 +132,30 @@ export interface ColumnSpec {
   includeCorners: boolean;
 }
 
+/** Input for the wall formwork assembly generator. */
+export interface WallSpec {
+  /** wall run in cm, along the X axis */
+  length: number;
+  /** concrete thickness in cm */
+  thickness: number;
+  /** pour height in cm */
+  height: number;
+  /** vertical spacing between waler runs, cm */
+  walerSpacing: number;
+  /** spacing between tie rods along the wall, cm */
+  tieSpacing: number;
+  /** where to drop the assembly, world cm */
+  originX: number;
+  originY: number;
+  includeWalers: boolean;
+  includeTies: boolean;
+  /**
+   * Close both ends. Off when the run continues into another pour or an
+   * existing structure, where an end panel would be wrong.
+   */
+  includeStopEnds: boolean;
+}
+
 /** Shape of an exported catalog file (materials + stock, no drawing). */
 export interface CatalogFile {
   app: 'du-formwork';
@@ -157,6 +181,7 @@ export type DialogState =
   | { kind: 'sheet-import' }
   | { kind: 'array' }
   | { kind: 'column-wizard' }
+  | { kind: 'wall-wizard' }
   | { kind: 'warehouses' }
   | { kind: 'title-block' }
   | { kind: 'documents' }

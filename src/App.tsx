@@ -12,6 +12,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { ArrayDialog } from './components/ArrayDialog';
 import { DocumentsDialog } from './components/DocumentsDialog';
 import { ColumnWizardDialog } from './components/ColumnWizardDialog';
+import { WallWizardDialog } from './components/WallWizardDialog';
 import { WarehousesDialog } from './components/WarehousesDialog';
 import { TitleBlockDialog } from './components/TitleBlockDialog';
 import { UsersDialog } from './components/UsersDialog';
@@ -105,6 +106,7 @@ export default function App() {
       {dialog?.kind === 'array' && <ArrayDialog />}
       {dialog?.kind === 'documents' && <DocumentsDialog />}
       {dialog?.kind === 'column-wizard' && <ColumnWizardDialog />}
+      {dialog?.kind === 'wall-wizard' && <WallWizardDialog />}
       {dialog?.kind === 'warehouses' && <WarehousesDialog />}
       {dialog?.kind === 'title-block' && <TitleBlockDialog />}
       {dialog?.kind === 'users' && <UsersDialog />}
