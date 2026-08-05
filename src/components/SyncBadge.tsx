@@ -80,11 +80,33 @@ export function SyncBadge() {
     );
   }
 
+  // Below 1150px these collapse to a coloured dot, so the text moves into the
+  // tooltip rather than being lost.
   if (status === 'readonly') {
-    return <div className="sync-badge muted">მხოლოდ ნახვა</div>;
+    return (
+      <div className="sync-badge muted" title="მხოლოდ ნახვა">
+        მხოლოდ ნახვა
+      </div>
+    );
   }
 
-  if (status === 'saving') return <div className="sync-badge">ინახება…</div>;
-  if (pending) return <div className="sync-badge muted">არ არის შენახული</div>;
-  return <div className="sync-badge ok">შენახულია</div>;
+  if (status === 'saving') {
+    return (
+      <div className="sync-badge" title="ინახება…">
+        ინახება…
+      </div>
+    );
+  }
+  if (pending) {
+    return (
+      <div className="sync-badge muted" title="არ არის შენახული">
+        არ არის შენახული
+      </div>
+    );
+  }
+  return (
+    <div className="sync-badge ok" title="შენახულია">
+      შენახულია
+    </div>
+  );
 }

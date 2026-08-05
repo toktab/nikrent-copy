@@ -186,6 +186,10 @@ export function UsersDialog() {
       {loading ? (
         <p className="field-hint">იტვირთება…</p>
       ) : (
+        /* The table needs ~430px; the dialog is narrower than that on a phone.
+           It gets its own scroller so the form below it stays put instead of
+           sliding away with it. */
+        <div className="table-scroll">
         <table className="users-table">
           <thead>
             <tr>
@@ -242,6 +246,7 @@ export function UsersDialog() {
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       <ul className="role-legend">

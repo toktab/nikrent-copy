@@ -150,6 +150,10 @@ input[type='color'] {
   align-items: center;
   gap: 12px;
   padding: 7px 14px;
+  /* Last resort. Once the toolbar has wrapped as far as it can, a narrow
+     window pushes whole groups onto another row instead of off the screen —
+     the header is allowed to get taller, never to hide a control. */
+  flex-wrap: wrap;
 }
 .bar-sub {
   border-top: 1px solid var(--line);
@@ -172,6 +176,10 @@ input[type='color'] {
   gap: 6px;
   margin-left: auto;
   flex-wrap: wrap;
+  /* Without this a flex item refuses to go below its min-content width, so a
+     full toolbar shoved the account menu clean off the right edge instead of
+     wrapping. The toolbar is the part that should give — it wraps for free. */
+  min-width: 0;
 }
 .toolbar.left {
   margin-left: 0;
@@ -1426,24 +1434,10 @@ kbd {
   align-items: center;
   gap: 10px;
   margin-left: auto;
-  min-width: 0;
-}
-
-.user-menu {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: 4px;
-  min-width: 0;
-}
-
-.user-name {
-  font-size: 12px;
-  color: var(--text);
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Never squeezed. The save state and the account menu are the two things in
+     the header that must stay whole — a half-drawn avatar reads as a broken
+     app, and a clipped save state is actively misleading. */
+  flex: 0 0 auto;
 }
 
 .user-role {
@@ -1518,18 +1512,42 @@ kbd {
   color: var(--text);
 }
 
-@media (max-width: 1100px) {
-  .sync-badge,
+/* The save state is the one thing in the header that must never be hidden:
+   with write-behind saving, silence is indistinguishable from success, and
+   someone could draw for an hour against a dead connection. It shrinks to a
+   coloured dot rather than disappearing, and the tooltip carries the word.
+
+   The failure and conflict states keep their full form at every width — they
+   own buttons, and they are exactly the moments worth spending header on. */
+@media (max-width: 1150px) {
+  .sync-badge:not(.bad) {
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    border-radius: 50%;
+    background: currentColor;
+    overflow: hidden;
+    text-indent: -999px;
+    flex: 0 0 auto;
+  }
   .sync-conflict {
-    display: none;
+    white-space: normal;
   }
 }
 
 /* ------------------------------------------------------------------- users */
+.table-scroll {
+  overflow-x: auto;
+}
+
 .users-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  /* An email, a name, a role picker and two buttons do not compress below
+     this. Below it the table scrolls on its own rather than squeezing the
+     address into an unreadable column. */
+  min-width: 430px;
 }
 
 .users-table th {
@@ -1890,7 +1908,13 @@ kbd {
   }
 }
 
-@media (max-width: 900px) {
+/* Measured at 1024×768 — an iPad landscape or a half-screen laptop window —
+   before this breakpoint moved: the toolbar wrapped onto three rows, 232px of
+   header against 481px of canvas. 37% of the screen spent on chrome.
+
+   1150 rather than 900 because no real laptop is that narrow (1280 is the
+   floor), so a desktop keeps its labels while a tablet gets its canvas. */
+@media (max-width: 1150px) {
   /* Icon-only toolbar: the labels repeat what the icon and tooltip already
      say, and dropping them roughly halves the number of wrapped rows. */
   .bar .btn-label {
@@ -1921,6 +1945,14 @@ kbd {
     min-width: 38px;
     font-size: 11px;
   }
+  /* Give the toolbar a row of its own rather than letting it elbow the save
+     state and the account menu onto a third row of their own — measured at
+     768px, that alone was 36px of header. */
+  .bar-main > .toolbar {
+    order: 2;
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
 }
 
 /* Portrait tablet and below: the side panels take more than half the width,
@@ -1944,6 +1976,29 @@ kbd {
   }
   .body {
     position: relative;
+  }
+}
+
+/* Phone and small split-screen. The sub-bar's toggles wrapped onto four rows
+   at 390px — 95px of header on an 844px screen, for controls that are all
+   secondary. One scrollable strip instead, the same shape the footer uses.
+
+   Scrolling to reach a toggle is worse than seeing it, so this stays off at
+   any width where the toggles genuinely fit. */
+@media (max-width: 700px) {
+  .bar-sub {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  .bar-sub::-webkit-scrollbar {
+    display: none;
+  }
+  .bar-sub > .toolbar {
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
+    margin-left: 0;
   }
 }
 
