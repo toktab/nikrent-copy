@@ -1,0 +1,76 @@
+# Weekly database backup.
+#
+# The company's catalog, stock ledger and every drawing live in one Supabase
+# project on the free tier, which has no point-in-time recovery. Without this
+# there is no copy of any of it: one mistaken delete, or one project problem,
+# and the work is gone permanently.
+#
+# Runs on GitHub's free minutes and stores the dump as a build artifact.
+#
+# ── Setup ──────────────────────────────────────────────────────────────────
+# Add one repository secret (Settings → Secrets and variables → Actions):
+#
+#   SUPABASE_DB_URL
+#     Supabase → Project Settings → Database → Connection string → URI.
+#     Use the *session pooler* URI on port 5432 and paste your database
+#     password into it. It contains that password, so it belongs in a secret
+#     and nowhere else.
+#
+# ── Restoring ──────────────────────────────────────────────────────────────
+#   gunzip -c backup.sql.gz | psql "$SUPABASE_DB_URL"
+#
+# A backup nobody has ever restored is a guess, not a backup. Restore one into
+# a scratch Supabase project once, so the procedure is known before it matters.
+
+name: Database backup
+
+on:
+  schedule:
+    # 03:00 UTC every Sunday.
+    - cron: '0 3 * * 0'
+  # So the first one can be taken now rather than next Sunday.
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    # pg_dump refuses to work against a server newer than itself, so the client
+    # comes from the matching major version rather than from Ubuntu's default.
+    container: postgres:17-alpine
+    steps:
+      - name: Dump the database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "SUPABASE_DB_URL is not set — see the header of this file." >&2
+            exit 1
+          fi
+          # --no-owner and --no-privileges keep the dump restorable into a
+          # different project, where the role names will not match.
+          pg_dump "$SUPABASE_DB_URL" \
+            --no-owner --no-privileges \
+            --schema=public --schema=storage \
+            | gzip -9 > backup.sql.gz
+          ls -lh backup.sql.gz
+
+      - name: Fail if the dump is suspiciously small
+        run: |
+          set -euo pipefail
+          size=$(stat -c %s backup.sql.gz)
+          echo "dump is ${size} bytes"
+          # An empty or error-only dump still exits 0 and still uploads, which
+          # would look like a working backup for months.
+          if [ "$size" -lt 2000 ]; then
+            echo "Dump is too small to be real — treating as a failure." >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backup.sql.gz
+          # GitHub's ceiling for artifacts is 90 days. Anything longer needs
+          # somewhere else to put them.
+          retention-days: 90

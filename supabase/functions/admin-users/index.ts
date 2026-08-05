@@ -16,20 +16,54 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+/**
+ * Sites allowed to call this from a browser — the deployed app, and localhost
+ * while developing. Set as a comma-separated secret:
+ *
+ *   supabase secrets set ALLOWED_ORIGINS="https://your-app.vercel.app,http://localhost:5173"
+ *
+ * Worth being clear about what this does and does not buy. It is hygiene, not
+ * a lock: CORS stops a *browser* on another site from reading the response, so
+ * it cannot protect an endpoint on its own. What actually guards this function
+ * is that every call must carry a valid signed-in token AND be an admin
+ * according to the database. A token lives in localStorage, which another
+ * origin cannot read, so there is no drive-by path in either way. This simply
+ * removes a door that has no reason to be open.
+ *
+ * Left wide open when the secret is unset, deliberately: shipping this must
+ * not silently break user management on a deployment that has not set it yet.
+ */
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  });
+function corsFor(req: Request): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    // The response differs by origin, so it must never be cached across them.
+    Vary: 'Origin',
+  };
+  if (!ALLOWED_ORIGINS.length) {
+    headers['Access-Control-Allow-Origin'] = '*';
+    return headers;
+  }
+  const origin = req.headers.get('Origin') ?? '';
+  // An origin that is not on the list simply gets no header back, and the
+  // browser refuses the response.
+  if (ALLOWED_ORIGINS.includes(origin)) headers['Access-Control-Allow-Origin'] = origin;
+  return headers;
 }
 
 Deno.serve(async (req: Request) => {
+  const CORS = corsFor(req);
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...CORS, 'Content-Type': 'application/json' },
+    });
+
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
 
