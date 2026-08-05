@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { useCanManageCatalog } from '../store/useAuthStore';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER, categoryLabel } from '../data/categories';
 import { fmtMoney, sizeLabel } from '../lib/bom';
 import { commitmentsByMaterial, emptyCommitment, stockIn, totalStock } from '../lib/inventory';
@@ -116,7 +116,12 @@ export function InventoryPanel() {
             </option>
           ))}
         </select>
-        <button className="btn small" onClick={() => openDialog({ kind: 'warehouses' })}>
+        <button
+          className="btn small"
+          disabled={!canManage}
+          title={canManage ? undefined : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'warehouses' })}
+        >
           საწყობები…
         </button>
       </div>
@@ -176,7 +181,8 @@ export function InventoryPanel() {
                     <td>
                       <button
                         className="link-name"
-                        title="რედაქტირება"
+                        disabled={!canManage}
+                        title={canManage ? 'რედაქტირება' : ADMIN_ONLY_TITLE}
                         onClick={() => openDialog({ kind: 'material', materialId: m.id })}
                       >
                         {m.name}

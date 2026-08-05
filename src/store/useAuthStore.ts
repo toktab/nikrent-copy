@@ -1,6 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
-import { isConfigured, supabase } from '../lib/supabase';
+import { isConfigured, setRemembered, supabase } from '../lib/supabase';
 
 /**
  * Session and role, kept deliberately apart from `useEditorStore`.
@@ -17,6 +17,8 @@ export interface Profile {
   email: string;
   full_name: string;
   role: Role;
+  /** public URL of the profile picture; empty when none is set */
+  avatar_url: string;
 }
 
 /**
@@ -35,12 +37,23 @@ interface AuthState {
   profileError: string | null;
   signingIn: boolean;
   error: string | null;
+  /**
+   * True after arriving via a recovery link. The session is real but exists
+   * only to set a new password, so the editor stays closed until it is done.
+   */
+  recovering: boolean;
+  /** confirmation that a recovery email was accepted for sending */
+  recoverySent: boolean;
 
   init: () => () => void;
   loadProfile: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, remember: boolean) => Promise<void>;
+  sendRecovery: (email: string) => Promise<void>;
+  completeRecovery: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  /** Apply a local change to the signed-in user's own profile. */
+  patchProfile: (patch: Partial<Profile>) => void;
 }
 
 /** Supabase speaks English; the interface does not. */
@@ -68,6 +81,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profileError: null,
   signingIn: false,
   error: null,
+  recovering: false,
+  recoverySent: false,
 
   /**
    * Reads any stored session, then listens for changes. Returns an unsubscribe
@@ -103,7 +118,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
       });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      // A recovery link signs the user in with a session whose only purpose is
+      // setting a new password. Flagged so the editor is not handed over until
+      // that has actually happened.
+      if (event === 'PASSWORD_RECOVERY') set({ recovering: true });
       set({
         session,
         user: session?.user ?? null,
@@ -128,7 +147,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role')
+      // `*` rather than a column list: naming avatar_url would make sign-in
+      // fail outright on a database where migration 0004 has not been run yet.
+      .select('*')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -143,11 +164,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       return;
     }
-    set({ profile: data as Profile, profileError: null });
+    // avatar_url is absent before migration 0004; normalise so the UI never
+    // has to test for undefined.
+    const row = data as Profile;
+    set({ profile: { ...row, avatar_url: row.avatar_url ?? '' }, profileError: null });
   },
 
-  signIn: async (email, password) => {
+  signIn: async (email, password, remember) => {
     if (!supabase) return;
+    // Set before signing in so the session is written to the storage the user
+    // chose, rather than being moved afterwards.
+    setRemembered(remember);
     set({ signingIn: true, error: null });
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
@@ -158,19 +185,73 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     else set({ signingIn: false });
   },
 
+  /**
+   * Send a recovery link.
+   *
+   * Deliberately a link and not a new password: a password mailed in plain
+   * text stays readable in the inbox, in any backup of it, and to anyone who
+   * later gains access to the mailbox. The link is single-use and expires.
+   *
+   * Always reports success, even for an address that has no account —
+   * otherwise the form becomes a way to test which staff emails exist.
+   */
+  sendRecovery: async (email) => {
+    if (!supabase) return;
+    set({ signingIn: true, error: null });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    });
+    if (error && /rate|limit|too many/i.test(error.message)) {
+      set({
+        error: 'ელფოსტის გაგზავნის ლიმიტი ამოიწურა. სცადე ერთ საათში ან მიმართე ადმინისტრატორს.',
+        signingIn: false,
+      });
+      return;
+    }
+    set({ recoverySent: true, signingIn: false });
+  },
+
+  completeRecovery: async (password) => {
+    if (!supabase) return;
+    set({ signingIn: true, error: null });
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      set({ error: translateAuthError(error.message), signingIn: false });
+      return;
+    }
+    set({ recovering: false, signingIn: false, error: null });
+  },
+
   signOut: async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
-    set({ session: null, user: null, profile: null, profileError: null, status: 'signed-out' });
+    set({
+      session: null,
+      user: null,
+      profile: null,
+      profileError: null,
+      status: 'signed-out',
+      recovering: false,
+      recoverySent: false,
+    });
   },
 
   clearError: () => set({ error: null }),
+
+  patchProfile: (patch) =>
+    set((state) => (state.profile ? { profile: { ...state.profile, ...patch } } : {})),
 }));
 
 /** Convenience selectors — roles are checked in more than one place. */
 export const selectIsAdmin = (s: AuthState): boolean => s.profile?.role === 'admin';
 export const selectCanEdit = (s: AuthState): boolean =>
   s.profile?.role === 'admin' || s.profile?.role === 'editor';
+
+/**
+ * Shown on every control an editor or viewer cannot use. Saying who *can* do
+ * it is the useful part — the reader's next step is to go and ask them.
+ */
+export const ADMIN_ONLY_TITLE = 'მხოლოდ ადმინისტრატორს შეუძლია კატალოგისა და მარაგის შეცვლა';
 
 /**
  * May the current user change the catalog, prices and stock?

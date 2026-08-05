@@ -39,6 +39,66 @@ function assertNotServiceRole(key: string): void {
   }
 }
 
+/** Whether the session should outlive closing the browser. */
+const REMEMBER_KEY = 'du-formwork-remember';
+
+export function isRemembered(): boolean {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Choose where the session is kept, and move it if the choice changed.
+ *
+ * Must be called *before* signing in, so the new session is written to the
+ * right place from the start.
+ */
+export function setRemembered(remember: boolean): void {
+  try {
+    localStorage.setItem(REMEMBER_KEY, remember ? 'true' : 'false');
+    // Clear whichever store is no longer in use, so a stale token cannot be
+    // picked up later and silently resurrect a session the user ended.
+    (remember ? sessionStorage : localStorage).removeItem('du-formwork-auth');
+  } catch {
+    /* storage unavailable; the default (remember) applies */
+  }
+}
+
+/**
+ * Session storage that follows the remember-me choice.
+ *
+ * supabase-js takes its storage once, at construction, so the switch has to
+ * live inside the adapter rather than in the options — the choice is made
+ * later, on the login screen.
+ */
+const authStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return (isRemembered() ? localStorage : sessionStorage).getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      (isRemembered() ? localStorage : sessionStorage).setItem(key, value);
+    } catch {
+      /* ignore */
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
 function build(): SupabaseClient | null {
   if (!isConfigured) return null;
   assertNotServiceRole(anonKey!);
@@ -50,6 +110,7 @@ function build(): SupabaseClient | null {
       // consumed on load, so this stays on.
       detectSessionInUrl: true,
       storageKey: 'du-formwork-auth',
+      storage: authStorage,
     },
   });
 }

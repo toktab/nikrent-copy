@@ -1465,12 +1465,8 @@ kbd {
   border-color: var(--accent2);
 }
 
-@media (max-width: 900px) {
-  .user-name,
-  .user-role {
-    display: none;
-  }
-}
+/* The role chip is used inside the profile panel and the role legend, so it
+   must never be hidden by width — the header no longer renders one directly. */
 
 /* --------------------------------------------------------------- sync state */
 .sync-badge {
@@ -1686,4 +1682,181 @@ kbd {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.check-row input[type='checkbox'] {
+  margin: 1px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent2);
+  width: 14px;
+  height: 14px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent2);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 2px;
+  text-align: center;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------- profile menu */
+.profile-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.avatar-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.avatar-button:hover {
+  border-color: var(--accent);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-fallback {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.profile-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+  z-index: 400;
+}
+
+.profile-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.profile-avatar-large {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.profile-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-large span {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.profile-id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.profile-id b {
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-id .user-role {
+  align-self: flex-start;
+}
+
+.profile-role-hint {
+  font-size: 10.5px;
+}
+
+.profile-row {
+  display: flex;
+  gap: 6px;
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.presence-dot {
+  overflow: hidden;
+}
+
+.presence-dot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@media (max-width: 760px) {
+  .profile-panel {
+    position: fixed;
+    top: 54px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+  }
 }

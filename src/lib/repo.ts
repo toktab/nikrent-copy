@@ -16,6 +16,45 @@ export class ConflictError extends Error {
 }
 
 /**
+ * Thrown when the server refused a write because of the user's role.
+ *
+ * Distinct from an ordinary failure because retrying cannot help: the change
+ * will be refused every time, so the sync engine must stop rather than queue
+ * it forever, and the user has to be told what was refused instead of seeing
+ * a permanent "saving failed".
+ */
+export class PermissionError extends Error {
+  constructor(public readonly what: string) {
+    super(`not allowed to change ${what}`);
+    this.name = 'PermissionError';
+  }
+}
+
+interface PostgrestLikeError {
+  message: string;
+  code?: string;
+}
+
+/**
+ * Turn a Postgrest error into ours, keeping the distinction between "try
+ * again" and "you will never be allowed to do this".
+ *
+ * 42501 is Postgres's insufficient_privilege, which covers both a missing
+ * table grant and a row-level security policy refusing the row. The message
+ * text is checked too, because the RPCs raise their own exceptions.
+ */
+function wrapError(what: string, error: PostgrestLikeError): Error {
+  const text = error.message.toLowerCase();
+  const denied =
+    error.code === '42501' ||
+    text.includes('permission denied') ||
+    text.includes('row-level security') ||
+    text.includes('only an admin');
+  if (denied) return new PermissionError(what);
+  return new Error(`${what}: ${error.message}`);
+}
+
+/**
  * Server version of each drawing we have seen, used for optimistic locking.
  *
  * Deliberately not in the editor store: it is bookkeeping about the server,
@@ -189,14 +228,14 @@ export async function applyPlan(plan: SyncPlan): Promise<void> {
 
   if (plan.warehousesUpsert.length) {
     const { error } = await supabase.from('warehouses').upsert(plan.warehousesUpsert);
-    if (error) throw new Error(`საწყობები: ${error.message}`);
+    if (error) throw wrapError('საწყობები', error);
   }
 
   if (plan.materialsUpsert.length) {
     const { error } = await supabase
       .from('materials')
       .upsert(plan.materialsUpsert.map(materialToRow));
-    if (error) throw new Error(`მასალები: ${error.message}`);
+    if (error) throw wrapError('მასალები', error);
   }
 
   for (const change of plan.stockSet) {
@@ -206,7 +245,7 @@ export async function applyPlan(plan: SyncPlan): Promise<void> {
       p_quantity: change.quantity,
       p_note: '',
     });
-    if (error) throw new Error(`მარაგი: ${error.message}`);
+    if (error) throw wrapError('მარაგი', error);
   }
 
   for (const doc of plan.documentsUpsert) {
@@ -215,18 +254,18 @@ export async function applyPlan(plan: SyncPlan): Promise<void> {
 
   if (plan.documentsDelete.length) {
     const { error } = await supabase.from('documents').delete().in('id', plan.documentsDelete);
-    if (error) throw new Error(`ნახაზები: ${error.message}`);
+    if (error) throw wrapError('ნახაზები', error);
     for (const id of plan.documentsDelete) versions.delete(id);
   }
 
   if (plan.materialsDelete.length) {
     const { error } = await supabase.from('materials').delete().in('id', plan.materialsDelete);
-    if (error) throw new Error(`მასალები: ${error.message}`);
+    if (error) throw wrapError('მასალები', error);
   }
 
   if (plan.warehousesDelete.length) {
     const { error } = await supabase.from('warehouses').delete().in('id', plan.warehousesDelete);
-    if (error) throw new Error(`საწყობები: ${error.message}`);
+    if (error) throw wrapError('საწყობები', error);
   }
 }
 
@@ -247,7 +286,7 @@ export async function saveDocument(doc: DrawingDoc): Promise<number> {
       .insert(documentToRow(doc))
       .select('version')
       .single();
-    if (error) throw new Error(`ნახაზი "${doc.name}": ${error.message}`);
+    if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
     const version = (data as { version: number }).version;
     versions.set(doc.id, version);
     return version;
@@ -260,7 +299,7 @@ export async function saveDocument(doc: DrawingDoc): Promise<number> {
     .eq('version', expected)
     .select('version');
 
-  if (error) throw new Error(`ნახაზი "${doc.name}": ${error.message}`);
+  if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
   if (!data || data.length === 0) throw new ConflictError(doc.id);
 
   const version = (data[0] as { version: number }).version;

@@ -22,11 +22,13 @@ export interface Peer {
   email: string;
   /** stable colour derived from the id, so a person looks the same to everyone */
   color: string;
+  avatarUrl: string;
 }
 
 interface PresenceMeta {
   name: string;
   email: string;
+  avatarUrl: string;
 }
 
 /** Distinct, readable-on-dark hues. Picked by hash so it never shifts. */
@@ -87,6 +89,7 @@ export function usePresence(docId: string | null): Peer[] {
             name: meta.name || meta.email,
             email: meta.email,
             color: colorFor(userId),
+            avatarUrl: meta.avatarUrl ?? '',
           });
         }
         others.sort((a, b) => a.name.localeCompare(b.name));
@@ -97,6 +100,7 @@ export function usePresence(docId: string | null): Peer[] {
         void channel.track({
           name: me.full_name?.trim() || me.email,
           email: me.email,
+          avatarUrl: me.avatar_url ?? '',
         } satisfies PresenceMeta);
       });
 

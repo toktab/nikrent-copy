@@ -15,10 +15,10 @@ export async function listProfiles(): Promise<Profile[]> {
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, full_name, role')
+    .select('*')
     .order('email');
   if (error) throw new Error(error.message);
-  return (data ?? []) as Profile[];
+  return ((data ?? []) as Profile[]).map((r) => ({ ...r, avatar_url: r.avatar_url ?? '' }));
 }
 
 export async function setRole(id: string, role: Role): Promise<void> {

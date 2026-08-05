@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { LoginScreen } from './LoginScreen';
+import { RecoveryScreen } from './RecoveryScreen';
 
 /**
  * Decides whether the editor is reachable.
@@ -15,6 +16,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const userId = useAuthStore((s) => s.user?.id ?? null);
   const profile = useAuthStore((s) => s.profile);
   const profileError = useAuthStore((s) => s.profileError);
+  const recovering = useAuthStore((s) => s.recovering);
   const init = useAuthStore((s) => s.init);
   const loadProfile = useAuthStore((s) => s.loadProfile);
   const signOut = useAuthStore((s) => s.signOut);
@@ -38,6 +40,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (status === 'signed-out') return <LoginScreen />;
+
+  // A recovery link produces a valid session, so this has to come before the
+  // editor — otherwise the user lands in the app and the password they came
+  // here to change is never set.
+  if (recovering) return <RecoveryScreen />;
 
   // Signed in, but the role has not arrived yet. Rendering the editor now
   // would briefly show controls the account may not be allowed to use.

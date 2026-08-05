@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useEditorStore } from '../store/useEditorStore';
-import { ConflictError, applyPlan, reloadDocument } from './repo';
+import { ConflictError, PermissionError, applyPlan, fetchAll, reloadDocument } from './repo';
 import {
   diffSnapshots,
   emptyPlan,
@@ -23,7 +23,7 @@ import {
  * and retried rather than dropped.
  */
 
-export type SyncStatus = 'idle' | 'saving' | 'error' | 'conflict' | 'readonly';
+export type SyncStatus = 'idle' | 'saving' | 'error' | 'conflict' | 'denied' | 'readonly';
 
 interface SyncState {
   status: SyncStatus;
@@ -31,6 +31,8 @@ interface SyncState {
   lastSavedAt: number | null;
   /** drawing another user saved first, blocking ours */
   conflictDocId: string | null;
+  /** what the server refused to let this role change */
+  deniedWhat: string | null;
   /** unsaved work is waiting to go up */
   pendingChanges: boolean;
 }
@@ -40,6 +42,7 @@ export const useSyncStore = create<SyncState>(() => ({
   error: null,
   lastSavedAt: null,
   conflictDocId: null,
+  deniedWhat: null,
   pendingChanges: false,
 }));
 
@@ -89,6 +92,7 @@ export async function flush(): Promise<void> {
     timer = null;
   }
   if (flushing || !canWrite) return;
+  if (useSyncStore.getState().status === 'denied') return;
   if (isEmptyPlan(pending)) {
     useSyncStore.setState({ pendingChanges: false });
     return;
@@ -107,6 +111,7 @@ export async function flush(): Promise<void> {
       error: null,
       lastSavedAt: Date.now(),
       conflictDocId: null,
+      deniedWhat: null,
       pendingChanges: !isEmptyPlan(pending),
     });
   } catch (err) {
@@ -115,7 +120,15 @@ export async function flush(): Promise<void> {
     pending = mergePlans(sending, pending);
     useSyncStore.setState({ pendingChanges: true });
 
-    if (err instanceof ConflictError) {
+    if (err instanceof PermissionError) {
+      // Retrying is pointless — the role will be refused every time. Stop, and
+      // let the user discard the change rather than watch it fail forever.
+      useSyncStore.setState({
+        status: 'denied',
+        deniedWhat: err.what,
+        error: `შენს უფლებას არ აქვს ${err.what}-ის შეცვლა. ცვლილება არ შენახულა.`,
+      });
+    } else if (err instanceof ConflictError) {
       useSyncStore.setState({
         status: 'conflict',
         conflictDocId: err.documentId,
@@ -175,6 +188,35 @@ export async function resolveConflictKeepMine(docId: string): Promise<void> {
   if (doc) pending = mergePlans(pending, { ...emptyPlan(), documentsUpsert: [doc] });
   useSyncStore.setState({ status: 'idle', conflictDocId: null, error: null });
   await flush();
+}
+
+/**
+ * Throw away everything queued and take the server's data again.
+ *
+ * The escape hatch when a change cannot ever be saved: the local copy has
+ * drifted from the server and the only honest resolution is to say so and
+ * reload, rather than leaving the screen showing an edit that does not exist.
+ */
+export async function discardAndReload(): Promise<void> {
+  pending = emptyPlan();
+  useSyncStore.setState({ status: 'saving', error: null });
+  try {
+    const snapshot = await fetchAll();
+    useEditorStore.getState().hydrateFromServer(snapshot);
+    baseline = snapshot;
+    useSyncStore.setState({
+      status: 'idle',
+      error: null,
+      deniedWhat: null,
+      conflictDocId: null,
+      pendingChanges: false,
+    });
+  } catch (err) {
+    useSyncStore.setState({
+      status: 'error',
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /** Begin watching the store. Returns an unsubscribe. */

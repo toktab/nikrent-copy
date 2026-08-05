@@ -33,7 +33,11 @@ export function PresenceBar() {
           style={{ background: peer.color }}
           title={`${peer.name} (${peer.email})`}
         >
-          {initialsFor(peer.name)}
+          {peer.avatarUrl ? (
+            <img src={peer.avatarUrl} alt="" />
+          ) : (
+            initialsFor(peer.name)
+          )}
         </span>
       ))}
       {extra > 0 && <span className="presence-dot more">+{extra}</span>}

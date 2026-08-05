@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Material } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
-import { useCanManageCatalog } from '../store/useAuthStore';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { usageByMaterial } from '../lib/bom';
 import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
@@ -14,6 +14,7 @@ export function Palette() {
   const query = useEditorStore((s) => s.paletteQuery);
   const setQuery = useEditorStore((s) => s.setPaletteQuery);
   const openDialog = useEditorStore((s) => s.openDialog);
+  const canManage = useCanManageCatalog();
 
   const used = useMemo(() => usageByMaterial(pieces), [pieces]);
 
@@ -38,10 +39,20 @@ export function Palette() {
         </button>
       </div>
       <div className="palette-top">
-        <button className="btn primary full" onClick={() => openDialog({ kind: 'material' })}>
+        <button
+          className="btn primary full"
+          disabled={!canManage}
+          title={canManage ? undefined : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'material' })}
+        >
           ＋ ახალი კომპონენტი
         </button>
-        <button className="btn full" onClick={() => openDialog({ kind: 'sheet-import' })}>
+        <button
+          className="btn full"
+          disabled={!canManage}
+          title={canManage ? undefined : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'sheet-import' })}
+        >
           📊 იმპორტი ცხრილიდან
         </button>
         <input
@@ -152,10 +163,20 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
           disabled={!canManage}
           onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
         />
-        <button className="btn icon" title="რედაქტირება" onClick={() => openDialog({ kind: 'material', materialId: m.id })}>
+        <button
+          className="btn icon"
+          disabled={!canManage}
+          title={canManage ? 'რედაქტირება' : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'material', materialId: m.id })}
+        >
           ✎
         </button>
-        <button className="btn icon danger" title="წაშლა" onClick={askDelete}>
+        <button
+          className="btn icon danger"
+          disabled={!canManage}
+          title={canManage ? 'წაშლა' : ADMIN_ONLY_TITLE}
+          onClick={askDelete}
+        >
           🗑
         </button>
       </div>

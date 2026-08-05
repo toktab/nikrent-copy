@@ -9,9 +9,10 @@ import {
 } from '../lib/catalogFile';
 import { pickFile, readFileAsText } from '../lib/files';
 import { combo } from '../lib/platform';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
-import { UserMenu } from './UserMenu';
+import { ProfileMenu } from './ProfileMenu';
 
 const SNAP_STEPS = [1, 5, 10, 25];
 
@@ -53,6 +54,7 @@ export function Header() {
   const switchDocument = useEditorStore((s) => s.switchDocument);
   const openDialog = useEditorStore((s) => s.openDialog);
   const setToast = useEditorStore((s) => s.setToast);
+  const canManage = useCanManageCatalog();
 
   const shortages = useMemo(
     () => buildBom(materials, pieces).shortageCount,
@@ -321,7 +323,7 @@ export function Header() {
 
         <div className="header-right">
           <SyncBadge />
-          <UserMenu />
+          <ProfileMenu />
         </div>
       </div>
 
@@ -379,15 +381,25 @@ export function Header() {
           </button>
           <button
             className="btn small"
+            disabled={!canManage}
             onClick={() => void importCatalog()}
-            title="ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)"
+            title={
+              canManage
+                ? 'ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)'
+                : ADMIN_ONLY_TITLE
+            }
           >
             ⤒ იმპორტი
           </button>
           <button
             className="btn small danger"
+            disabled={!canManage}
             onClick={resetCatalog}
-            title="41 ჩაშენებული Du მასალის დაბრუნება — დამატებული კომპონენტები და მარაგები წაიშლება"
+            title={
+              canManage
+                ? '41 ჩაშენებული Du მასალის დაბრუნება — დამატებული კომპონენტები და მარაგები წაიშლება'
+                : ADMIN_ONLY_TITLE
+            }
           >
             აღდგენა
           </button>

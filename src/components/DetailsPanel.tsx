@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { categoryLabel } from '../data/categories';
 import { fmtMoney } from '../lib/bom';
 import { totalStock } from '../lib/inventory';
@@ -14,6 +15,7 @@ export function DetailsPanel() {
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
   const openDialog = useEditorStore((s) => s.openDialog);
+  const canManage = useCanManageCatalog();
 
   const selectedPieces = useMemo(
     () => pieces.filter((p) => selectedIds.includes(p.id)),
@@ -134,6 +136,8 @@ export function DetailsPanel() {
       <button
         className="btn small full"
         style={{ marginTop: 6 }}
+        disabled={!canManage}
+        title={canManage ? undefined : ADMIN_ONLY_TITLE}
         onClick={() => openDialog({ kind: 'material', materialId: material.id })}
       >
         ✎ კომპონენტის რედაქტირება

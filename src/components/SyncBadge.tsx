@@ -1,4 +1,5 @@
 import {
+  discardAndReload,
   flush,
   resolveConflictKeepMine,
   resolveConflictTakeServer,
@@ -45,6 +46,23 @@ export function SyncBadge() {
           title="სერვერის ვერსია ჩაანაცვლებს შენსას — შენი ცვლილებები დაიკარგება"
         >
           აიღე სერვერის
+        </button>
+      </div>
+    );
+  }
+
+  // A refusal by role is not a failure to retry — it is a change that will
+  // never be accepted, so it gets its own wording and its own way out.
+  if (status === 'denied') {
+    return (
+      <div className="sync-conflict" role="alert">
+        <span>{error}</span>
+        <button
+          className="btn small"
+          onClick={() => void discardAndReload()}
+          title="ცვლილება უქმდება და მონაცემები სერვერიდან თავიდან ჩაიტვირთება"
+        >
+          ცვლილების გაუქმება
         </button>
       </div>
     );
