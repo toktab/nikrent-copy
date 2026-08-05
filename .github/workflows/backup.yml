@@ -11,10 +11,15 @@
 # Add one repository secret (Settings → Secrets and variables → Actions):
 #
 #   SUPABASE_DB_URL
-#     Supabase → Project Settings → Database → Connection string → URI.
-#     Use the *session pooler* URI on port 5432 and paste your database
-#     password into it. It contains that password, so it belongs in a secret
-#     and nowhere else.
+#     Supabase dashboard → Connect (top bar, beside the project name) →
+#     Session pooler. Paste your database password into it. The string
+#     contains that password, so it belongs in a secret and nowhere else.
+#
+#     It has to be the SESSION POOLER on port 5432. The other two both fail:
+#     the transaction pooler (6543) cannot serve pg_dump, and the direct
+#     connection resolves to IPv6 only while GitHub's runners are IPv4-only,
+#     which fails as "network unreachable" rather than as anything obvious.
+#     The host should read `…pooler.supabase.com`, never `db.….supabase.co`.
 #
 # ── Restoring ──────────────────────────────────────────────────────────────
 #   gunzip -c backup.sql.gz | psql "$SUPABASE_DB_URL"

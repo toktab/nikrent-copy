@@ -41,8 +41,20 @@ Four non-null answers and a timestamp means all five are in.
 **This is the one that matters.** Right now there is no copy of the catalog,
 the stock ledger or any drawing anywhere. One mistaken delete is permanent.
 
-1. Supabase → Project Settings → Database → Connection string → **URI**, using
-   the *session pooler* on port 5432. Paste your database password into it.
+1. Supabase dashboard → **Connect** (top bar, beside the project name; it is
+   no longer under Settings → Database) → **Session pooler**. Paste your
+   database password in place of `[YOUR-PASSWORD]`.
+
+   It must be the pooler, and it must be port 5432:
+
+   | | |
+   | --- | --- |
+   | **Session pooler**, 5432 | what to use |
+   | Transaction pooler, 6543 | `pg_dump` cannot work through it |
+   | Direct connection | `db.<ref>.supabase.co` resolves to **IPv6 only**, and GitHub runners are IPv4-only — the job fails with "network unreachable" |
+
+   The host should read `…pooler.supabase.com`, never `db.….supabase.co`.
+
 2. GitHub → repo → Settings → Secrets and variables → Actions → New secret:
    - `SUPABASE_DB_URL` — that URI
 
