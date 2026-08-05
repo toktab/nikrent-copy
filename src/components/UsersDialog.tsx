@@ -9,12 +9,13 @@ import {
 } from '../lib/adminUsers';
 import { useAuthStore, type Profile, type Role } from '../store/useAuthStore';
 import { useEditorStore } from '../store/useEditorStore';
+import { t } from '../i18n';
 import { Modal } from './Modal';
 
 const ROLE_LABEL: Record<Role, string> = {
-  admin: 'ადმინისტრატორი',
-  editor: 'რედაქტორი',
-  viewer: 'მხოლოდ ნახვა',
+  admin: t('role.admin'),
+  editor: t('role.editor'),
+  viewer: t('role.viewer'),
 };
 
 const ROLE_HINT: Record<Role, string> = {

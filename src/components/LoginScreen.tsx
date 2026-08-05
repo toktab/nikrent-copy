@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { isRemembered } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
+import { t } from '../i18n';
 import { Icon } from './Icon';
 
 /**
@@ -37,16 +38,15 @@ export function LoginScreen() {
     return (
       <div className="login-screen">
         <div className="login-card">
-          <h1>შეამოწმე ელფოსტა</h1>
+          <h1>{t('auth.checkEmail')}</h1>
           <p className="login-sub">
-            თუ ამ მისამართზე ანგარიში არსებობს, გამოგზავნილია ბმული პაროლის აღსადგენად.
+            {t('auth.checkEmailBody')}
           </p>
           <p className="login-hint">
-            წერილი რამდენიმე წუთში არ მოვიდა? შეამოწმე სპამი, ან სთხოვე ადმინისტრატორს ახალი
-            პაროლის გენერაცია — ეს ყოველთვის მუშაობს.
+            {t('auth.checkEmailHint')}
           </p>
           <button className="btn full" onClick={() => setMode('sign-in')}>
-            შესვლის გვერდზე დაბრუნება
+            {t('auth.backToSignInPage')}
           </button>
         </div>
       </div>
@@ -56,15 +56,15 @@ export function LoginScreen() {
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1>Du ფორმვორკის რედაქტორი</h1>
+        <h1>{t('auth.appName')}</h1>
         <p className="login-sub">
           {mode === 'sign-in'
-            ? 'შესასვლელად გამოიყენე სამუშაო ელფოსტა'
-            : 'შეიყვანე ელფოსტა და გამოგიგზავნით აღდგენის ბმულს'}
+            ? t('auth.signInHint')
+            : t('auth.recoverHint')}
         </p>
 
         <label className="field">
-          <span>ელფოსტა</span>
+          <span>{t('auth.email')}</span>
           <input
             type="email"
             value={email}
@@ -81,7 +81,7 @@ export function LoginScreen() {
         {mode === 'sign-in' && (
           <>
             <label className="field">
-              <span>პაროლი</span>
+              <span>{t('auth.password')}</span>
               <input
                 type="password"
                 value={password}
@@ -100,7 +100,7 @@ export function LoginScreen() {
                 checked={remember}
                 onChange={(e) => setRemember(e.target.checked)}
               />
-              <span>დამახსოვრება — ბრაუზერის დახურვის შემდეგაც შესული დავრჩე</span>
+              <span>{t('auth.remember')}</span>
             </label>
           </>
         )}
@@ -116,7 +116,7 @@ export function LoginScreen() {
           type="submit"
           disabled={mode === 'sign-in' ? !canSignIn : !canRecover}
         >
-          {signingIn ? '…' : mode === 'sign-in' ? 'შესვლა' : 'ბმულის გამოგზავნა'}
+          {signingIn ? '…' : mode === 'sign-in' ? t('auth.signIn') : t('auth.sendLink')}
         </button>
 
         <button
@@ -128,18 +128,17 @@ export function LoginScreen() {
           }}
         >
           {mode === 'sign-in' ? (
-            'პაროლი დაგავიწყდა?'
+            t('auth.forgot')
           ) : (
             <>
-              <Icon name="arrow-left" /> შესვლა
+              <Icon name="arrow-left" /> {t('auth.backToSignIn')}
             </>
           )}
         </button>
 
         {mode === 'sign-in' && (
           <p className="login-hint">
-            საერთო კომპიუტერზე მოხსენი „დამახსოვრება“ — მაშინ ბრაუზერის დახურვისას სესია
-            დასრულდება.
+            {t('auth.rememberHint')}
           </p>
         )}
       </form>

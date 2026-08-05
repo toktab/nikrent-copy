@@ -3,18 +3,19 @@ import { initialsFor } from '../lib/presence';
 import { removeAvatar, updateDisplayName, uploadAvatar, validateAvatar } from '../lib/profile';
 import { useAuthStore, type Role } from '../store/useAuthStore';
 import { useEditorStore } from '../store/useEditorStore';
+import { t } from '../i18n';
 import { Icon } from './Icon';
 
 const ROLE_LABEL: Record<Role, string> = {
-  admin: 'ადმინისტრატორი',
-  editor: 'რედაქტორი',
-  viewer: 'მხოლოდ ნახვა',
+  admin: t('role.admin'),
+  editor: t('role.editor'),
+  viewer: t('role.viewer'),
 };
 
 const ROLE_HINT: Record<Role, string> = {
-  admin: 'შეგიძლია ყველაფრის შეცვლა',
-  editor: 'შეგიძლია ნახაზების შეცვლა',
-  viewer: 'მხოლოდ ნახვა შეგიძლია',
+  admin: t('role.adminCan'),
+  editor: t('role.editorCan'),
+  viewer: t('role.viewerCan'),
 };
 
 /**

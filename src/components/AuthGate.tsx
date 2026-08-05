@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
+import { t } from '../i18n';
 import { LoginScreen } from './LoginScreen';
 import { RecoveryScreen } from './RecoveryScreen';
 
@@ -34,7 +35,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (status === 'loading') {
     return (
       <div className="login-screen">
-        <p className="login-sub">იტვირთება…</p>
+        <p className="login-sub">{t('auth.loading')}</p>
       </div>
     );
   }
@@ -54,16 +55,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <div className="login-card">
           {profileError ? (
             <>
-              <h1>ანგარიში არ არის სრული</h1>
+              <h1>{t('auth.incompleteAccount')}</h1>
               <p className="login-error" role="alert">
                 {profileError}
               </p>
               <button className="btn full" onClick={() => void signOut()}>
-                გამოსვლა
+                {t('auth.signOut')}
               </button>
             </>
           ) : (
-            <p className="login-sub">პროფილი იტვირთება…</p>
+            <p className="login-sub">{t('auth.profileLoading')}</p>
           )}
         </div>
       </div>

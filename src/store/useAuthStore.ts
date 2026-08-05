@@ -1,6 +1,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { isConfigured, setRemembered, supabase } from '../lib/supabase';
+import { t } from '../i18n';
 
 /**
  * Session and role, kept deliberately apart from `useEditorStore`.
@@ -59,16 +60,16 @@ interface AuthState {
 /** Supabase speaks English; the interface does not. */
 function translateAuthError(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes('invalid login credentials')) return 'არასწორი ელფოსტა ან პაროლი.';
-  if (m.includes('email not confirmed')) return 'ელფოსტა არ არის დადასტურებული.';
+  if (m.includes('invalid login credentials')) return t('error.badCredentials');
+  if (m.includes('email not confirmed')) return t('error.emailNotConfirmed');
   if (m.includes('too many requests') || m.includes('rate limit')) {
-    return 'ძალიან ბევრი მცდელობა. სცადე ცოტა ხანში.';
+    return t('error.rateLimited');
   }
   if (m.includes('signups not allowed') || m.includes('signup is disabled')) {
-    return 'ახალი ანგარიშის შექმნა გამორთულია. მიმართე ადმინისტრატორს.';
+    return t('error.signupDisabled');
   }
   if (m.includes('failed to fetch') || m.includes('network')) {
-    return 'სერვერთან კავშირი ვერ მოხერხდა. შეამოწმე ინტერნეტი.';
+    return t('error.network');
   }
   return message;
 }
@@ -160,7 +161,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!data) {
       set({
         profile: null,
-        profileError: 'ანგარიშს არ აქვს პროფილი. მიმართე ადმინისტრატორს.',
+        profileError: t('error.noProfile'),
       });
       return;
     }
@@ -203,7 +204,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
     if (error && /rate|limit|too many/i.test(error.message)) {
       set({
-        error: 'ელფოსტის გაგზავნის ლიმიტი ამოიწურა. სცადე ერთ საათში ან მიმართე ადმინისტრატორს.',
+        error: t('error.mailQuota'),
         signingIn: false,
       });
       return;
@@ -251,7 +252,7 @@ export const selectCanEdit = (s: AuthState): boolean =>
  * Shown on every control an editor or viewer cannot use. Saying who *can* do
  * it is the useful part — the reader's next step is to go and ask them.
  */
-export const ADMIN_ONLY_TITLE = 'მხოლოდ ადმინისტრატორს შეუძლია კატალოგისა და მარაგის შეცვლა';
+export const ADMIN_ONLY_TITLE = t('role.adminOnly');
 
 /**
  * May the current user change the catalog, prices and stock?

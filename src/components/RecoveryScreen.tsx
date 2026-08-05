@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
+import { t } from '../i18n';
 
 /**
  * Shown after arriving from a recovery link.
@@ -31,11 +32,11 @@ export function RecoveryScreen() {
           if (canSave) void completeRecovery(password);
         }}
       >
-        <h1>ახალი პაროლის დაყენება</h1>
-        <p className="login-sub">აირჩიე ახალი პაროლი — ძველი აღარ იმუშავებს.</p>
+        <h1>{t('recovery.title')}</h1>
+        <p className="login-sub">{t('recovery.subtitle')}</p>
 
         <label className="field">
-          <span>ახალი პაროლი</span>
+          <span>{t('recovery.newPassword')}</span>
           <input
             type="password"
             value={password}
@@ -45,7 +46,7 @@ export function RecoveryScreen() {
           />
         </label>
         <label className="field">
-          <span>გაიმეორე</span>
+          <span>{t('recovery.repeat')}</span>
           <input
             type="password"
             value={repeat}
@@ -61,14 +62,14 @@ export function RecoveryScreen() {
         )}
 
         <p className="login-hint">
-          {tooShort ? 'მინიმუმ 12 სიმბოლო.' : mismatch ? 'პაროლები არ ემთხვევა.' : 'მინიმუმ 12 სიმბოლო.'}
+          {mismatch ? t('recovery.mismatch') : t('recovery.minLength', { n: 12 })}
         </p>
 
         <button className="btn primary full" type="submit" disabled={!canSave}>
-          {signingIn ? '…' : 'შენახვა და გაგრძელება'}
+          {signingIn ? '…' : t('recovery.save')}
         </button>
         <button type="button" className="link-button" onClick={() => void signOut()}>
-          გაუქმება და გამოსვლა
+          {t('recovery.cancel')}
         </button>
       </form>
     </div>
