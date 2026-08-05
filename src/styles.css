@@ -534,6 +534,43 @@ input[type='color'] {
   outline-offset: 0;
 }
 
+/* A piece seen from the front or the side: a flat silhouette, filled in the
+   material's own colour so a course still reads as panels-and-walers. The
+   border keeps neighbouring pieces of the same colour apart. */
+.piece.elevation {
+  border: calc(1px / var(--z, 1)) solid rgba(10, 13, 17, 0.55);
+  box-sizing: border-box;
+}
+
+/* Ground level, and the reason a height is readable at a glance. Sits under
+   the pieces but over the grid. */
+.ground-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  border-top: calc(2px / var(--z, 1)) solid var(--accent);
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Which view the surface is showing, and what a drag will do in it.
+   Clear of the 22px ruler gutter, which is drawn over the stage. */
+.surface-hint {
+  position: absolute;
+  left: 32px;
+  bottom: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgba(30, 34, 40, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 9px;
+  pointer-events: none;
+  max-width: calc(100% - 20px);
+}
+
 /* drop preview — shows exactly where a dragged material will land */
 .ghost {
   position: absolute;

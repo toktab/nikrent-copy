@@ -10,6 +10,7 @@ import {
 import { pickFile, readFileAsText } from '../lib/files';
 import { combo } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
+import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { ProfileMenu } from './ProfileMenu';
@@ -27,6 +28,7 @@ export function Header() {
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
   const viewMode = useEditorStore((s) => s.viewMode);
+  const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
   const selectedIds = useEditorStore((s) => s.selectedIds);
@@ -45,6 +47,7 @@ export function Header() {
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
   const setViewMode = useEditorStore((s) => s.setViewMode);
+  const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
@@ -212,17 +215,23 @@ export function Header() {
         </div>
 
         <div className="view-switch" role="group" aria-label="ხედი">
-          <button
-            className={`btn small${viewMode === '2d' ? ' active' : ''}`}
-            onClick={() => setViewMode('2d')}
-            title="გეგმა — რედაქტირებადი"
-          >
-            2D
-          </button>
+          {VIEW_ORDER.map((v) => (
+            <button
+              key={v}
+              className={`btn small${viewMode === '2d' && surfaceView === v ? ' active' : ''}`}
+              onClick={() => {
+                setViewMode('2d');
+                setSurfaceView(v);
+              }}
+              title={VIEW_HINT[v]}
+            >
+              {VIEW_LABEL[v]}
+            </button>
+          ))}
           <button
             className={`btn small${viewMode === '3d' ? ' active' : ''}`}
             onClick={() => setViewMode('3d')}
-            title="სივრცითი ხედი — მხოლოდ სანახავად"
+            title="სივრცითი ხედი — რედაქტირებადი"
           >
             3D
           </button>

@@ -18,11 +18,9 @@ import { sanitizeMaterial } from '../lib/catalogFile';
 import {
   clampZoom,
   computeEdgeSnap,
-  contentBounds,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
-  pieceBounds,
   snapValue,
   unionRect,
 } from '../lib/geometry';
@@ -30,6 +28,12 @@ import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
 import { planWall } from '../lib/wallWizard';
+import {
+  projectPiece,
+  projectedContentBounds,
+  unprojectDelta,
+  type ViewAxis,
+} from '../lib/projection';
 import { isConfigured } from '../lib/supabase';
 import type { DataSnapshot } from '../lib/syncDiff';
 
@@ -62,6 +66,7 @@ const PREF_KEYS = [
   'forceLabels',
   'showOverlaps',
   'viewMode',
+  'surfaceView',
   'hiddenLines',
   'paletteOpen',
   'inspectorOpen',
@@ -137,6 +142,8 @@ export interface EditorState {
   showOverlaps: boolean;
   /** 2D plan editor, or the read-only 3D visualisation */
   viewMode: '2d' | '3d';
+  /** Which orthographic view the 2D surface is showing. */
+  surfaceView: ViewAxis;
   /** what the 3D view does with edges that sit behind other pieces */
   hiddenLines: HiddenLineMode;
   /** side panels can be folded away to give the canvas room on small screens */
@@ -177,10 +184,16 @@ export interface EditorState {
   selectAll: () => void;
 
   // ── actions: pieces ──
-  addPiece: (materialId: string, worldX: number, worldY: number) => void;
+  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number) => void;
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
-  moveSelectionBy: (dxCm: number, dyCm: number, baseline: Piece[]) => void;
+  /**
+   * Live drag on the 2D surface, in surface centimetres. Which world axes
+   * those are is `surfaceView`'s business, not the caller's.
+   */
+  moveSelectionBy: (duCm: number, dvCm: number, baseline: Piece[]) => void;
+  /** Arrow-key nudge, also in surface centimetres. */
+  nudgeSelection: (duCm: number, dvCm: number) => void;
   /** Live drag from the 3D view, which can also move a piece up and down. */
   moveSelectionSpatially: (
     dxCm: number,
@@ -189,7 +202,6 @@ export interface EditorState {
     baseline: Piece[],
   ) => void;
   endDrag: () => void;
-  nudgeSelection: (dxCm: number, dyCm: number) => void;
   /** Put the selection at an exact elevation, from the inspector field. */
   setElevation: (zCm: number) => void;
   /** Raise or lower the selection, from a keyboard nudge. */
@@ -234,6 +246,8 @@ export interface EditorState {
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
+  /** Switch the surface between plan, front and side, reframing as it goes. */
+  setSurfaceView: (view: ViewAxis) => void;
   setHiddenLines: (mode: HiddenLineMode) => void;
   setPaletteOpen: (on: boolean) => void;
   setInspectorOpen: (on: boolean) => void;
@@ -367,6 +381,7 @@ export const useEditorStore = create<EditorState>()(
         forceLabels: false,
         showOverlaps: true,
         viewMode: '2d',
+        surfaceView: 'plan',
         hiddenLines: 'hide',
         // Start folded on a phone-ish window so the canvas is usable at all.
         paletteOpen: typeof window === 'undefined' || window.innerWidth > 900,
@@ -451,7 +466,9 @@ export const useEditorStore = create<EditorState>()(
         fitToContent: () =>
           set((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
-            const b = contentBounds(s.pieces, byId);
+            // In an elevation the model sits above the ground line, at negative
+            // surface y — the plan's bounds would frame empty floor.
+            const b = projectedContentBounds(s.pieces, byId, s.surfaceView);
             if (!b) return { ...DEFAULT_VIEW };
             const pad = 60;
             const zoom = Math.min(
@@ -487,10 +504,17 @@ export const useEditorStore = create<EditorState>()(
          * caller's job (see `dropPosition` in StageCanvas) so that the drop
          * preview and the placed piece can never disagree.
          */
-        addPiece: (materialId, worldX, worldY) =>
+        addPiece: (materialId, worldX, worldY, worldZ = 0) =>
           commit((s) => {
             if (!s.materials.some((m) => m.id === materialId)) return {};
-            const piece: Piece = { id: uid(), materialId, x: worldX, y: worldY, rot: 0 };
+            const piece: Piece = {
+              id: uid(),
+              materialId,
+              x: worldX,
+              y: worldY,
+              rot: 0,
+              z: Math.max(0, worldZ),
+            };
             return { pieces: [...s.pieces, piece], selectedIds: [piece.id] };
           }),
 
@@ -504,35 +528,52 @@ export const useEditorStore = create<EditorState>()(
           })),
 
         /**
-         * Live drag. `baseline` is the piece list as it was when the drag
-         * started, so the delta always applies to the original positions and
-         * repeated snapping cannot creep.
+         * Live drag on the surface, whichever view it is showing.
+         *
+         * `baseline` is the piece list as it was when the drag started, so the
+         * delta always applies to the original positions and repeated snapping
+         * cannot creep.
+         *
+         * The snapping runs entirely in surface coordinates and only becomes
+         * world movement at the very end. That is what lets one path serve all
+         * three views — and it means edge snapping, which is what actually
+         * makes panels butt together, works in an elevation too: courses land
+         * on each other instead of near each other.
          */
-        moveSelectionBy: (dxCm, dyCm, baseline) =>
+        moveSelectionBy: (duCm, dvCm, baseline) =>
           apply((s) => {
             const selected = new Set(s.selectedIds);
             const origin = new Map(baseline.map((p) => [p.id, p]));
             const byId = new Map(s.materials.map((m) => [m.id, m]));
+            const view = s.surfaceView;
 
             // 1. grid snap, applied to the drag delta so repeated snapping
             //    cannot creep away from the original positions
-            const gridDx = snapValue(dxCm, s.snapStep, s.snap);
-            const gridDy = snapValue(dyCm, s.snapStep, s.snap);
+            const gridDu = snapValue(duCm, s.snapStep, s.snap);
+            const gridDv = snapValue(dvCm, s.snapStep, s.snap);
 
             // 2. edge snap: nudge the whole selection so its bounding box lines
             //    up with a nearby piece. Panel widths are not grid multiples,
             //    so this is what actually makes panels butt together.
-            let extraDx = 0;
-            let extraDy = 0;
+            let extraDu = 0;
+            let extraDv = 0;
             let guideX: number | null = null;
             let guideY: number | null = null;
 
             if (s.edgeSnap) {
+              const shift = unprojectDelta(gridDu, gridDv, view);
               const movingRects = baseline
                 .filter((p) => selected.has(p.id))
                 .map((p) => {
                   const m = byId.get(p.materialId);
-                  return m ? pieceBounds({ ...p, x: p.x + gridDx, y: p.y + gridDy }, m) : null;
+                  if (!m) return null;
+                  const moved: Piece = {
+                    ...p,
+                    x: p.x + shift.dx,
+                    y: p.y + shift.dy,
+                    z: (p.z ?? 0) + shift.dz,
+                  };
+                  return projectPiece(moved, m, view);
                 })
                 .filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -542,19 +583,20 @@ export const useEditorStore = create<EditorState>()(
                   .filter((p) => !selected.has(p.id))
                   .map((p) => {
                     const m = byId.get(p.materialId);
-                    return m ? pieceBounds(p, m) : null;
+                    return m ? projectPiece(p, m, view) : null;
                   })
                   .filter((r): r is NonNullable<typeof r> => r !== null);
 
                 // tolerance in cm, ~8 screen px so it feels the same at any zoom
                 const snapResult = computeEdgeSnap(movingBox, targets, 8 / s.zoom);
-                extraDx = snapResult.dx;
-                extraDy = snapResult.dy;
+                extraDu = snapResult.dx;
+                extraDv = snapResult.dy;
                 guideX = snapResult.guideX;
                 guideY = snapResult.guideY;
               }
             }
 
+            const move = unprojectDelta(gridDu + extraDu, gridDv + extraDv, view);
             return {
               guideX,
               guideY,
@@ -563,8 +605,10 @@ export const useEditorStore = create<EditorState>()(
                 const base = origin.get(p.id) ?? p;
                 return {
                   ...p,
-                  x: base.x + gridDx + extraDx,
-                  y: base.y + gridDy + extraDy,
+                  x: base.x + move.dx,
+                  y: base.y + move.dy,
+                  // Nothing sits below the slab it is poured on.
+                  z: Math.max(0, (base.z ?? 0) + move.dz),
                 };
               }),
             };
@@ -632,13 +676,22 @@ export const useEditorStore = create<EditorState>()(
             };
           }),
 
-        nudgeSelection: (dxCm, dyCm) =>
+        /** Arrow keys, in surface centimetres — so they follow the view too. */
+        nudgeSelection: (duCm, dvCm) =>
           commit((s) => {
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
+            const move = unprojectDelta(duCm, dvCm, s.surfaceView);
             return {
               pieces: s.pieces.map((p) =>
-                selected.has(p.id) ? { ...p, x: p.x + dxCm, y: p.y + dyCm } : p,
+                selected.has(p.id)
+                  ? {
+                      ...p,
+                      x: p.x + move.dx,
+                      y: p.y + move.dy,
+                      z: Math.max(0, (p.z ?? 0) + move.dz),
+                    }
+                  : p,
               ),
             };
           }),
@@ -929,6 +982,21 @@ export const useEditorStore = create<EditorState>()(
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setViewMode: (mode) => set({ viewMode: mode }),
+
+        /**
+         * Switch which orthographic view the surface shows, then reframe.
+         *
+         * The reframe is not a convenience. A plan sits around the origin
+         * while an elevation sits entirely above the ground line, at negative
+         * surface y, so keeping the pan would leave the model off-screen and
+         * the surface looking empty.
+         */
+        setSurfaceView: (view) => {
+          if (get().surfaceView === view) return;
+          set({ surfaceView: view, guideX: null, guideY: null });
+          get().fitToContent();
+        },
+
         setHiddenLines: (mode) => set({ hiddenLines: mode }),
         setPaletteOpen: (on) => set({ paletteOpen: on }),
         setInspectorOpen: (on) => set({ inspectorOpen: on }),

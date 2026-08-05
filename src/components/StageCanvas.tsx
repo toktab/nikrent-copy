@@ -20,8 +20,16 @@ import {
   WORLD_H,
   WORLD_W,
 } from '../lib/geometry';
+import {
+  depthRanks,
+  isElevation,
+  projectPiece,
+  VIEW_HINT,
+  type ViewAxis,
+} from '../lib/projection';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
+import { ElevationPieceView } from './ElevationPieceView';
 import { ShapeSvg } from './ShapeSvg';
 import { LabelLayer } from './LabelLayer';
 import { Rulers } from './Rulers';
@@ -40,6 +48,27 @@ interface MarqueeBox {
   h: number;
 }
 
+/**
+ * Middle of the placed work along the axis an elevation looks down, so a piece
+ * dropped there lands among the others instead of at the world origin.
+ */
+function hiddenAxisDefault(pieces: Piece[], materials: Material[], view: ViewAxis): number {
+  const byId = new Map(materials.map((m) => [m.id, m]));
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m) continue;
+    const b = pieceBounds(p, m);
+    // The front view looks along Y, the side view along X.
+    const lo = view === 'front' ? b.y : b.x;
+    const hi = lo + (view === 'front' ? b.h : b.w);
+    min = Math.min(min, lo);
+    max = Math.max(max, hi);
+  }
+  return Number.isFinite(min) ? (min + max) / 2 : 0;
+}
+
 export function StageCanvas() {
   const stageRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction>(null);
@@ -48,7 +77,13 @@ export function StageCanvas() {
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeBox | null>(null);
-  const [ghost, setGhost] = useState<{ material: Material; x: number; y: number } | null>(null);
+  const [ghost, setGhost] = useState<{
+    material: Material;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
 
   const pieces = useEditorStore((s) => s.pieces);
   const materials = useEditorStore((s) => s.materials);
@@ -59,12 +94,21 @@ export function StageCanvas() {
   const guideX = useEditorStore((s) => s.guideX);
   const guideY = useEditorStore((s) => s.guideY);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
+  const surfaceView = useEditorStore((s) => s.surfaceView);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const elevation = isElevation(surfaceView);
   const overlapping = useMemo(
-    () => (showOverlaps ? findOverlaps(pieces, byId) : new Set<string>()),
-    [showOverlaps, pieces, byId],
+    // Overlap highlighting is a plan check: two footprints sharing ground is a
+    // mistake, but two pieces sharing a column of space at different heights
+    // is a wall.
+    () => (showOverlaps && !elevation ? findOverlaps(pieces, byId) : new Set<string>()),
+    [showOverlaps, elevation, pieces, byId],
+  );
+  const ranks = useMemo(
+    () => depthRanks(pieces, byId, surfaceView),
+    [pieces, byId, surfaceView],
   );
 
   // ── Keep the store's idea of the viewport size in sync ────────────────────
@@ -213,7 +257,7 @@ export function StageCanvas() {
           // A tiny box is a click, not a drag — leave the selection cleared.
           if (box.w > 3 || box.h > 3) {
             const lookup = new Map(s.materials.map((m) => [m.id, m]));
-            // screen box → world cm box
+            // screen box → surface cm box
             const wx = (box.x - s.panX) / s.zoom;
             const wy = (box.y - s.panY) / s.zoom;
             const ww = box.w / s.zoom;
@@ -221,7 +265,9 @@ export function StageCanvas() {
             const hits = s.pieces.filter((p) => {
               const m = lookup.get(p.materialId);
               if (!m) return false;
-              const b = pieceBounds(p, m);
+              // Tested against what the view actually shows, so a rubber band
+              // in an elevation catches the course it was drawn around.
+              const b = projectPiece(p, m, s.surfaceView);
               return b.x < wx + ww && b.x + b.w > wx && b.y < wy + wh && b.y + b.h > wy;
             });
             s.setSelection(hits.map((p) => p.id));
@@ -391,23 +437,30 @@ export function StageCanvas() {
   }, []);
 
   /**
-   * Where a dragged material would land, in world cm.
+   * Where a dragged material would land, in surface cm plus the world position
+   * that surface point means.
    *
    * One function serves both the live preview and the actual drop, so the ghost
    * can never disagree with the placed piece. The piece is centred on the
-   * cursor using its PLAN size (w × depth) — using `m.h` here put a 300 cm
-   * panel 150 cm away from the pointer.
+   * cursor using its size *in the current view* — using `m.h` in plan put a
+   * 300 cm panel 150 cm away from the pointer, and using the plan depth in an
+   * elevation would do the same thing vertically.
    */
   const dropPosition = useCallback((material: Material, clientX: number, clientY: number) => {
     const el = stageRef.current;
     if (!el) return null;
     const s = useEditorStore.getState();
     const r = el.getBoundingClientRect();
-    const pw = planW(material);
-    const ph = planH(material);
+    const view = s.surfaceView;
 
-    let x = snapValue((clientX - r.left - s.panX) / s.zoom - pw / 2, s.snapStep, s.snap);
-    let y = snapValue((clientY - r.top - s.panY) / s.zoom - ph / 2, s.snapStep, s.snap);
+    // Size on the surface: a probe piece at the origin, projected.
+    const probe: Piece = { id: '', materialId: material.id, x: 0, y: 0, rot: 0, z: 0 };
+    const box = projectPiece(probe, material, view);
+    const pw = box.w;
+    const ph = box.h;
+
+    let u = snapValue((clientX - r.left - s.panX) / s.zoom - pw / 2, s.snapStep, s.snap);
+    let v = snapValue((clientY - r.top - s.panY) / s.zoom - ph / 2, s.snapStep, s.snap);
     let guideX: number | null = null;
     let guideY: number | null = null;
 
@@ -417,16 +470,33 @@ export function StageCanvas() {
       const targets = s.pieces
         .map((p) => {
           const mm = lookup.get(p.materialId);
-          return mm ? pieceBounds(p, mm) : null;
+          return mm ? projectPiece(p, mm, view) : null;
         })
         .filter((b): b is NonNullable<typeof b> => b !== null);
-      const snap = computeEdgeSnap({ x, y, w: pw, h: ph }, targets, 8 / s.zoom);
-      x += snap.dx;
-      y += snap.dy;
+      const snap = computeEdgeSnap({ x: u, y: v, w: pw, h: ph }, targets, 8 / s.zoom);
+      u += snap.dx;
+      v += snap.dy;
       guideX = snap.guideX;
       guideY = snap.guideY;
     }
-    return { x, y, guideX, guideY };
+
+    if (view === 'plan') {
+      return { u, v, w: pw, h: ph, world: { x: u, y: v, z: 0 }, guideX, guideY };
+    }
+
+    /**
+     * An elevation says nothing about the axis it looks along, so that one has
+     * to be chosen. The middle of what is already placed is the least
+     * surprising answer: the piece lands inside the assembly being worked on
+     * rather than at the origin, which on a drawing laid out away from 0,0
+     * would drop it somewhere off in the distance.
+     */
+    const hidden = hiddenAxisDefault(s.pieces, s.materials, view);
+    // projectPiece puts the TOP edge at -(z + height), so invert that.
+    const z = Math.max(0, -v - material.h);
+    return view === 'front'
+      ? { u, v, w: pw, h: ph, world: { x: u, y: hidden, z }, guideX, guideY }
+      : { u, v, w: pw, h: ph, world: { x: hidden, y: u, z }, guideX, guideY };
   }, []);
 
   const onDragOver = useCallback(
@@ -437,7 +507,7 @@ export function StageCanvas() {
       const material = s.materials.find((m) => m.id === s.draggingMaterialId);
       if (!material) return;
       const at = dropPosition(material, e.clientX, e.clientY);
-      if (at) setGhost({ material, x: at.x, y: at.y });
+      if (at) setGhost({ material, x: at.u, y: at.v, w: at.w, h: at.h });
     },
     [dropPosition],
   );
@@ -452,7 +522,7 @@ export function StageCanvas() {
       const material = s.materials.find((m) => m.id === materialId);
       if (!material) return;
       const at = dropPosition(material, e.clientX, e.clientY);
-      if (at) s.addPiece(material.id, at.x, at.y);
+      if (at) s.addPiece(material.id, at.world.x, at.world.y, at.world.z);
       s.setDraggingMaterial(null);
     },
     [dropPosition],
@@ -487,31 +557,51 @@ export function StageCanvas() {
           } as CSSProperties
         }
       >
-        <div className="grid" style={{ width: WORLD_W, height: WORLD_H }} />
+        {/* An elevation is drawn above the ground line, at negative surface y,
+            so the grid has to reach up there too. */}
+        <div
+          className="grid"
+          style={{
+            width: WORLD_W,
+            height: WORLD_H,
+            top: elevation ? -WORLD_H / 2 : 0,
+          }}
+        />
+
+        {/* Ground level. In an elevation this is the slab everything stands on,
+            and the one line that makes a height readable at a glance. */}
+        {elevation && <div className="ground-line" style={{ width: WORLD_W }} />}
 
         {/* Live drop preview: exactly where the piece will land, snapping included. */}
         {ghost && (
           <div
             className="ghost"
-            style={{
-              left: ghost.x,
-              top: ghost.y,
-              width: planW(ghost.material),
-              height: planH(ghost.material),
-            }}
+            style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
           >
-            <ShapeSvg
-              material={ghost.material}
-              width={planW(ghost.material)}
-              height={planH(ghost.material)}
-              strokeWidth={1 / zoom}
-            />
+            {!elevation && (
+              <ShapeSvg
+                material={ghost.material}
+                width={ghost.w}
+                height={ghost.h}
+                strokeWidth={1 / zoom}
+              />
+            )}
           </div>
         )}
         {pieces.map((piece) => {
           const material = byId.get(piece.materialId);
           if (!material) return null;
-          return (
+          return elevation ? (
+            <ElevationPieceView
+              key={piece.id}
+              piece={piece}
+              material={material}
+              selected={selected.has(piece.id)}
+              view={surfaceView}
+              rank={ranks.get(piece.id) ?? 0}
+              onPointerDown={onPiecePointerDown}
+            />
+          ) : (
             <PieceView
               key={piece.id}
               piece={piece}
@@ -525,7 +615,9 @@ export function StageCanvas() {
         })}
       </div>
 
-      <LabelLayer />
+      {/* Labels are measured off the plan footprint, so they would sit in the
+          wrong place over an elevation. */}
+      {!elevation && <LabelLayer />}
 
       {/* Alignment guides from edge snapping, drawn in screen space. */}
       {guideX !== null && (
@@ -547,6 +639,8 @@ export function StageCanvas() {
           ზედაპირი ცარიელია — გადმოათრიე მასალა მარცხენა პანელიდან
         </div>
       )}
+
+      {elevation && <div className="surface-hint">{VIEW_HINT[surfaceView]}</div>}
     </main>
   );
 }
