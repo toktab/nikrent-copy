@@ -1,13 +1,8 @@
-import {
-  discardAndReload,
-  flush,
-  resolveConflictKeepMine,
-  resolveConflictTakeServer,
-  useSyncStore,
-} from '../lib/syncEngine';
+import { useSyncStore } from '../lib/syncEngine';
 import { isConfigured } from '../lib/supabase';
-import { useEditorStore } from '../store/useEditorStore';
+import { useOnline } from '../lib/useOnline';
 import { Icon } from './Icon';
+import { Tooltip } from './Tooltip';
 
 /**
  * Whether the server has the user's work.
@@ -16,97 +11,69 @@ import { Icon } from './Icon';
  * silence would be indistinguishable from success — someone could draw for an
  * hour against a dead connection and lose all of it. This is deliberately
  * always visible rather than a toast that disappears.
+ *
+ * The badge is the glance; it never carries the whole story. Anything the user
+ * has to act on — a conflict, a refusal, a failure — gets a banner under the
+ * header with the cause and the way out. Cramming those into the header is
+ * what used to push the account menu off the right edge.
  */
 export function SyncBadge() {
   const status = useSyncStore((s) => s.status);
   const pending = useSyncStore((s) => s.pendingChanges);
   const error = useSyncStore((s) => s.error);
-  const conflictDocId = useSyncStore((s) => s.conflictDocId);
-  const conflictName = useEditorStore(
-    (s) => s.documents.find((d) => d.id === conflictDocId)?.name ?? '',
-  );
+  const online = useOnline();
 
   if (!isConfigured) return null;
 
-  if (status === 'conflict') {
+  // Offline outranks everything: nothing can reach the server, so "failed" and
+  // "unsaved" would both be describing the same missing network.
+  if (!online) {
     return (
-      <div className="sync-conflict" role="alert">
-        <span>
-          ნახაზი <b>{conflictName}</b> სხვამ შეცვალა.
-        </span>
-        <button
-          className="btn small"
-          onClick={() => conflictDocId && void resolveConflictKeepMine(conflictDocId)}
-          title="შენი ვერსია გადააწერს სერვერზე არსებულს"
-        >
-          დატოვე ჩემი
-        </button>
-        <button
-          className="btn small"
-          onClick={() => conflictDocId && void resolveConflictTakeServer(conflictDocId)}
-          title="სერვერის ვერსია ჩაანაცვლებს შენსას — შენი ცვლილებები დაიკარგება"
-        >
-          აიღე სერვერის
-        </button>
-      </div>
+      <Tooltip label="ოფლაინ" reason="ცვლილებები ინახება ლოკალურად" icon="offline">
+        <span className="badge">ოფლაინ</span>
+      </Tooltip>
     );
   }
 
-  // A refusal by role is not a failure to retry — it is a change that will
-  // never be accepted, so it gets its own wording and its own way out.
+  if (status === 'conflict') {
+    return <span className="badge conflict">შეიცვალა</span>;
+  }
   if (status === 'denied') {
     return (
-      <div className="sync-conflict" role="alert">
-        <span>{error}</span>
-        <button
-          className="btn small"
-          onClick={() => void discardAndReload()}
-          title="ცვლილება უქმდება და მონაცემები სერვერიდან თავიდან ჩაიტვირთება"
-        >
-          ცვლილების გაუქმება
-        </button>
-      </div>
+      <Tooltip label="ცვლილება არ შენახულა" reason={error ?? undefined} icon="lock">
+        <span className="badge bad">ვერ შეინახა</span>
+      </Tooltip>
     );
   }
-
   if (status === 'error') {
     return (
-      <div className="sync-badge bad" role="alert" title={error ?? ''}>
-        <span><Icon name="warning" /> შენახვა ვერ მოხერხდა</span>
-        <button className="btn small" onClick={() => void flush()}>
-          ხელახლა
-        </button>
-      </div>
+      <Tooltip label="შენახვა ვერ მოხერხდა" reason={error ?? undefined} icon="warning">
+        <span className="badge bad">ვერ შეინახა</span>
+      </Tooltip>
     );
   }
-
-  // Below 1150px these collapse to a coloured dot, so the text moves into the
-  // tooltip rather than being lost.
   if (status === 'readonly') {
     return (
-      <div className="sync-badge muted" title="მხოლოდ ნახვა">
-        მხოლოდ ნახვა
-      </div>
+      <Tooltip
+        label="მხოლოდ ნახვა"
+        reason="რედაქტირების უფლება არ გაქვს — მიმართე ადმინისტრატორს"
+        icon="lock"
+      >
+        <span className="badge readonly">
+          <Icon name="lock" size={12} /> მხოლოდ ნახვა
+        </span>
+      </Tooltip>
     );
   }
-
   if (status === 'saving') {
-    return (
-      <div className="sync-badge" title="ინახება…">
-        ინახება…
-      </div>
-    );
+    return <span className="badge warn">ინახება…</span>;
   }
   if (pending) {
     return (
-      <div className="sync-badge muted" title="არ არის შენახული">
-        არ არის შენახული
-      </div>
+      <Tooltip label="შეუნახავი ცვლილებები" reason="ავტომატურად აიტვირთება">
+        <span className="badge warn">შეუნახავი</span>
+      </Tooltip>
     );
   }
-  return (
-    <div className="sync-badge ok" title="შენახულია">
-      შენახულია
-    </div>
-  );
+  return <span className="badge ok">შენახულია</span>;
 }

@@ -11,6 +11,9 @@ export type Shape = 'rect' | 'L' | 'line';
  */
 export type HiddenLineMode = 'hide' | 'dashed' | 'show';
 
+/** The inspector's three working views. */
+export type InspectorTab = 'details' | 'bom' | 'inventory';
+
 /**
  * Stock is held per warehouse: `{ [warehouseId]: quantity }`. Companies that
  * only ever use one store see a single number in the UI and never meet the

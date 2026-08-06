@@ -77,10 +77,25 @@ export function DataGate({ children }: { children: ReactNode }) {
 
   if (phase === 'ready') return <>{children}</>;
 
+  // The shape of the editor rather than a centred word. A skeleton says "this
+  // is loading and here is what is coming"; a blank screen with "loading…" is
+  // indistinguishable from an app that has broken, which is what people assume
+  // the moment it takes longer than they expected.
   if (phase === 'loading') {
     return (
-      <div className="login-screen">
-        <p className="login-sub">მონაცემები იტვირთება…</p>
+      <div className="app" aria-busy="true">
+        <div className="loading-bar" />
+        <div className="loading-shell">
+          <div className="loading-rail">
+            <div className="skeleton" style={{ height: 32 }} />
+            <div className="skeleton" style={{ height: 30 }} />
+            <div className="skeleton" style={{ height: 32, marginTop: 6 }} />
+            {[72, 90, 64, 82, 70, 88, 60].map((w, i) => (
+              <div key={i} className="skeleton" style={{ height: 12, width: `${w}%` }} />
+            ))}
+          </div>
+          <div className="loading-stage">მონაცემები იტვირთება…</div>
+        </div>
       </div>
     );
   }

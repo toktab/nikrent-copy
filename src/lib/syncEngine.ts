@@ -258,9 +258,19 @@ export function startSync(): () => void {
   };
   window.addEventListener('beforeunload', onBeforeUnload);
 
+  // Coming back online retries by itself. Without this the queued work sat
+  // there until the user happened to edit something else or pressed the retry
+  // button — so the app told them their changes would upload when the
+  // connection returned, and then quietly did not.
+  const onOnline = () => {
+    if (useSyncStore.getState().pendingChanges) void flush();
+  };
+  window.addEventListener('online', onOnline);
+
   return () => {
     unsubscribe();
     window.removeEventListener('beforeunload', onBeforeUnload);
+    window.removeEventListener('online', onOnline);
     if (timer) clearTimeout(timer);
   };
 }

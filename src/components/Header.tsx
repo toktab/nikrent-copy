@@ -15,6 +15,8 @@ import { BrandMark } from './BrandMark';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { ProfileMenu } from './ProfileMenu';
+import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
+import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 
 const SNAP_STEPS = [1, 5, 10, 25];
@@ -67,6 +69,7 @@ export function Header() {
   );
   const hasSelection = selectedIds.length > 0;
   const [printing, setPrinting] = useState(false);
+  const activeDoc = documents.find((d) => d.id === activeDocId);
 
   /** Scaled, dimensioned drawing sheet with the title block. */
   const printDrawing = async () => {
@@ -186,41 +189,63 @@ export function Header() {
     });
   };
 
+  /** Admin-only controls say what they would do and why they can't. */
+  const gate = (label: string) => (canManage ? undefined : label);
+
   return (
     <header className="header">
-      <div className="bar bar-main">
-        <h1>
-          <BrandMark size={18} />
-          კუბი
-        </h1>
+      {/* ── row 1: what you are looking at, and who else is ─────────────── */}
+      <div className="row row-top">
+        <div className="row-left">
+          <BrandMark size={22} />
+          <span className="sep" />
 
-        <div className="doc-picker">
-          <select
-            value={activeDocId}
-            onChange={(e) => switchDocument(e.target.value)}
-            title="მიმდინარე ნახაზი"
+          <Menu
+            trigger={(open) => (
+              <button className={`doc-pick${open ? ' open' : ''}`} title="მიმდინარე ნახაზი">
+                <span className="doc-pick-name">{activeDoc?.name ?? 'ნახაზი'}</span>
+                <span className="doc-pick-count">{activeDoc?.pieces.length ?? 0}</span>
+                <Icon name="chevron-down" size={14} />
+              </button>
+            )}
           >
-            {documents.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.pieces.length})
-              </option>
-            ))}
-          </select>
-          <button
-            className="btn small"
-            onClick={() => openDialog({ kind: 'documents' })}
-            title="ნახაზების მართვა"
-          >
-            ნახაზები…
-          </button>
-          <PresenceBar />
+            {(close) => (
+              <>
+                <MenuLabel>ნახაზები</MenuLabel>
+                {documents.map((d) => (
+                  <MenuItem
+                    key={d.id}
+                    on={d.id === activeDocId}
+                    trail={d.pieces.length || undefined}
+                    onClick={() => {
+                      switchDocument(d.id);
+                      close();
+                    }}
+                  >
+                    {d.name}
+                  </MenuItem>
+                ))}
+                <MenuSep />
+                <MenuItem
+                  icon="folder"
+                  onClick={() => {
+                    openDialog({ kind: 'documents' });
+                    close();
+                  }}
+                >
+                  ნახაზების მართვა…
+                </MenuItem>
+              </>
+            )}
+          </Menu>
         </div>
 
-        <div className="view-switch" role="group" aria-label="ხედი">
+        <div className="seg" role="group" aria-label="ხედი">
           {VIEW_ORDER.map((v) => (
             <button
               key={v}
-              className={`btn small${viewMode === '2d' && surfaceView === v ? ' active' : ''}`}
+              className={viewMode === '2d' && surfaceView === v ? 'on' : undefined}
+              aria-pressed={viewMode === '2d' && surfaceView === v}
               onClick={() => {
                 setViewMode('2d');
                 setSurfaceView(v);
@@ -231,7 +256,8 @@ export function Header() {
             </button>
           ))}
           <button
-            className={`btn small${viewMode === '3d' ? ' active' : ''}`}
+            className={viewMode === '3d' ? 'on' : undefined}
+            aria-pressed={viewMode === '3d'}
             onClick={() => setViewMode('3d')}
             title="სივრცითი ხედი — რედაქტირებადი"
           >
@@ -239,226 +265,356 @@ export function Header() {
           </button>
         </div>
 
-        {shortages > 0 && (
-          <span className="shortage-badge" title="კომპონენტი, რომლის მარაგიც არ ჰყოფნის"><Icon name="warning" /> დეფიციტი: {shortages}
-          </span>
-        )}
-
-        <div className="toolbar">
-          <button className="btn" onClick={undo} disabled={!canUndo} title={`დაბრუნება (${combo(['mod', 'Z'])})`}><Icon name="undo" />
-          </button>
-          <button className="btn" onClick={redo} disabled={!canRedo} title={`გამეორება (${combo(['mod', 'shift', 'Z'])})`}><Icon name="redo" />
-          </button>
-
-          <span className="sep" />
-
-          <button
-            className={`btn${snap ? ' active' : ''}`}
-            onClick={() => setSnap(!snap)}
-            title="ბადეზე მიბმა"
-          ><Icon name="grid" /> მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
-          </button>
-          <select
-            value={snapStep}
-            onChange={(e) => setSnapStep(Number(e.target.value))}
-            title="ბადის ბიჯი"
+        <div className="row-right">
+          {/* Everything that is used once a session rather than once a minute.
+              These eleven actions used to be a permanent second toolbar. */}
+          <Menu
+            align="right"
+            trigger={(open) => (
+              <button
+                className={`btn icon ghost${open ? ' active' : ''}`}
+                aria-label="ნახაზისა და კატალოგის მოქმედებები"
+              >
+                <Icon name="more" size={17} />
+              </button>
+            )}
           >
-            {SNAP_STEPS.map((s) => (
-              <option key={s} value={s}>
-                {s} სმ
-              </option>
-            ))}
-          </select>
+            {(close) => (
+              <>
+                <MenuLabel>ნახაზი</MenuLabel>
+                <MenuItem
+                  icon="sheet"
+                  onClick={() => {
+                    openDialog({ kind: 'title-block' });
+                    close();
+                  }}
+                >
+                  შტამპი…
+                </MenuItem>
+                <MenuItem
+                  icon="print"
+                  disabled={!pieces.length || printing}
+                  onClick={() => {
+                    void printDrawing();
+                    close();
+                  }}
+                >
+                  {printing ? 'იბეჭდება…' : 'ბეჭდვა (PDF)'}
+                </MenuItem>
+                <MenuItem
+                  icon="download"
+                  disabled={!pieces.length}
+                  onClick={() => {
+                    exportLayoutFile(pieces);
+                    close();
+                  }}
+                >
+                  ნახაზის ექსპორტი
+                </MenuItem>
+                <MenuItem
+                  icon="upload"
+                  onClick={() => {
+                    void importLayout();
+                    close();
+                  }}
+                >
+                  ნახაზის იმპორტი
+                </MenuItem>
+                <MenuItem
+                  icon="trash"
+                  danger
+                  disabled={!pieces.length}
+                  onClick={() => {
+                    clearAll();
+                    close();
+                  }}
+                >
+                  ზედაპირის გასუფთავება
+                </MenuItem>
 
-          <span className="sep" />
+                <MenuSep />
+                <MenuLabel>კატალოგი</MenuLabel>
+                <MenuItem
+                  icon="download"
+                  onClick={() => {
+                    exportCatalogFile(materials, warehouses);
+                    close();
+                  }}
+                >
+                  კატალოგის ექსპორტი
+                </MenuItem>
+                <MenuItem
+                  icon="upload"
+                  disabled={!canManage}
+                  title={gate(ADMIN_ONLY_TITLE)}
+                  onClick={() => {
+                    void importCatalog();
+                    close();
+                  }}
+                >
+                  კატალოგის იმპორტი
+                </MenuItem>
+                <MenuItem
+                  icon="reset"
+                  danger
+                  disabled={!canManage}
+                  title={gate(ADMIN_ONLY_TITLE)}
+                  onClick={() => {
+                    resetCatalog();
+                    close();
+                  }}
+                >
+                  ჩაშენებული კატალოგის აღდგენა
+                </MenuItem>
+              </>
+            )}
+          </Menu>
 
-          <button
-            className="btn"
-            onClick={() => openDialog({ kind: 'column-wizard' })}
-            title="კოლონის ავტომატური აწყობა"
-          ><Icon name="column" /> <span className="btn-label">კოლონა</span>
-          </button>
-          <button
-            className="btn"
-            onClick={() => openDialog({ kind: 'wall-wizard' })}
-            title="კედლის ავტომატური აწყობა"
-          ><Icon name="wall" /> <span className="btn-label">კედელი</span>
-          </button>
-          <button
-            className="btn"
-            onClick={() => openDialog({ kind: 'templates' })}
-            title="შენახული შაბლონები — მონიშნულის შენახვა და ჩასმა"
-          ><Icon name="copy" /> <span className="btn-label">შაბლონი</span>
-          </button>
-
-          <span className="sep" />
-
-          <button
-            className="btn"
-            onClick={() => rotateSelected(90)}
-            disabled={!hasSelection}
-            title="მოტრიალება 90° (R). ზუსტი კუთხე — „დეტალები“ ჩანართში."
-          ><Icon name="rotate-cw" /> <span className="btn-label">90°</span>
-          </button>
-          <button
-            className="btn"
-            onClick={duplicateSelected}
-            disabled={!hasSelection}
-            title={`დუბლირება (${combo(['mod', 'D'])})`}
-          ><Icon name="copy" />
-          </button>
-          <button
-            className="btn"
-            onClick={() => openDialog({ kind: 'array' })}
-            disabled={!hasSelection}
-            title="მასივი — ასლების გამრავლება"
-          ><Icon name="array" /> <span className="btn-label">მასივი</span>
-          </button>
-          <button
-            className="btn danger"
-            onClick={deleteSelected}
-            disabled={!hasSelection}
-            title={`წაშლა (${combo(['del'])})`}
-          ><Icon name="trash" />
-          </button>
-
-          <span className="sep" />
-
-          <button className="btn" onClick={() => zoomBy(1 / 1.2)} title="დაშორება"><Icon name="minus" />
-          </button>
-          <span className="zoomlabel">{Math.round(zoom * 100)}%</span>
-          <button className="btn" onClick={() => zoomBy(1.2)} title="მიახლოება"><Icon name="plus" />
-          </button>
-          <button className="btn" onClick={fitToContent} title="ჩატევა"><Icon name="fit" /> <span className="btn-label">ცენტრი</span>
-          </button>
-        </div>
-
-        <div className="header-right">
           <SyncBadge />
+          <PresenceBar />
+          {/* The divider belongs to the account menu, not to the row: without a
+              server there is no account, and a rule floating on its own at the
+              right edge reads as a rendering fault. */}
           <ProfileMenu />
         </div>
       </div>
 
-      <div className="bar bar-sub">
-        <div className="toolbar left">
-          <span className="group-label">წარწერები</span>
-          <button
-            className={`btn small${showDims ? ' active' : ''}`}
-            onClick={() => setShowDims(!showDims)}
-            title="ყველა ელემენტზე ზომის ჩვენება"
-          >
-            ზომები
+      {/* ── row 2: what you do to it ────────────────────────────────────── */}
+      <div className="row row-tools">
+        <Tooltip label="დაბრუნება" reason={combo(['mod', 'Z'])}>
+          <button className="btn icon ghost" onClick={undo} disabled={!canUndo} aria-label="დაბრუნება">
+            <Icon name="undo" size={17} />
           </button>
-          <button
-            className={`btn small${showNames ? ' active' : ''}`}
-            onClick={() => setShowNames(!showNames)}
-          >
-            სახელები
+        </Tooltip>
+        <Tooltip label="გამეორება" reason={combo(['mod', 'shift', 'Z'])}>
+          <button className="btn icon ghost" onClick={redo} disabled={!canRedo} aria-label="გამეორება">
+            <Icon name="redo" size={17} />
           </button>
-          <button
-            className={`btn small${forceLabels ? ' active' : ''}`}
-            onClick={() => setForceLabels(!forceLabels)}
-            title="წარწერები არ დაიმალოს ძალიან პატარა/დაშორებულ ხედზეც"
-          >
-            ყოველთვის
-          </button>
+        </Tooltip>
 
-          <span className="sep" />
-          <span className="group-label">დახმარება</span>
-          <button
-            className={`btn small${edgeSnap ? ' active' : ''}`}
-            onClick={() => setEdgeSnap(!edgeSnap)}
-            title="მიბმა მეზობელი ელემენტის კიდეზე — პანელები ზუსტად ეკვრება ერთმანეთს"
-          >
-            კიდეზე მიბმა
-          </button>
-          <button
-            className={`btn small${showOverlaps ? ' active' : ''}`}
-            onClick={() => setShowOverlaps(!showOverlaps)}
-            title="გადაფარებული ელემენტების მონიშვნა"
-          >
-            გადაფარება
-          </button>
+        <span className="sep" />
 
-        </div>
+        <button
+          className={`btn${snap ? ' active' : ''}`}
+          onClick={() => setSnap(!snap)}
+          aria-pressed={snap}
+          title="ბადეზე მიბმა"
+        >
+          <Icon name="grid" /> მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
+        </button>
 
-        <div className="toolbar">
-          <span className="group-label">კატალოგი</span>
-          <button
-            className="btn small"
-            onClick={() => exportCatalogFile(materials, warehouses)}
-            title="მასალები, ფასები და მარაგები ერთ ფაილად — სარეზერვო ასლი და სხვა კომპიუტერზე გადატანა"
-          ><Icon name="download" /> <span className="btn-label">ექსპორტი</span>
-          </button>
-          <button
-            className="btn small"
-            disabled={!canManage}
-            onClick={() => void importCatalog()}
-            title={
-              canManage
-                ? 'ადრე შენახული კატალოგის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარეს)'
-                : ADMIN_ONLY_TITLE
-            }
-          ><Icon name="upload" /> <span className="btn-label">იმპორტი</span>
-          </button>
-          <button
-            className="btn small danger"
-            disabled={!canManage}
-            onClick={resetCatalog}
-            title={
-              canManage
-                ? '41 ჩაშენებული Du მასალის დაბრუნება — დამატებული კომპონენტები და მარაგები წაიშლება'
-                : ADMIN_ONLY_TITLE
-            }
-          >
-            აღდგენა
-          </button>
+        <Menu
+          trigger={(open) => (
+            <button className={`btn${open ? ' active' : ''}`} title="ბადის ბიჯი">
+              {snapStep} სმ <Icon name="chevron-down" size={12} />
+            </button>
+          )}
+        >
+          {(close) => (
+            <>
+              <MenuLabel>ბადის ბიჯი</MenuLabel>
+              {SNAP_STEPS.map((s) => (
+                <MenuItem
+                  key={s}
+                  on={s === snapStep}
+                  onClick={() => {
+                    setSnapStep(s);
+                    close();
+                  }}
+                >
+                  {s} სმ
+                </MenuItem>
+              ))}
+            </>
+          )}
+        </Menu>
 
-          <span className="sep" />
+        <Menu
+          trigger={(open) => (
+            <button className={`btn icon${open ? ' active' : ''}`} aria-label="ხედის პარამეტრები">
+              <Icon name="sliders" size={16} />
+            </button>
+          )}
+        >
+          <>
+            <MenuLabel>წარწერები</MenuLabel>
+            <MenuItem on={showDims} onClick={() => setShowDims(!showDims)}>
+              ზომები
+            </MenuItem>
+            <MenuItem on={showNames} onClick={() => setShowNames(!showNames)}>
+              სახელები
+            </MenuItem>
+            <MenuItem
+              on={forceLabels}
+              onClick={() => setForceLabels(!forceLabels)}
+              title="წარწერები არ დაიმალოს ძალიან პატარა/დაშორებულ ხედზეც"
+            >
+              ყოველთვის
+            </MenuItem>
+            <MenuSep />
+            <MenuLabel>დახმარება</MenuLabel>
+            <MenuItem
+              on={edgeSnap}
+              onClick={() => setEdgeSnap(!edgeSnap)}
+              title="მიბმა მეზობელი ელემენტის კიდეზე — პანელები ზუსტად ეკვრება ერთმანეთს"
+            >
+              კიდეზე მიბმა
+            </MenuItem>
+            <MenuItem
+              on={showOverlaps}
+              onClick={() => setShowOverlaps(!showOverlaps)}
+              title="გადაფარებული ელემენტების მონიშვნა"
+            >
+              გადაფარება
+            </MenuItem>
+          </>
+        </Menu>
 
-          <span className="group-label">ნახაზი</span>
+        <span className="sep" />
+
+        <button
+          className="btn raised"
+          onClick={() => openDialog({ kind: 'column-wizard' })}
+          title="კოლონის ავტომატური აწყობა"
+        >
+          <Icon name="column" /> <span className="btn-label">კოლონა</span>
+        </button>
+        <button
+          className="btn raised"
+          onClick={() => openDialog({ kind: 'wall-wizard' })}
+          title="კედლის ავტომატური აწყობა"
+        >
+          <Icon name="wall" /> <span className="btn-label">კედელი</span>
+        </button>
+        <button
+          className="btn"
+          onClick={() => openDialog({ kind: 'templates' })}
+          title="შენახული შაბლონები — მონიშნულის შენახვა და ჩასმა"
+        >
+          <Icon name="copy" /> <span className="btn-label">შაბლონი</span>
+        </button>
+
+        <span className="sep" />
+
+        {/* Act on the selection. Disabled with nothing selected, and each one
+            says so rather than just going grey. */}
+        <Tooltip
+          label="მოტრიალება 90°"
+          reason={hasSelection ? 'R · ზუსტი კუთხე „დეტალებში“' : 'ჯერ მონიშნე ელემენტი'}
+        >
           <button
-            className="btn small"
-            onClick={() => openDialog({ kind: 'title-block' })}
-            title="ობიექტი, რევიზია, მასშტაბი"
+            className="btn icon ghost"
+            onClick={() => rotateSelected(90)}
+            disabled={!hasSelection}
+            aria-label="მოტრიალება 90°"
           >
-            შტამპი…
+            <Icon name="rotate-cw" size={17} />
           </button>
+        </Tooltip>
+        <Tooltip
+          label="დუბლირება"
+          reason={hasSelection ? combo(['mod', 'D']) : 'ჯერ მონიშნე ელემენტი'}
+        >
           <button
-            className="btn small"
-            onClick={printDrawing}
-            disabled={!pieces.length || printing}
-            title="მასშტაბური ნახაზი შტამპით (PDF)"
+            className="btn icon ghost"
+            onClick={duplicateSelected}
+            disabled={!hasSelection}
+            aria-label="დუბლირება"
           >
-            {printing ? '…' : <>
-              <Icon name="print" /> <span className="btn-label">ბეჭდვა</span>
-            </>}
+            <Icon name="copy" size={17} />
           </button>
+        </Tooltip>
+        <Tooltip
+          label="მასივი"
+          reason={hasSelection ? 'ასლების გამრავლება ბადეზე' : 'ჯერ მონიშნე ელემენტი'}
+        >
           <button
-            className="btn small"
-            onClick={() => exportLayoutFile(pieces)}
-            disabled={!pieces.length}
-            title="მიმდინარე ნახაზი ფაილად — არქივი ან კოლეგისთვის გასაგზავნად"
-          ><Icon name="download" /> <span className="btn-label">ექსპორტი</span>
-          </button>
-          <button
-            className="btn small"
-            onClick={() => void importLayout()}
-            title="ნახაზის ფაილის ჩატვირთვა (ჩაანაცვლებს მიმდინარე ნახაზს)"
-          ><Icon name="upload" /> <span className="btn-label">იმპორტი</span>
-          </button>
-          <button
-            className="btn small danger"
-            onClick={clearAll}
-            disabled={!pieces.length}
-            title="ყველა ელემენტის წაშლა ზედაპირიდან — კატალოგი და მარაგები რჩება"
+            className="btn icon ghost"
+            onClick={() => openDialog({ kind: 'array' })}
+            disabled={!hasSelection}
+            aria-label="მასივი"
           >
-            გასუფთავება
+            <Icon name="array" size={17} />
+          </button>
+        </Tooltip>
+        <Tooltip
+          label="წაშლა"
+          reason={hasSelection ? combo(['del']) : 'ჯერ მონიშნე ელემენტი'}
+        >
+          <button
+            className="btn icon ghost danger"
+            onClick={deleteSelected}
+            disabled={!hasSelection}
+            aria-label="წაშლა"
+          >
+            <Icon name="trash" size={17} />
+          </button>
+        </Tooltip>
+
+        <span className="flex-spacer" />
+
+        <div className="zoom-group">
+          <button
+            className="btn icon small"
+            onClick={() => zoomBy(1 / 1.2)}
+            aria-label="დაშორება"
+            title="დაშორება"
+          >
+            <Icon name="minus" size={15} />
+          </button>
+          <span className="zoomlabel">{Math.round(zoom * 100)}%</span>
+          <button
+            className="btn icon small"
+            onClick={() => zoomBy(1.2)}
+            aria-label="მიახლოება"
+            title="მიახლოება"
+          >
+            <Icon name="plus" size={15} />
+          </button>
+          <button
+            className="btn icon ghost"
+            onClick={fitToContent}
+            aria-label="ნახაზის ჩატევა ეკრანზე"
+            title="ჩატევა"
+          >
+            <Icon name="fit" size={16} />
           </button>
         </div>
       </div>
 
-      {storageError && <div className="storage-banner"><Icon name="warning" /> {storageError}</div>}
+      {storageError && (
+        <div className="storage-banner">
+          <Icon name="warning" /> {storageError}
+        </div>
+      )}
+      {shortages > 0 && <ShortageBar count={shortages} />}
     </header>
+  );
+}
+
+/**
+ * Inventory cannot cover the drawing. This is the one number the yard cares
+ * about, so it gets a line of its own under the toolbar rather than a badge
+ * competing for space inside it.
+ */
+function ShortageBar({ count }: { count: number }) {
+  const setInspectorOpen = useEditorStore((s) => s.setInspectorOpen);
+  const setInspectorTab = useEditorStore((s) => s.setInspectorTab);
+  return (
+    <div className="shortage-bar">
+      <span className="badge shortage">დეფიციტი</span>
+      <span>
+        <b>{count}</b> კომპონენტს მარაგი არ ჰყოფნის ამ ნახაზისთვის.
+      </span>
+      <button
+        className="btn small"
+        onClick={() => {
+          setInspectorOpen(true);
+          setInspectorTab('bom');
+        }}
+      >
+        უწყისში ნახვა
+      </button>
+    </div>
   );
 }

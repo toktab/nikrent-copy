@@ -33,6 +33,7 @@ import { ElevationPieceView } from './ElevationPieceView';
 import { ShapeSvg } from './ShapeSvg';
 import { LabelLayer } from './LabelLayer';
 import { Rulers } from './Rulers';
+import { EmptyDrawing } from './EmptyDrawing';
 
 /** What the pointer is currently doing on the stage. */
 type Interaction =
@@ -621,7 +622,7 @@ export function StageCanvas() {
         {/* Live drop preview: exactly where the piece will land, snapping included. */}
         {ghost && (
           <div
-            className="ghost"
+            className="drop-ghost"
             style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
           >
             {!elevation && (
@@ -680,11 +681,7 @@ export function StageCanvas() {
         />
       )}
 
-      {pieces.length === 0 && (
-        <div className="drop-hint">
-          ზედაპირი ცარიელია — გადმოათრიე მასალა მარცხენა პანელიდან
-        </div>
-      )}
+      {pieces.length === 0 && <EmptyDrawing />}
 
       {elevation && <div className="surface-hint">{VIEW_HINT[surfaceView]}</div>}
     </main>

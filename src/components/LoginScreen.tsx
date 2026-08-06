@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { isRemembered } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { t } from '../i18n';
+import { BrandMark } from './BrandMark';
 import { Icon } from './Icon';
 
 /**
@@ -56,7 +57,10 @@ export function LoginScreen() {
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1>{t('auth.appName')}</h1>
+        <h1>
+          <BrandMark size={30} />
+          {t('auth.appName')}
+        </h1>
         <p className="login-sub">
           {mode === 'sign-in'
             ? t('auth.signInHint')

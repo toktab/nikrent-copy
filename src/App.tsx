@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './store/useEditorStore';
-import { combo } from './lib/platform';
 import { Header } from './components/Header';
+import { StatusBar } from './components/StatusBar';
+import { OfflineBanner } from './components/OfflineBanner';
+import { SyncBanner } from './components/SyncBanner';
 import { Palette } from './components/Palette';
 import { StageCanvas } from './components/StageCanvas';
 import { View3D } from './components/View3D';
@@ -41,6 +43,8 @@ export default function App() {
   return (
     <div className="app">
       <Header />
+      <SyncBanner />
+      <OfflineBanner />
 
       <div className="body">
         {paletteOpen ? (
@@ -68,41 +72,7 @@ export default function App() {
         )}
       </div>
 
-      <footer className="footer">
-        <span>
-          <kbd>თრევა</kbd> გადაადგილება
-        </span>
-        <span>
-          <kbd>R</kbd> მოტრიალება
-        </span>
-        <span>
-          <kbd>{combo(['del'])}</kbd> წაშლა
-        </span>
-        <span>
-          <kbd>{combo(['mod', 'Z'])}</kbd> დაბრუნება
-        </span>
-        <span>
-          <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
-        </span>
-        <span>
-          <kbd>ისრები</kbd> გადაწევა
-        </span>
-        <span>
-          <kbd>{combo(['shift'])}</kbd>+კლიკი — მონიშვნის დამატება
-        </span>
-        <span>
-          <kbd>Alt</kbd>+კლიკი — ქვედა ელემენტის მონიშვნა
-        </span>
-        <span>
-          <kbd>Space</kbd>+თრევა ან შუა ღილაკი — ხედის გადაწევა
-        </span>
-        <span>
-          <kbd>ორი თითი</kbd> ხედის გადაწევა
-        </span>
-        <span>
-          <kbd>{combo(['mod'])}</kbd>+სქროლი ან პინჩი — მასშტაბი
-        </span>
-      </footer>
+      <StatusBar />
 
       {dialog?.kind === 'material' && (
         <MaterialFormDialog key={dialog.materialId ?? 'new'} materialId={dialog.materialId} />

@@ -45,6 +45,24 @@
   --badBg: #40282a;
   --grid: #333b45;
   --gridMajor: #454f5b;
+
+  /* Recessed surfaces. An input drawn darker than its panel reads as a well you
+     type into; drawn lighter it reads as a raised thing you press. The app had
+     them raised, which is why fields and buttons were hard to tell apart. */
+  --well: #181b20;
+  --stage: #1c2026; /* drawing surface, status bar */
+  --ink: #12161c; /* text on accent; tooltip ground */
+
+  /* Control geometry. One radius everywhere, one step down for pills, one up
+     for floating surfaces — a drawing tool should look measured. */
+  --r: 4px;
+  --r-sm: 3px;
+  --r-lg: 6px;
+
+  /* Two rows, fixed. See the .header comment. */
+  --row1: 56px;
+  --row2: 52px;
+  --statusbar: 30px;
 }
 
 * {
@@ -92,32 +110,53 @@ kbd {
   height: 100vh;
 }
 
-/* ---------------------------------------------------------------- controls */
+/* ----------------------------------------------------------------- controls
+   Four sizes, because the same layout has to work under a mouse in the office
+   and a gloved hand on site — the touch size is not a separate design, it is
+   the same control at 44px (see the pointer:coarse block).
+
+   Four weights, because a toolbar where every button looks identical makes the
+   user read all of them to find one. Loudest to quietest:
+
+     .primary   accent fill      the one action a screen is asking for
+     .raised    panel2 fill      named tools — the wizards
+     (default)  outlined         settings you change and read back
+     .ghost     bare             frequent verbs whose icon is the label
+     .danger    red outline      destructive, never filled until hover
+                                                                              */
 .btn {
-  background: var(--panel2);
+  height: 32px;
+  padding: 0 14px;
+  background: none;
   border: 1px solid var(--line);
-  color: var(--text);
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  color: #c3cad4;
+  border-radius: var(--r);
+  font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 6px;
   white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .btn:hover:not(:disabled) {
-  background: #3a424c;
+  background: var(--panel2);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.btn:active:not(:disabled) {
+  background: #262b32;
 }
 .btn:disabled {
   opacity: 0.42;
   cursor: default;
 }
 .btn.active {
-  background: var(--accent);
-  color: #1c1c1c;
-  border-color: var(--accent);
+  background: var(--panel2);
+  border-color: var(--line-strong);
+  color: var(--text);
   font-weight: 600;
 }
 .btn.primary {
@@ -127,33 +166,104 @@ kbd {
      white text on it fails contrast. */
   background: var(--accent);
   border-color: var(--accent);
-  color: #12161c;
+  color: var(--ink);
   font-weight: 600;
 }
 .btn.primary:hover:not(:disabled) {
-  background: #8ab8f7;
-  border-color: #8ab8f7;
+  background: #8ab6f7;
+  border-color: #8ab6f7;
+  color: var(--ink);
+}
+.btn.primary:active:not(:disabled) {
+  background: #5a93e0;
+  border-color: #5a93e0;
+}
+.btn.raised {
+  background: var(--panel2);
+  border-color: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+.btn.raised:hover:not(:disabled) {
+  background: #39404a;
+  border-color: transparent;
+}
+.btn.ghost {
+  background: none;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--panel2);
+  border-color: transparent;
+  color: var(--text);
+}
+.btn.ghost.active {
+  background: var(--panel2);
+  color: var(--text);
+}
+.btn.danger {
+  color: var(--bad);
+  border-color: rgba(246, 109, 103, 0.45);
 }
 .btn.danger:hover:not(:disabled) {
-  background: #7a2b2b;
-  border-color: #a33;
+  background: rgba(246, 109, 103, 0.14);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.btn.danger.ghost {
+  border-color: transparent;
 }
 .btn.primary.danger {
-  background: #a33;
-  border-color: #a33;
+  background: var(--bad);
+  border-color: var(--bad);
+  color: var(--ink);
+}
+.btn.primary.danger:hover:not(:disabled) {
+  background: #f8837e;
+  border-color: #f8837e;
 }
 .btn.small {
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 10px;
   font-size: 11px;
+  gap: 5px;
 }
+.btn.lg {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+/* Square: the icon is the whole label, so the box is the icon's box. */
 .btn.icon {
-  padding: 3px 6px;
-  font-size: 12px;
-  line-height: 1;
+  width: 32px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.btn.icon.small {
+  width: 26px;
+}
+.btn.icon.lg {
+  width: 38px;
 }
 .btn.full {
   width: 100%;
   justify-content: center;
+}
+
+/* One focus ring for everything focusable, drawn outside the control on a
+   ground ring so it stays visible against both panel and accent fills. */
+.btn:focus-visible,
+.seg button:focus-visible,
+.menu-item:focus-visible,
+.tab:focus-visible,
+.link-button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(112, 166, 245, 0.65);
 }
 
 select,
@@ -163,111 +273,422 @@ input[type='email'],
 input[type='password'],
 input[type='search'],
 textarea {
-  background: var(--panel2);
+  background: var(--well);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 5px 6px;
-  font-size: 12px;
+  border-radius: var(--r);
+  padding: 7px 10px;
+  font-size: 12.5px;
   font-family: inherit;
+}
+select {
+  cursor: pointer;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-tertiary);
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(112, 166, 245, 0.18);
+}
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background: var(--surface);
+  border-color: var(--panel);
+  color: #565f6b;
+  cursor: default;
+}
+input.bad,
+textarea.bad,
+input[aria-invalid='true'] {
+  border-color: var(--bad);
+}
+input.bad:focus,
+input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px rgba(246, 109, 103, 0.18);
+}
+/* The message that says what is wrong with the field above it. */
+.field-error {
+  font-size: 11px;
+  color: var(--bad);
+  margin-top: 5px;
 }
 input[type='color'] {
   background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r);
   width: 46px;
-  height: 28px;
+  height: 32px;
   padding: 2px;
   cursor: pointer;
 }
 .sep {
   width: 1px;
-  height: 20px;
+  height: 24px;
   background: var(--line);
-  margin: 0 2px;
+  margin: 0 4px;
   display: inline-block;
+  flex: 0 0 auto;
 }
 .flex-spacer {
   flex: 1;
 }
 
-/* ------------------------------------------------------------------ header */
-.header {
+/* ------------------------------------------------------- segmented control
+   An inset track with one raised pill. The recess says "these are alternatives,
+   exactly one is on" in a way a row of separate buttons never does. */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  background: var(--well);
+  border-radius: var(--r-lg);
+  padding: 3px;
+  gap: 2px;
   flex: 0 0 auto;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
 }
-.bar {
+.seg button {
+  height: 28px;
+  padding: 0 14px;
+  border: none;
+  background: none;
+  border-radius: var(--r);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.seg button:hover:not(.on) {
+  color: var(--text);
+}
+.seg button.on {
+  background: var(--panel2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- badges
+   The six real states. Every one carries a dot as well as a hue, so they stay
+   distinguishable on a screen washed out by sun — and to anyone who cannot
+   separate the hues at all. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(154, 164, 177, 0.13);
+  color: var(--muted);
+}
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+.badge.ok {
+  background: rgba(113, 197, 117, 0.13);
+  color: var(--ok);
+}
+.badge.warn {
+  background: rgba(239, 168, 49, 0.13);
+  color: var(--warn);
+}
+.badge.bad {
+  background: rgba(246, 109, 103, 0.13);
+  color: var(--bad);
+}
+.badge.conflict {
+  background: rgba(193, 136, 234, 0.13);
+  color: var(--conflict);
+}
+.badge.shortage {
+  background: rgba(253, 131, 88, 0.13);
+  color: var(--shortage);
+}
+/* A lock icon carries read-only instead of a dot — it is the one state that is
+   about permission rather than progress, and it reads as that at a glance. */
+.badge.readonly::before {
+  display: none;
+}
+.badge .icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* --------------------------------------------------------- floating surfaces
+   Menus, popovers and tooltips: lifted off the panel by a border plus a long
+   soft shadow rather than by brightness alone. */
+.menu {
+  position: absolute;
+  z-index: 60;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 5px;
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.66);
+}
+.menu-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 7px 14px;
-  /* Last resort. Once the toolbar has wrapped as far as it can, a narrow
-     window pushes whole groups onto another row instead of off the screen —
-     the header is allowed to get taller, never to hide a control. */
-  flex-wrap: wrap;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: var(--r-sm);
+  color: #c3cad4;
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
 }
-.bar-sub {
-  border-top: 1px solid var(--line);
-  padding: 5px 14px;
+.menu-item:hover:not(:disabled) {
+  background: var(--panel2);
+  color: var(--text);
+}
+.menu-item:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.menu-item.on {
+  color: var(--text);
+}
+.menu-item.danger {
+  color: var(--bad);
+}
+.menu-item.danger:hover:not(:disabled) {
+  background: rgba(246, 109, 103, 0.13);
+  color: var(--bad);
+}
+/* Trailing marks — a tick for toggles, a shortcut for actions — share one slot
+   so both columns line up down the menu. */
+.menu-item .trail {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.menu-item.on .trail {
+  color: var(--accent);
+}
+.menu-label {
+  padding: 8px 10px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.menu-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 5px 4px;
+}
+.menu-anchor {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.menu.right {
+  right: 0;
+}
+.menu.below {
+  top: calc(100% + 6px);
+}
+
+/* ------------------------------------------------------------------ tooltip
+   Two forms. The short one names the action and its shortcut. The rich one is
+   for a control that cannot be used: what it would do, then why it can't. */
+.tip-anchor {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.tip {
+  position: fixed;
+  z-index: 90;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.7);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tip-top {
+  transform: translate(-50%, -100%);
+}
+.tip-rich {
+  padding: 10px 12px;
+  max-width: 260px;
+  white-space: normal;
+}
+.tip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.tip-reason {
+  color: var(--text-tertiary);
+}
+.tip .icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ header
+   Two rows that never wrap.
+
+   What was here before was three rows of undifferentiated buttons that wrapped
+   unpredictably between 1150 and 1400px, and cost 16–26% of a 1440×900 screen.
+   The fix was not to shrink them: it was to notice that eleven of those actions
+   — the catalog files, the stamp, print, reset — are used about once a session
+   and had no business being permanently parked in a drawing tool's chrome.
+   They live in the document menu now. What is left is two rows, 108px, fixed.
+
+   Row 1 answers "what am I looking at, and who else is". Row 2 is only verbs.
+
+   The header also recedes: it is --surface now, darker than the panels it used
+   to share a colour with, so the drawing is the brightest thing on screen. */
+.header {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  /* Never. A wrapping toolbar is what this redesign exists to end. */
+  flex-wrap: nowrap;
+}
+.row-top {
+  height: var(--row1);
   justify-content: space-between;
+  border-bottom: 1px solid var(--panel);
 }
-.header h1 {
+.row-tools {
+  height: var(--row2);
+  gap: 6px;
+}
+.row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* The drawing name is the only thing here that can be arbitrarily long, so
+     this is the group that gives when the window narrows. */
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.row-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+.row-top .seg {
+  flex: 0 0 auto;
+}
+
+/* The drawing you are in, and how many pieces are on it. */
+.doc-pick {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 15px;
-  margin: 0;
-  font-weight: 700;
-  /* Zero, not 0.2px — Mkhedruli does not take tracking the way Latin does. */
-  letter-spacing: 0;
+  height: 32px;
+  padding: 0 8px;
+  min-width: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.doc-pick:hover,
+.doc-pick.open {
+  background: var(--panel);
+  border-color: var(--line);
+}
+.doc-pick-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.toolbar {
+.doc-pick-count {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.doc-pick .icon {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.zoom-group {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  flex-wrap: wrap;
-  /* Without this a flex item refuses to go below its min-content width, so a
-     full toolbar shoved the account menu clean off the right edge instead of
-     wrapping. The toolbar is the part that should give — it wraps for free. */
-  min-width: 0;
-}
-.toolbar.left {
-  margin-left: 0;
-}
-.group-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--muted);
-  margin-right: 2px;
+  gap: 3px;
+  flex: 0 0 auto;
 }
 .zoomlabel {
-  font-size: 12px;
-  color: var(--muted);
-  min-width: 46px;
+  font-size: 12.5px;
+  color: #c3cad4;
+  min-width: 48px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-/* 2D / 3D switch */
-.view-switch {
+
+/* Inventory cannot cover the drawing — the one number the yard cares about, so
+   it gets a line rather than a badge fighting for room in the toolbar. */
+.shortage-bar {
   display: flex;
-  gap: 2px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 2px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--panel);
+  background: rgba(253, 131, 88, 0.07);
+  font-size: 12.5px;
+  color: #c3cad4;
 }
-.view-switch .btn {
-  border: none;
-  background: transparent;
-  padding: 4px 12px;
-  font-weight: 600;
+.shortage-bar b {
+  color: var(--shortage);
+  font-variant-numeric: tabular-nums;
 }
-.view-switch .btn.active {
-  background: var(--accent);
-  color: #1c1c1c;
+.shortage-bar .btn {
+  margin-left: auto;
 }
 
 /* ---------------------------------------------------------------- 3D view */
@@ -289,32 +710,38 @@ input[type='color'] {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  background: rgba(30, 34, 40, 0.85);
+  background: rgba(30, 34, 40, 0.9);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 5px 8px;
+  border-radius: var(--r-lg);
+  padding: 6px 8px;
 }
 .view3d-select {
-  font-size: 11px;
-  padding: 4px 5px;
+  font-size: 11.5px;
+  padding: 5px 8px;
+  height: 26px;
 }
 /* Which way a drag moves the selection — a pair, so it reads as one choice
-   rather than two unrelated buttons. */
+   rather than two unrelated buttons. Same inset track as the view switcher in
+   the header, because it is the same kind of control.
+
+   Deliberately not accent-filled: in this view the accent means "selected
+   piece", and a permanently blue toolbar button next to a blue selection
+   outline is exactly the collision this redesign set out to remove. */
 .view3d-axis {
   display: flex;
   gap: 2px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 7px;
+  background: var(--well);
+  border-radius: var(--r);
   padding: 2px;
 }
 .view3d-axis .btn {
-  border: none;
+  border-color: transparent;
   background: transparent;
 }
 .view3d-axis .btn.active {
-  background: var(--accent);
-  color: #1c1c1c;
+  background: var(--panel2);
+  color: var(--text);
 }
 .view3d-hint {
   font-size: 11px;
@@ -328,33 +755,12 @@ input[type='color'] {
   white-space: normal;
 }
 
-/* drawing picker in the title bar */
-.doc-picker {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.doc-picker select {
-  max-width: 190px;
-}
 .storage-banner {
   background: #40282a;
   border-top: 1px solid var(--bad);
   color: #ffc2c2;
   font-size: 11.5px;
   padding: 6px 14px;
-}
-.shortage-badge {
-  /* Not a failure — the drawing is fine, the yard is short. Its own hue, so it
-     cannot be mistaken for something that went wrong. */
-  background: #3a2620;
-  border: 1px solid var(--shortage);
-  color: var(--shortage);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 20px;
-  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------------- body */
@@ -369,11 +775,11 @@ input[type='color'] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 8px 0 12px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--muted);
+  padding: 8px 8px 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
   flex: 0 0 auto;
 }
 .inspector .panel-head {
@@ -384,7 +790,7 @@ input[type='color'] {
 .rail {
   flex: 0 0 auto;
   width: 26px;
-  background: var(--panel);
+  background: var(--surface);
   border: none;
   border-right: 1px solid var(--line);
   color: var(--muted);
@@ -409,8 +815,10 @@ input[type='color'] {
 .palette {
   width: 288px;
   flex: 0 0 auto;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
+  /* Same ground as the header: the panels frame the drawing, they are not
+     objects sitting on top of it. */
+  background: var(--surface);
+  border-right: 1px solid var(--panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -423,12 +831,12 @@ input[type='color'] {
 }
 .search {
   width: 100%;
-  padding: 7px 9px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border-radius: var(--r);
   border: 1px solid var(--line);
-  background: var(--panel2);
+  background: var(--well);
   color: var(--text);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .hint {
   font-size: 11px;
@@ -442,9 +850,9 @@ input[type='color'] {
   flex: 1 1 auto;
 }
 .cathead {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--muted);
   margin: 14px 6px 6px;
   display: flex;
@@ -465,24 +873,36 @@ input[type='color'] {
   display: inline-block;
   flex: 0 0 auto;
 }
+/* ------------------------------------------------------------- palette row
+   The densest repeating element in the app, and the one the eye lives on. Its
+   whole identity is the name — "პანელი 90*300" against "პანელი 75*300" — so
+   the name gets the space and everything else is sized around it.
+
+   Edit and delete are admin verbs used once a week; they were permanently
+   taking 64px from a 288px panel and truncating every name to "პანე…". They
+   appear on hover and on keyboard focus, and nowhere else. */
 .mat {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 7px;
-  border: 1px solid transparent;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--r);
+  box-shadow: inset 0 0 0 1px transparent;
   user-select: none;
 }
 .mat:hover {
-  background: var(--panel2);
-  border-color: var(--line);
+  background: var(--panel);
 }
 .mat.shortage {
   /* The component is fine and the drawing is fine — there just are not enough
      of them in the yard. Shortage has its own hue so it never reads as an
      error the way borrowed red did. */
-  background: rgba(253, 131, 88, 0.1);
+  background: rgba(253, 131, 88, 0.08);
+}
+.mat.shortage .nm,
+.mat.shortage .short-delta {
+  color: var(--shortage);
 }
 .mat-drag {
   display: flex;
@@ -506,43 +926,71 @@ input[type='color'] {
   min-width: 0;
 }
 .nm {
-  font-size: 12px;
-  line-height: 1.25;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .dim {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
 }
+/* How many of this component the current drawing uses. */
 .used-chip {
-  background: var(--accent2);
-  color: #fff;
+  background: var(--panel2);
+  color: var(--muted);
   border-radius: 10px;
   padding: 0 6px;
   font-size: 10px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-.mat-actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
+.short-delta {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
 }
+.mat-actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 10px;
+  /* The row's own ground, so the actions cover the stock field cleanly rather
+     than sitting on top of a half-legible number. */
+  background: linear-gradient(90deg, transparent, var(--panel) 12px);
+  opacity: 0;
+  pointer-events: none;
+}
+.mat:hover .mat-actions,
+.mat:focus-within .mat-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.mat.shortage:hover .mat-actions,
+.mat.shortage:focus-within .mat-actions {
+  background: linear-gradient(90deg, transparent, #2a2823 12px);
+}
 .stock-input {
-  width: 48px;
-  padding: 3px 4px;
-  font-size: 11px;
+  width: 46px;
+  padding: 4px 6px;
+  font-size: 11.5px;
   text-align: right;
+  flex: 0 0 auto;
 }
 .stock-input.bad {
-  border-color: var(--bad);
-  color: #ffb3b3;
+  border-color: var(--shortage);
+  color: var(--shortage);
 }
 
 /* ------------------------------------------------------------------- stage */
@@ -654,8 +1102,12 @@ input[type='color'] {
   max-width: calc(100% - 20px);
 }
 
-/* drop preview — shows exactly where a dragged material will land */
-.ghost {
+/* Drop preview — shows exactly where a dragged material will land.
+   Named `.drop-ghost`, not `.ghost`: the plain name is the standard one for a
+   borderless button, and when the toolbar started using it every ghost button
+   in the header inherited `position: absolute` from this rule and collapsed to
+   nothing inside its wrapper. */
+.drop-ghost {
   position: absolute;
   transform-origin: center center;
   opacity: 0.5;
@@ -664,7 +1116,7 @@ input[type='color'] {
   outline: calc(1.5px / var(--z, 1)) dashed var(--warn);
   z-index: 30;
 }
-.ghost .shape {
+.drop-ghost .shape {
   width: 100%;
   height: 100%;
 }
@@ -696,16 +1148,134 @@ input[type='color'] {
   pointer-events: none;
   z-index: 45;
 }
-.drop-hint {
+/* ------------------------------------------------------------ empty drawing
+   The surface stays visible behind it — this is a prompt, not a takeover, and
+   the grid is the reassurance that the drawing is there and simply has nothing
+   on it yet. Only the card takes the pointer, so drag-and-drop onto the empty
+   surface still works. */
+.empty-drawing {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
-  font-size: 14px;
   pointer-events: none;
+  z-index: 20;
+  padding: 24px;
+}
+.empty-card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   text-align: center;
+  max-width: 380px;
+}
+.empty-mark {
+  opacity: 0.5;
+  margin-bottom: 6px;
+}
+.empty-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+.empty-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.empty-alt {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+/* ----------------------------------------------------------------- skeleton
+   The shape of what is coming, so the wait reads as loading rather than as an
+   app that opened broken and empty. */
+.skeleton {
+  background: var(--panel);
+  border-radius: var(--r-sm);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+.loading-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.loading-rail {
+  width: 288px;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--panel);
+  background: var(--surface);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.loading-stage {
+  flex: 1 1 auto;
+  background-color: var(--stage);
+  background-image: radial-gradient(circle, var(--grid) 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+/* An indeterminate bar: honest about not knowing how long, and still moving. */
+.loading-bar {
+  height: 3px;
+  background: var(--panel);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.loading-bar::after {
+  content: '';
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+  animation: loading-slide 1.5s ease-in-out infinite;
+}
+@keyframes loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
 }
 
 /* rulers */
@@ -818,15 +1388,15 @@ input[type='color'] {
 .inspector {
   width: 300px;
   flex: 0 0 auto;
-  background: var(--panel);
-  border-left: 1px solid var(--line);
+  background: var(--surface);
+  border-left: 1px solid var(--panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 .tabs {
   display: flex;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--panel);
   flex: 0 0 auto;
 }
 .tab {
@@ -834,10 +1404,10 @@ input[type='color'] {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--muted);
+  color: var(--text-tertiary);
   font-family: inherit;
-  font-size: 12px;
-  padding: 9px 4px;
+  font-size: 12.5px;
+  padding: 12px 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -852,13 +1422,19 @@ input[type='color'] {
   border-bottom-color: var(--accent);
   font-weight: 600;
 }
+/* A count on a tab is a shortage count — its own hue, never borrowed red. */
 .tab-badge {
-  background: var(--bad);
-  color: #fff;
+  background: rgba(253, 131, 88, 0.16);
+  color: var(--shortage);
   border-radius: 10px;
   font-size: 10px;
-  padding: 0 5px;
+  padding: 1px 6px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tab-badge.sel {
+  background: rgba(112, 166, 245, 0.16);
+  color: var(--accent);
 }
 .tab-body {
   overflow-y: auto;
@@ -940,25 +1516,35 @@ input[type='color'] {
   gap: 6px;
   margin-bottom: 10px;
 }
+/* Stat tiles: a recessed well, so the number reads as a reading taken off the
+   drawing rather than a button someone forgot to wire up. */
 .sc-item {
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 7px 9px;
+  background: var(--well);
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  padding: 9px 11px;
 }
 .sc-item span {
   display: block;
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  /* Mkhedruli has no uppercase, so `text-transform` did nothing for the
+     Georgian labels and only stretched the Latin ones. Hierarchy comes from
+     size and colour. */
+  letter-spacing: 0;
 }
 .sc-item b {
-  font-size: 16px;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
+/* Short in the yard, not broken — the shortage hue, never red. */
 .sc-item.warn {
-  background: var(--badBg);
-  border-color: var(--bad);
+  background: rgba(253, 131, 88, 0.09);
+  border-color: rgba(253, 131, 88, 0.42);
+}
+.sc-item.warn b {
+  color: var(--shortage);
 }
 .export-row {
   display: flex;
@@ -984,8 +1570,7 @@ input[type='color'] {
   gap: 7px;
   margin-bottom: 5px;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 600;
   color: var(--muted);
 }
 .bom-cat b {
@@ -1040,7 +1625,8 @@ input[type='color'] {
   color: var(--muted);
 }
 .bom-table tr.short td {
-  background: #3a2620;
+  /* Shortage tints the whole row — it is the one number the yard acts on. */
+  background: rgba(253, 131, 88, 0.09);
   color: var(--shortage);
 }
 .bom-name {
@@ -1053,7 +1639,7 @@ input[type='color'] {
 }
 .warn-badge {
   margin-left: 4px;
-  color: var(--bad);
+  color: var(--shortage);
 }
 .inv-table .stock-input {
   width: 52px;
@@ -1073,16 +1659,58 @@ input[type='color'] {
 }
 
 /* ------------------------------------------------------------------ footer */
-.footer {
+/* --------------------------------------------------------------- status bar
+   Was eleven keyboard hints of identical weight that never changed. Now the
+   left half carries the few worth advertising and the right half carries what
+   actually moves: selection, view, zoom, network. */
+.statusbar {
   flex: 0 0 auto;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-  padding: 5px 14px;
+  height: var(--statusbar);
+  background: var(--stage);
+  border-top: 1px solid var(--panel);
+  padding: 0 14px;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--text-tertiary);
   display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  overflow: hidden;
+}
+.hintlist {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+.hintlist > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.status-view,
+.status-sel {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+.status-sel b {
+  color: var(--accent);
+}
+.status-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.status-queued {
+  color: var(--text-tertiary);
+}
+.status-queued::before {
+  content: '· ';
 }
 kbd {
   background: var(--panel2);
@@ -1109,13 +1737,13 @@ kbd {
 .modal {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-lg);
   width: 460px;
   max-width: 100%;
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 30px 70px -25px rgba(0, 0, 0, 0.75);
 }
 .modal.wide {
   width: 860px;
@@ -1124,26 +1752,30 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 15px 20px;
   border-bottom: 1px solid var(--line);
 }
 .modal-head h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 .modal-body {
-  padding: 14px;
+  padding: 20px;
   overflow-y: auto;
-  font-size: 12px;
+  font-size: 12.5px;
 }
+/* The footer sits on the surface colour, so the row that commits or cancels
+   reads as a different plane from the form it acts on. */
 .modal-foot {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
   align-items: center;
-  padding: 11px 14px;
+  padding: 14px 20px;
   border-top: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0 0 5px 5px;
 }
 .confirm-text {
   margin: 0;
@@ -1159,10 +1791,11 @@ kbd {
   flex-direction: column;
   gap: 4px;
 }
+/* Mkhedruli has no uppercase and no small caps, so the `text-transform:
+   uppercase` these labels used to carry did nothing to the Georgian and only
+   stretched the stray Latin. Weight and colour carry the hierarchy. */
 .field > span {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 11.5px;
   color: var(--muted);
 }
 .field.span2 {
@@ -1445,6 +2078,10 @@ kbd {
 /* ------------------------------------------------------------------- toast */
 /* -------------------------------------------------------------- responsive */
 /* Fixed 288 + 300 px panels leave no canvas on a small laptop or a tablet. */
+/* The design asks for an icons-only palette below 1280. Not followed on
+   purpose: these rows are "პანელი 90*300" against "პანელი 75*300" — identical
+   swatches whose entire identity is the text. Icons-only would make the panel
+   unusable rather than compact, so it narrows instead. */
 @media (max-width: 1280px) {
   .palette {
     width: 236px;
@@ -1460,10 +2097,11 @@ kbd {
   .inspector {
     width: 224px;
   }
-  .header h1 {
-    display: none;
-  }
-  /* No room for inline stock here — the Inventory tab still has it. */
+}
+/* Inline stock used to go at 1024 because the row had no room for it. It has
+   room now — edit and delete moved to hover — so it survives until the panels
+   start overlaying the canvas. The Inventory tab still has it either way. */
+@media (max-width: 860px) {
   .palette .stock-input {
     display: none;
   }
@@ -1471,22 +2109,55 @@ kbd {
 
 /* Touch devices: bigger hit targets, and never let the browser hijack a
    drag on the canvas for its own scroll/zoom gestures. */
+/* The touch size is not a separate design — it is the same control at 44px,
+   which is the smallest target a gloved hand hits reliably. */
 @media (pointer: coarse) {
   .stage {
     touch-action: none;
   }
   .btn {
-    padding: 8px 12px;
+    height: 44px;
+    padding: 0 20px;
+    font-size: 14px;
   }
   .btn.small {
-    padding: 6px 10px;
+    height: 36px;
+    padding: 0 14px;
+    font-size: 12.5px;
+  }
+  .btn.icon {
+    width: 44px;
+  }
+  .btn.icon.small {
+    width: 36px;
+  }
+  .seg button {
+    height: 38px;
+    padding: 0 18px;
+    font-size: 13.5px;
+  }
+  .menu-item {
+    padding: 12px 12px;
+    font-size: 13.5px;
+  }
+  .doc-pick {
+    height: 44px;
+  }
+  .tab {
+    min-height: 44px;
   }
   .mat {
     padding: 7px 6px;
   }
   .stock-input {
     width: 56px;
-    padding: 6px 4px;
+    padding: 8px 6px;
+  }
+  /* Rows 1 and 2 have to grow with the controls inside them or the 44px
+     targets get clipped by a 56px row. */
+  :root {
+    --row1: 60px;
+    --row2: 58px;
   }
 }
 
@@ -1520,21 +2191,28 @@ kbd {
 
 .login-card {
   width: 100%;
-  max-width: 340px;
+  max-width: 360px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 24px;
+  border-radius: var(--r-lg);
+  padding: 28px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  gap: 14px;
+  box-shadow: 0 30px 70px -25px rgba(0, 0, 0, 0.75);
 }
 
+/* The mark above the name, centred. This is the one screen every user sees
+   before they see anything else, and it was a bare word. */
 .login-card h1 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
+  margin: 0 0 2px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 .login-card h1 span {
@@ -1544,7 +2222,8 @@ kbd {
 .login-sub {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -1558,11 +2237,11 @@ kbd {
 
 .login-error {
   margin: 0;
-  background: var(--badBg);
-  border: 1px solid var(--bad);
+  background: rgba(246, 109, 103, 0.1);
+  border: 1px solid rgba(246, 109, 103, 0.45);
   color: var(--text);
-  border-radius: 6px;
-  padding: 8px 10px;
+  border-radius: var(--r);
+  padding: 9px 11px;
   font-size: 12px;
 }
 
@@ -1575,17 +2254,6 @@ kbd {
 }
 
 /* --------------------------------------------------------------- user chip */
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-  /* Never squeezed. The save state and the account menu are the two things in
-     the header that must stay whole — a half-drawn avatar reads as a broken
-     app, and a clipped save state is actively misleading. */
-  flex: 0 0 auto;
-}
-
 .user-role {
   font-size: 10px;
   padding: 2px 7px;
@@ -1609,36 +2277,75 @@ kbd {
    must never be hidden by width — the header no longer renders one directly. */
 
 /* --------------------------------------------------------------- sync state */
-.sync-badge {
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  display: inline-flex;
+/* ------------------------------------------------------------- state banners
+   A badge says which of the six states is on. A banner says what happened and
+   what to do about it. Anything the user has to decide gets the banner — the
+   header is not the place to hold a conversation. */
+.sync-banner,
+.offline-banner {
+  flex: 0 0 auto;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
-
-.sync-badge.ok {
-  color: var(--ok);
+.sync-banner-text,
+.offline-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
-
-.sync-badge.bad {
+.sync-banner-text b,
+.offline-text b {
+  font-size: 13px;
+}
+.sync-banner-text span,
+.offline-text span {
+  color: #c3cad4;
+}
+.sync-banner-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+/* Nothing failed — someone else got there first, and there is a choice to
+   make. Its own hue keeps it out of the vocabulary of errors. */
+.sync-banner.conflict {
+  background: rgba(193, 136, 234, 0.08);
+  border-bottom-color: rgba(193, 136, 234, 0.4);
+}
+.sync-banner.conflict > .icon,
+.sync-banner.conflict b {
+  color: var(--conflict);
+}
+.sync-banner.bad {
+  background: rgba(246, 109, 103, 0.08);
+  border-bottom-color: rgba(246, 109, 103, 0.4);
+}
+.sync-banner.bad > .icon,
+.sync-banner.bad b {
   color: var(--bad);
 }
-
-.sync-conflict {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  /* Nothing failed — someone else got there first, and there is a choice to
-     make. Its own hue keeps it out of the vocabulary of errors. */
-  background: #30253a;
-  border: 1px solid var(--conflict);
-  color: var(--conflict);
-  border-radius: 6px;
-  padding: 4px 8px;
-  white-space: nowrap;
+/* Deliberately colourless. Losing the network on a building site is normal,
+   not a fault, and painting it red sends people hunting for a bug. */
+.offline-banner {
+  background: var(--panel);
+  border-bottom-color: var(--line);
+}
+.offline-banner > .icon {
+  color: var(--muted);
+}
+.offline-when {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .login-card.wide-card {
@@ -1663,24 +2370,28 @@ kbd {
 
 /* The save state is the one thing in the header that must never be hidden:
    with write-behind saving, silence is indistinguishable from success, and
-   someone could draw for an hour against a dead connection. It shrinks to a
-   coloured dot rather than disappearing, and the tooltip carries the word.
+   someone could draw for an hour against a dead connection. It shrinks to its
+   own dot rather than disappearing, and the tooltip carries the word.
 
-   The failure and conflict states keep their full form at every width — they
-   own buttons, and they are exactly the moments worth spending header on. */
+   Failure keeps its full form at every width, and the states that need a
+   decision are banners now, so nothing that owns a button can be squeezed. */
 @media (max-width: 1150px) {
-  .sync-badge:not(.bad) {
-    width: 9px;
-    height: 9px;
+  /* Scoped to row 1, not the whole header: the shortage bar below it is a full
+     line with room to spare, and collapsing its badge to a bare dot would
+     leave "4 კომპონენტს მარაგი არ ჰყოფნის" introduced by nothing.
+
+     font-size:0 rather than color:transparent — the dot is drawn from
+     currentColor, so hiding the text by colour would hide the dot with it. */
+  .row-top .badge:not(.bad):not(.conflict) {
+    width: 24px;
     padding: 0;
-    border-radius: 50%;
-    background: currentColor;
+    justify-content: center;
+    font-size: 0;
     overflow: hidden;
-    text-indent: -999px;
-    flex: 0 0 auto;
   }
-  .sync-conflict {
-    white-space: normal;
+  .row-top .badge:not(.bad):not(.conflict)::before {
+    width: 8px;
+    height: 8px;
   }
 }
 
@@ -1794,8 +2505,7 @@ kbd {
 .users-table th {
   text-align: left;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  font-weight: 600;
   color: var(--muted);
   font-weight: 500;
   padding: 4px 6px;
@@ -1820,8 +2530,7 @@ kbd {
 .section-title {
   margin: 16px 0 8px;
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  font-weight: 600;
   color: var(--muted);
   font-weight: 600;
 }
@@ -1980,6 +2689,9 @@ kbd {
 .profile-menu {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
 }
 
 .avatar-button {
@@ -2141,10 +2853,20 @@ kbd {
    rows. The canvas is the tool; everything else is overhead.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* The footer is entirely keyboard shortcuts, which mean nothing without a
-   keyboard. On touch it is 86px of pure waste. */
+/* The hint list is keyboard shortcuts, which mean nothing without a keyboard.
+   The readout beside it — selection, view, zoom, network — is worth more on a
+   tablet than on a desktop, so the bar stays and only the hints go. */
 @media (pointer: coarse) {
-  .footer {
+  .hintlist {
+    display: none;
+  }
+}
+
+/* Below 1280 the two rows are still two rows; what gives is everything that
+   was only ever there for comfort. */
+@media (max-width: 1280px) {
+  /* Secondary shortcuts. The three that remain are the ones nobody guesses. */
+  .statusbar .opt {
     display: none;
   }
 }
@@ -2157,42 +2879,54 @@ kbd {
    floor), so a desktop keeps its labels while a tablet gets its canvas. */
 @media (max-width: 1150px) {
   /* Icon-only toolbar: the labels repeat what the icon and tooltip already
-     say, and dropping them roughly halves the number of wrapped rows. */
-  .bar .btn-label {
+     say, and dropping them is what keeps row 2 on one line here. */
+  .row .btn-label {
     display: none;
   }
-  .bar .btn {
-    padding: 6px 8px;
+  .row {
+    gap: 8px;
+    padding: 0 10px;
   }
-  .bar {
-    gap: 6px;
-    padding: 5px 8px;
-  }
-  .bar-sub {
-    padding: 4px 8px;
-  }
-  .toolbar {
+  .row-tools {
     gap: 4px;
   }
-  /* Group labels ("წარწერები", "დახმარება") are guidance for a first-time
-     desktop user and cost a whole row here. */
-  .group-label {
+  .zoomlabel {
+    min-width: 40px;
+    font-size: 11.5px;
+  }
+  .doc-pick {
+    font-size: 13px;
+  }
+  /* Row 2 is a strip of verbs. If they genuinely will not fit, it scrolls —
+     that is still better than wrapping into a third row, because the row
+     heights stay predictable and the canvas keeps its size. */
+  .row-tools {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .row-tools::-webkit-scrollbar {
     display: none;
   }
-  .doc-picker select {
-    max-width: 120px;
+}
+
+/* Narrow enough that the centred view switcher and the drawing name are
+   fighting. The name gives — the switcher is pressed constantly and the name
+   is already in the browser tab. */
+@media (max-width: 960px) {
+  .doc-pick-name {
+    max-width: 110px;
   }
+  .doc-pick-count {
+    display: none;
+  }
+  /* Measured at 768: row 2 overflowed by 47px, which is this label almost
+     exactly. The zoom percentage is already on the status bar, so showing it
+     twice was costing the − and + buttons their place on screen. */
   .zoomlabel {
-    min-width: 38px;
-    font-size: 11px;
+    display: none;
   }
-  /* Give the toolbar a row of its own rather than letting it elbow the save
-     state and the account menu onto a third row of their own — measured at
-     768px, that alone was 36px of header. */
-  .bar-main > .toolbar {
-    order: 2;
-    flex: 1 1 100%;
-    margin-left: 0;
+  .row-tools {
+    padding: 0 8px;
   }
 }
 
@@ -2220,44 +2954,44 @@ kbd {
   }
 }
 
-/* Phone and small split-screen. The sub-bar's toggles wrapped onto four rows
-   at 390px — 95px of header on an 844px screen, for controls that are all
-   secondary. One scrollable strip instead, the same shape the footer uses.
-
-   Scrolling to reach a toggle is worse than seeing it, so this stays off at
-   any width where the toggles genuinely fit. */
+/* Phone and small split-screen. At 390px the view switcher is the only thing
+   in row 1 that must keep its full form — it is how you get between the three
+   drawings-in-one that this app is. The brand mark goes, the name shrinks. */
 @media (max-width: 700px) {
-  .bar-sub {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    justify-content: flex-start;
-    scrollbar-width: none;
-  }
-  .bar-sub::-webkit-scrollbar {
+  .row-top .brand-mark {
     display: none;
   }
-  .bar-sub > .toolbar {
-    flex-wrap: nowrap;
-    flex: 0 0 auto;
-    margin-left: 0;
+  .row-top .row-left > .sep {
+    display: none;
+  }
+  .doc-pick-name {
+    max-width: 84px;
+  }
+  .seg button {
+    padding: 0 10px;
+  }
+  .statusbar {
+    gap: 10px;
   }
 }
 
 @media (max-width: 900px) {
-  /* Keep the hints available on a narrow window with a keyboard, but as one
-     scrollable row rather than three wrapped ones — they were costing 86px,
-     more than the drawing toolbar above them. */
-  .footer {
+  /* One scrollable row rather than several wrapped ones. */
+  .hintlist {
     flex-wrap: nowrap;
     overflow-x: auto;
     gap: 14px;
-    padding: 4px 10px;
     scrollbar-width: none;
   }
-  .footer::-webkit-scrollbar {
+  .hintlist::-webkit-scrollbar {
     display: none;
   }
-  .footer span {
-    flex: 0 0 auto;
+  .sync-banner,
+  .offline-banner {
+    flex-wrap: wrap;
+  }
+  .sync-banner-actions,
+  .offline-when {
+    margin-left: 0;
   }
 }

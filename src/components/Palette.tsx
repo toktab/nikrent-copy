@@ -6,6 +6,7 @@ import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { usageByMaterial } from '../lib/bom';
 import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
 import { Swatch } from './ShapeSvg';
+import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 
 /** Left-hand material palette: search, grouped list, drag source, inline stock. */
@@ -60,10 +61,6 @@ export function Palette() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="მასალის ძებნა…"
         />
-      </div>
-
-      <div className="hint">
-        გადმოათრიე მასალა ზედაპირზე. ზომები დაახლოებით სწორ მასშტაბშია (სმ).
       </div>
 
       <div className="matlist">
@@ -146,35 +143,58 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
         </div>
       </div>
 
+      {/* How short, before the stock number — the size of the gap is the thing
+          worth acting on, not the count that happens to be in the yard. */}
+      {shortage && (
+        <span className="short-delta" title={`${used - stock} ცალი აკლია`}>
+          −{used - stock}
+        </span>
+      )}
+
+      <input
+        className={`stock-input${shortage ? ' bad' : ''}`}
+        type="number"
+        min={0}
+        step={1}
+        value={stockIn(m, primaryWarehouse)}
+        title={
+          warehouses.length > 1
+            ? `მარაგი: ${warehouses[0].name} (სულ ${stock})`
+            : 'მარაგი (ცალი)'
+        }
+        disabled={!canManage}
+        onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
+      />
+
       <div className="mat-actions">
-        <input
-          className={`stock-input${shortage ? ' bad' : ''}`}
-          type="number"
-          min={0}
-          step={1}
-          value={stockIn(m, primaryWarehouse)}
-          title={
-            warehouses.length > 1
-              ? `მარაგი: ${warehouses[0].name} (სულ ${stock})`
-              : 'მარაგი (ცალი)'
-          }
-          disabled={!canManage}
-          onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
-        />
-        <button
-          className="btn icon"
-          disabled={!canManage}
-          title={canManage ? 'რედაქტირება' : ADMIN_ONLY_TITLE}
-          onClick={() => openDialog({ kind: 'material', materialId: m.id })}
-        ><Icon name="pencil" />
-        </button>
-        <button
-          className="btn icon danger"
-          disabled={!canManage}
-          title={canManage ? 'წაშლა' : ADMIN_ONLY_TITLE}
-          onClick={askDelete}
-        ><Icon name="trash" />
-        </button>
+        <Tooltip
+          label="რედაქტირება"
+          reason={canManage ? undefined : ADMIN_ONLY_TITLE}
+          icon={canManage ? undefined : 'lock'}
+        >
+          <button
+            className="btn icon ghost small"
+            disabled={!canManage}
+            aria-label={`${m.name} — რედაქტირება`}
+            onClick={() => openDialog({ kind: 'material', materialId: m.id })}
+          >
+            <Icon name="pencil" size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip
+          label="წაშლა"
+          reason={canManage ? undefined : ADMIN_ONLY_TITLE}
+          icon={canManage ? undefined : 'lock'}
+        >
+          <button
+            className="btn icon ghost small danger"
+            disabled={!canManage}
+            aria-label={`${m.name} — წაშლა`}
+            onClick={askDelete}
+          >
+            <Icon name="trash" size={14} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

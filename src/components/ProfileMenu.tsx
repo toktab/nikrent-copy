@@ -115,6 +115,7 @@ export function ProfileMenu() {
 
   return (
     <div className="profile-menu" ref={root}>
+      <span className="sep" />
       <button
         className="avatar-button"
         onClick={() => setOpen((v) => !v)}

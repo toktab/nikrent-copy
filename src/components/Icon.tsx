@@ -47,7 +47,11 @@ export type IconName =
   | 'arrow-up'
   | 'height'
   | 'dot'
-  | 'circle';
+  | 'circle'
+  | 'more'
+  | 'sliders'
+  | 'lock'
+  | 'offline';
 
 /** Path data only — stroke styling is applied once, on the <svg>. */
 const PATHS: Record<IconName, string> = {
@@ -90,10 +94,20 @@ const PATHS: Record<IconName, string> = {
   height: 'M12 4v16 M8 7l4-3 4 3 M8 17l4 3 4-3',
   dot: 'M12 12h.01',
   circle: 'M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z',
+  more: 'M5 12h.01 M12 12h.01 M19 12h.01',
+  // Three rails with three handles: settings you slide, not a list you read.
+  // A plain hamburger here would be indistinguishable from a menu.
+  sliders: 'M4 7h16 M4 12h16 M4 17h16 M9 5v4 M16 10v4 M7 15v4',
+  // Permission, not progress — carried by a padlock so read-only never rests
+  // on colour alone.
+  lock: 'M5 11h14v9H5z M8 11V7a4 4 0 0 1 8 0v4',
+  // Two arcs, a dot and the slash. A full wifi fan has five strokes that turn
+  // into grey mush at the 13px this is actually drawn at.
+  offline: 'M3 3l18 18 M12 19.5h.01 M8.4 15.9a5.5 5.5 0 0 1 6.2-1 M4.6 11.6a11 11 0 0 1 12.6-1.4',
 };
 
 /** Solid glyphs read better than strokes at this weight. */
-const FILLED: Partial<Record<IconName, boolean>> = { dot: true };
+const FILLED: Partial<Record<IconName, boolean>> = { dot: true, more: true };
 
 interface Props {
   name: IconName;

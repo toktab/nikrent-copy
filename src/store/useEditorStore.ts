@@ -8,6 +8,7 @@ import type {
   DocSnapshot,
   DrawingDoc,
   HiddenLineMode,
+  InspectorTab,
   Material,
   MaterialDraft,
   Piece,
@@ -70,6 +71,7 @@ const PREF_KEYS = [
   'hiddenLines',
   'paletteOpen',
   'inspectorOpen',
+  'inspectorTab',
 ] as const;
 
 /**
@@ -149,6 +151,9 @@ export interface EditorState {
   /** side panels can be folded away to give the canvas room on small screens */
   paletteOpen: boolean;
   inspectorOpen: boolean;
+  /** which inspector tab is showing — in the store so the shortage bar can
+      open the drawing's bill of materials on the row that is short */
+  inspectorTab: InspectorTab;
 
   // ── transient UI ──
   selectedIds: string[];
@@ -251,6 +256,7 @@ export interface EditorState {
   setHiddenLines: (mode: HiddenLineMode) => void;
   setPaletteOpen: (on: boolean) => void;
   setInspectorOpen: (on: boolean) => void;
+  setInspectorTab: (tab: InspectorTab) => void;
   setPaletteQuery: (q: string) => void;
 
   // ── actions: catalog ──
@@ -386,6 +392,7 @@ export const useEditorStore = create<EditorState>()(
         // Start folded on a phone-ish window so the canvas is usable at all.
         paletteOpen: typeof window === 'undefined' || window.innerWidth > 900,
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
+        inspectorTab: 'bom',
 
         selectedIds: [],
         clipboard: [],
@@ -1000,6 +1007,7 @@ export const useEditorStore = create<EditorState>()(
         setHiddenLines: (mode) => set({ hiddenLines: mode }),
         setPaletteOpen: (on) => set({ paletteOpen: on }),
         setInspectorOpen: (on) => set({ inspectorOpen: on }),
+        setInspectorTab: (tab) => set({ inspectorTab: tab }),
         setPaletteQuery: (q) => set({ paletteQuery: q }),
 
         // ── catalog ───────────────────────────────────────────────────────

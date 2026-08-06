@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { DetailsPanel } from './DetailsPanel';
@@ -6,13 +6,13 @@ import { BomPanel } from './BomPanel';
 import { InventoryPanel } from './InventoryPanel';
 import { Icon } from './Icon';
 
-type Tab = 'details' | 'bom' | 'inventory';
-
 /** Right-hand inspector with the three working views. */
 export function SidePanel() {
-  const [tab, setTab] = useState<Tab>('bom');
+  const tab = useEditorStore((s) => s.inspectorTab);
+  const setTab = useEditorStore((s) => s.setInspectorTab);
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
+  const selectedIds = useEditorStore((s) => s.selectedIds);
   const shortages = useMemo(() => buildBom(materials, pieces).shortageCount, [materials, pieces]);
 
   const setInspectorOpen = useEditorStore((s) => s.setInspectorOpen);
@@ -20,18 +20,37 @@ export function SidePanel() {
   return (
     <aside className="inspector">
       <div className="panel-head">
-        <button className="btn icon" title="დაკეცვა" onClick={() => setInspectorOpen(false)}><Icon name="chevron-right" />
+        <button
+          className="btn icon ghost small"
+          title="დაკეცვა"
+          aria-label="პანელის დაკეცვა"
+          onClick={() => setInspectorOpen(false)}
+        >
+          <Icon name="chevron-right" />
         </button>
       </div>
-      <div className="tabs">
-        <button className={tab === 'details' ? 'tab active' : 'tab'} onClick={() => setTab('details')}>
+      <div className="tabs" role="tablist">
+        <button
+          className={tab === 'details' ? 'tab active' : 'tab'}
+          role="tab"
+          aria-selected={tab === 'details'}
+          onClick={() => setTab('details')}
+        >
           დეტალები
+          {selectedIds.length > 0 && <span className="tab-badge sel">{selectedIds.length}</span>}
         </button>
-        <button className={tab === 'bom' ? 'tab active' : 'tab'} onClick={() => setTab('bom')}>
+        <button
+          className={tab === 'bom' ? 'tab active' : 'tab'}
+          role="tab"
+          aria-selected={tab === 'bom'}
+          onClick={() => setTab('bom')}
+        >
           უწყისი
         </button>
         <button
           className={tab === 'inventory' ? 'tab active' : 'tab'}
+          role="tab"
+          aria-selected={tab === 'inventory'}
           onClick={() => setTab('inventory')}
         >
           მარაგი

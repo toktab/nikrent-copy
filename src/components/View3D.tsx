@@ -31,6 +31,7 @@ import {
 } from '../lib/raster3d';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { Icon } from './Icon';
+import { EmptyDrawing } from './EmptyDrawing';
 
 /** Darken/lighten a #rrggbb by a 0..1+ factor. */
 function shade(hex: string, factor: number): Rgb {
@@ -440,12 +441,11 @@ export function View3D() {
     };
 
     const bounds = contentBounds3(pieces, byId);
+    // Nothing to draw. The empty state is real DOM overlaid on the canvas
+    // rather than canvas text, so it can offer the wizards as buttons — and so
+    // it says the same thing in the same shape as the 2D surface does.
     if (!bounds) {
       pickMap.current = [];
-      ctx.fillStyle = '#9aa4b1';
-      ctx.font = '14px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('ზედაპირი ცარიელია — 2D-ში განათავსე მასალა', size.w / 2, size.h / 2);
       return;
     }
 
@@ -526,6 +526,8 @@ export function View3D() {
         style={{ width: size.w, height: size.h, display: 'block', touchAction: 'none' }}
         onPointerDown={onPointerDown}
       />
+
+      {pieces.length === 0 && <EmptyDrawing />}
 
       <div className="view3d-bar">
         <button className="btn small" onClick={fit} disabled={!hasPieces} title="ჩატევა"><Icon name="fit" /> ცენტრი

@@ -31,7 +31,7 @@ export function BrandMark({ size = 24, onLight = false, flat = false, className 
       viewBox="0 0 100 100"
       width={size}
       height={size}
-      className={className}
+      className={className ? `brand-mark ${className}` : 'brand-mark'}
       aria-hidden="true"
       focusable="false"
       style={{ display: 'block', flex: '0 0 auto' }}
