@@ -17,9 +17,11 @@ import {
   planH,
   planW,
   snapValue,
+  unionRect,
   WORLD_H,
   WORLD_W,
 } from '../lib/geometry';
+import { componentThatFits, nearestGap } from '../lib/gap';
 import {
   depthRanks,
   isElevation,
@@ -132,6 +134,34 @@ export function StageCanvas() {
     () => depthRanks(pieces, byId, surfaceView),
     [pieces, byId, surfaceView],
   );
+
+  /**
+   * The leftover beside whatever is selected.
+   *
+   * This is the number that decides a formwork run — you butt panels along a
+   * wall until they stop fitting, and what is left has to be closed with a
+   * filler or cut on site. Derived rather than tracked, so it is there while
+   * dragging and still there after letting go.
+   */
+  const nonNull = <T,>(r: T | null): r is T => r !== null;
+  const gap = useMemo(() => {
+    if (!selectedIds.length) return null;
+    const project = (p: Piece) => {
+      const m = byId.get(p.materialId);
+      // The real height rides along: a plan view projects a 90×300 panel to
+      // 90×9, so the 300 that decides whether a filler actually closes the
+      // hole is nowhere in the footprint.
+      return m ? { ...projectPiece(p, m, surfaceView), heightCm: m.h } : null;
+    };
+    const movingBox = unionRect(
+      pieces.filter((p) => selected.has(p.id)).map(project).filter(nonNull),
+    );
+    if (!movingBox) return null;
+    const targets = pieces.filter((p) => !selected.has(p.id)).map(project).filter(nonNull);
+    const found = nearestGap(movingBox, targets);
+    if (!found) return null;
+    return { ...found, fill: componentThatFits(found.size, materials, found.againstHeight) };
+  }, [pieces, selected, selectedIds.length, byId, materials, surfaceView]);
 
   // ── Keep the store's idea of the viewport size in sync ────────────────────
   useEffect(() => {
@@ -665,6 +695,23 @@ export function StageCanvas() {
       {/* Labels are measured off the plan footprint, so they would sit in the
           wrong place over an elevation. */}
       {!elevation && <LabelLayer />}
+
+      {/* The leftover, in screen space so it stays legible at any zoom. Amber,
+          because an unclosed gap is provisional — the drawing is not finished
+          while it is there. */}
+      {gap && (
+        <div
+          className="gap-chip"
+          style={{ left: gap.u * zoom + panX, top: gap.v * zoom + panY }}
+        >
+          <b>{Math.round(gap.size * 10) / 10} სმ</b>
+          {gap.fill ? (
+            <span className="gap-fill">{gap.fill}</span>
+          ) : (
+            <span className="gap-cut">ზუსტი ზომა კატალოგში არაა</span>
+          )}
+        </div>
+      )}
 
       {/* Alignment guides from edge snapping, drawn in screen space. */}
       {guideX !== null && (

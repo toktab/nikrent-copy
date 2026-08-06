@@ -1098,11 +1098,25 @@ export const useEditorStore = create<EditorState>()(
       // With a backend, only preferences are kept locally, and under their own
       // key — see PREFS_KEY for why sharing the old one would destroy data.
       name: isConfigured ? PREFS_KEY : STORAGE_KEY,
-      version: 3,
+      version: 4,
       storage: safeStorage,
       // v2 stored a single top-level `pieces` array instead of named drawings.
-      // `merge` normalises either shape, so migration just passes state through.
-      migrate: (persisted) => persisted as Partial<EditorState>,
+      // `merge` normalises either shape, so migration mostly passes through.
+      migrate: (persisted) => {
+        const state = persisted as Partial<EditorState> | undefined;
+        if (!state) return {};
+        // v3 offered 10 cm and 25 cm grid steps. The panels are 30/45/60/75/90,
+        // whose common module is 15: a 25 cm grid lands one of those five on a
+        // grid line and 10 lands three, so both spent most of their time
+        // pulling panels off the joints they were meant to butt against. Anyone
+        // still on one moves to the nearest step that the catalog divides into.
+        const remap: Record<number, number> = { 10: 15, 25: 30 };
+        const step = state.snapStep;
+        if (typeof step === 'number' && remap[step]) {
+          return { ...state, snapStep: remap[step] };
+        }
+        return state;
+      },
       /**
        * The persist middleware swallows anything `merge` throws: the store is
        * left on its empty defaults and the next autosave writes those over the

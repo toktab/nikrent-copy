@@ -504,6 +504,21 @@ input[type='color'] {
   display: inline-flex;
   flex: 0 0 auto;
 }
+/* A quiet aside on a menu row — why this one is the sensible pick. */
+.menu-note {
+  margin-left: 8px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+/* The grid step, shown on the snap button only while there is a grid. */
+.snap-step {
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 .menu.right {
   right: 0;
 }
@@ -1119,6 +1134,42 @@ input[type='color'] {
 .drop-ghost .shape {
   width: 100%;
   height: 100%;
+}
+
+/* ------------------------------------------------------------------ the gap
+   The leftover between the selection and its neighbour: the number a formwork
+   run is decided by, and the one thing this drawing never told anyone. Amber,
+   because an open gap is provisional — the drawing is not done while it is
+   there. Screen space, so it stays legible at any zoom, and centred on the gap
+   itself so it reads as a dimension rather than a notification. */
+.gap-chip {
+  position: absolute;
+  z-index: 40;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 4px 9px;
+  border-radius: var(--r-sm);
+  background: rgba(30, 34, 40, 0.94);
+  border: 1px solid rgba(239, 168, 49, 0.5);
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.7);
+  font-size: 11.5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.gap-chip b {
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
+}
+/* Something in the catalog closes it exactly — the good outcome. */
+.gap-fill {
+  color: var(--ok);
+}
+/* Nothing does, so this one gets cut on site. Worth knowing before the lorry
+   is loaded, not after. */
+.gap-cut {
+  color: var(--text-tertiary);
 }
 
 /* edge-snap alignment guides */

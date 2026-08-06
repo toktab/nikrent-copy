@@ -19,7 +19,38 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 
-const SNAP_STEPS = [1, 5, 10, 25];
+/**
+ * Grid steps that match the catalog.
+ *
+ * The panels are 30 / 45 / 60 / 75 / 90 cm, whose common module is 15. The old
+ * list offered 10 and 25: a 25 cm grid lands only one of the five panel widths
+ * on a grid line, and 10 lands three. Both spent most of their time pulling
+ * panels off the joints they were supposed to butt against.
+ */
+const SNAP_STEPS = [1, 5, 15, 30];
+
+/**
+ * Snapping, as one choice rather than two independent switches.
+ *
+ * Edge is the default and very nearly always the right answer: formwork is not
+ * laid out on a grid, it is parts butting against parts, and an absolute grid
+ * stops being true the moment a 24 cm corner or a 5 cm filler enters the run —
+ * everything after it sits permanently off-grid. The grid earns its place for
+ * one job only, setting the first pieces out on the building's axes.
+ */
+type SnapMode = 'edge' | 'grid' | 'off';
+
+const SNAP_LABEL: Record<SnapMode, string> = {
+  edge: 'კიდეზე',
+  grid: 'ბადეზე',
+  off: 'გამორთ.',
+};
+
+const SNAP_HINT: Record<SnapMode, string> = {
+  edge: 'პანელები ეკვრება მეზობლის კიდეს — ფორმვორკისთვის ეს სჭირდება',
+  grid: 'ბადეზეც და კიდეზეც — ღერძებზე გასატანად',
+  off: 'თავისუფალი განთავსება',
+};
 
 export function Header() {
   const snap = useEditorStore((s) => s.snap);
@@ -70,6 +101,16 @@ export function Header() {
   const hasSelection = selectedIds.length > 0;
   const [printing, setPrinting] = useState(false);
   const activeDoc = documents.find((d) => d.id === activeDocId);
+
+  // Two booleans, one choice. Grid keeps edge snapping on underneath it —
+  // within 8 screen pixels of a neighbour you always want the joint, whatever
+  // the grid says, and there is no reading of "grid, and also let panels miss
+  // each other by 3 cm" that anyone wants.
+  const snapMode: SnapMode = snap ? 'grid' : edgeSnap ? 'edge' : 'off';
+  const setSnapMode = (mode: SnapMode) => {
+    setSnap(mode === 'grid');
+    setEdgeSnap(mode !== 'off');
+  };
 
   /** Scaled, dimensioned drawing sheet with the title block. */
   const printDrawing = async () => {
@@ -394,37 +435,52 @@ export function Header() {
 
         <span className="sep" />
 
-        <button
-          className={`btn${snap ? ' active' : ''}`}
-          onClick={() => setSnap(!snap)}
-          aria-pressed={snap}
-          title="ბადეზე მიბმა"
-        >
-          <Icon name="grid" /> მიბმა: <b>{snap ? 'ჩართ.' : 'გამ.'}</b>
-        </button>
-
         <Menu
           trigger={(open) => (
-            <button className={`btn${open ? ' active' : ''}`} title="ბადის ბიჯი">
-              {snapStep} სმ <Icon name="chevron-down" size={12} />
+            <button className={`btn${open ? ' active' : ''}`} title={SNAP_HINT[snapMode]}>
+              <Icon name="grid" /> მიბმა: <b>{SNAP_LABEL[snapMode]}</b>
+              {snapMode === 'grid' && <span className="snap-step">{snapStep} სმ</span>}
+              <Icon name="chevron-down" size={12} />
             </button>
           )}
         >
           {(close) => (
             <>
-              <MenuLabel>ბადის ბიჯი</MenuLabel>
-              {SNAP_STEPS.map((s) => (
+              <MenuLabel>მიბმა</MenuLabel>
+              {(['edge', 'grid', 'off'] as SnapMode[]).map((mode) => (
                 <MenuItem
-                  key={s}
-                  on={s === snapStep}
+                  key={mode}
+                  on={mode === snapMode}
+                  title={SNAP_HINT[mode]}
                   onClick={() => {
-                    setSnapStep(s);
-                    close();
+                    setSnapMode(mode);
+                    if (mode !== 'grid') close();
                   }}
                 >
-                  {s} სმ
+                  {SNAP_LABEL[mode]}
                 </MenuItem>
               ))}
+              {/* Only when there is a grid to have a step. */}
+              {snapMode === 'grid' && (
+                <>
+                  <MenuSep />
+                  <MenuLabel>ბადის ბიჯი</MenuLabel>
+                  {SNAP_STEPS.map((s) => (
+                    <MenuItem
+                      key={s}
+                      on={s === snapStep}
+                      onClick={() => {
+                        setSnapStep(s);
+                        close();
+                      }}
+                    >
+                      {s} სმ
+                      {/* The one step every panel width divides into. */}
+                      {s === 15 && <span className="menu-note">პანელის მოდული</span>}
+                    </MenuItem>
+                  ))}
+                </>
+              )}
             </>
           )}
         </Menu>
@@ -452,14 +508,9 @@ export function Header() {
               ყოველთვის
             </MenuItem>
             <MenuSep />
-            <MenuLabel>დახმარება</MenuLabel>
-            <MenuItem
-              on={edgeSnap}
-              onClick={() => setEdgeSnap(!edgeSnap)}
-              title="მიბმა მეზობელი ელემენტის კიდეზე — პანელები ზუსტად ეკვრება ერთმანეთს"
-            >
-              კიდეზე მიბმა
-            </MenuItem>
+            <MenuLabel>შემოწმება</MenuLabel>
+            {/* Edge snapping used to live here as a third toggle. It is the
+                snap control now — it was never a display option. */}
             <MenuItem
               on={showOverlaps}
               onClick={() => setShowOverlaps(!showOverlaps)}
