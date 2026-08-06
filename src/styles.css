@@ -1,23 +1,50 @@
 /* ============================================================================
-   Du formwork editor — dark UI. Colour tokens carried over from the v1
-   prototype so the look is unchanged.
+   კუბი — dark UI.
+
+   The neutrals were already right: a cool, quiet scale that lets coloured
+   components read as objects on it. Everything else was overloaded.
+
+   One amber was doing selection, primary action AND the height marker, which
+   produced the bug that started this: a selected wall was outlined in the same
+   amber as its own panel material, so the selection barely read against the
+   thing it was selecting. Selection now has its own hue, and amber keeps
+   exactly one job — provisional.
+
+   Six real states exist in this app — saved, unsaved, failed, conflict,
+   shortage, read-only — and they were sharing three colours. Conflict and
+   shortage now have their own rather than borrowing red.
    ========================================================================== */
 :root {
+  /* neutrals */
   --bg: #1e2228;
+  --surface: #20252b;
   --panel: #272c33;
   --panel2: #2f353d;
   --line: #3a424c;
+  --line-strong: #4a5460;
   --text: #e6e9ee;
   --muted: #9aa4b1;
-  --accent: #f5a623;
+  --text-tertiary: #7a8391;
+
+  /* brand */
+  --accent: #70a6f5; /* primary action, links, focus, selection */
+  /* Material colour for rebar and steel — never UI chrome. It was never the
+     problem, so it is unchanged. */
   --accent2: #4a90e2;
-  --sel: #f5a623;
+  --sel: var(--accent);
+
+  /* the six states */
+  --ok: #71c575; /* saved */
+  --warn: #efa831; /* unsaved · provisional · measurement */
+  --bad: #f66d67; /* failed */
+  --conflict: #c188ea; /* someone else edited this drawing */
+  --shortage: #fd8358; /* inventory cannot cover the drawing */
+  /* Never colour alone — always paired with an icon and a reason. */
+  --readonly: var(--muted);
+
+  --badBg: #40282a;
   --grid: #333b45;
   --gridMajor: #454f5b;
-  --surface: #20252b;
-  --bad: #e06c6c;
-  --badBg: #40282a;
-  --ok: #7fc08a;
 }
 
 * {
@@ -28,11 +55,31 @@ html,
 body {
   margin: 0;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans Georgian', Arial,
-    sans-serif;
+  /* Georgian first: the interface is Georgian, so the face that draws it leads
+     and Noto Sans handles Latin and punctuation on the same skeleton. The
+     system stack stays behind them as a fallback for a cold cache. */
+  font-family: 'Noto Sans Georgian', 'Noto Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Arial, sans-serif;
+  /* Tracking that flatters Latin distorts Mkhedruli, so it stays at zero. */
+  letter-spacing: 0;
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+}
+
+/**
+ * Numbers stack in columns all over this app — quantities, stock, balance,
+ * dimensions — and proportional figures make a column of them ragged and
+ * genuinely harder to compare. Tabular figures everywhere numeric.
+ */
+input[type='number'],
+.zoomlabel,
+.users-table td,
+.bom-row,
+.kv b,
+code,
+kbd {
+  font-variant-numeric: tabular-nums;
 }
 
 #root {
@@ -74,13 +121,18 @@ body {
   font-weight: 600;
 }
 .btn.primary {
-  background: var(--accent2);
-  border-color: var(--accent2);
-  color: #fff;
+  /* Was accent2, which is a material colour for rebar and steel — it has no
+     business being UI chrome. Primary action is the accent, like every other
+     action in the app. Dark ink on it, because the accent is light enough that
+     white text on it fails contrast. */
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #12161c;
   font-weight: 600;
 }
 .btn.primary:hover:not(:disabled) {
-  background: #5b9ce6;
+  background: #8ab8f7;
+  border-color: #8ab8f7;
 }
 .btn.danger:hover:not(:disabled) {
   background: #7a2b2b;
@@ -161,14 +213,15 @@ input[type='color'] {
   justify-content: space-between;
 }
 .header h1 {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
   margin: 0;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  font-weight: 700;
+  /* Zero, not 0.2px — Mkhedruli does not take tracking the way Latin does. */
+  letter-spacing: 0;
   white-space: nowrap;
-}
-.header h1 span {
-  color: var(--accent);
 }
 .toolbar {
   display: flex;
@@ -292,9 +345,11 @@ input[type='color'] {
   padding: 6px 14px;
 }
 .shortage-badge {
-  background: var(--badBg);
-  border: 1px solid var(--bad);
-  color: #ffb3b3;
+  /* Not a failure — the drawing is fine, the yard is short. Its own hue, so it
+     cannot be mistaken for something that went wrong. */
+  background: #3a2620;
+  border: 1px solid var(--shortage);
+  color: var(--shortage);
   font-size: 11px;
   font-weight: 600;
   padding: 3px 9px;
@@ -424,7 +479,10 @@ input[type='color'] {
   border-color: var(--line);
 }
 .mat.shortage {
-  background: rgba(224, 108, 108, 0.09);
+  /* The component is fine and the drawing is fine — there just are not enough
+     of them in the yard. Shortage has its own hue so it never reads as an
+     error the way borrowed red did. */
+  background: rgba(253, 131, 88, 0.1);
 }
 .mat-drag {
   display: flex;
@@ -573,7 +631,8 @@ input[type='color'] {
   left: 0;
   top: 0;
   height: 0;
-  border-top: calc(2px / var(--z, 1)) solid var(--accent);
+  /* A datum, not a selection — amber, with the height marker it belongs to. */
+  border-top: calc(2px / var(--z, 1)) solid var(--warn);
   opacity: 0.75;
   pointer-events: none;
   z-index: 1;
@@ -601,7 +660,8 @@ input[type='color'] {
   transform-origin: center center;
   opacity: 0.5;
   pointer-events: none;
-  outline: calc(1.5px / var(--z, 1)) dashed var(--accent);
+  /* A piece that is not placed yet — the definition of provisional. */
+  outline: calc(1.5px / var(--z, 1)) dashed var(--warn);
   z-index: 30;
 }
 .ghost .shape {
@@ -630,8 +690,9 @@ input[type='color'] {
 /* rubber-band selection */
 .marquee {
   position: absolute;
+  /* A rubber band is selection, so it follows the selection colour. */
   border: 1px solid var(--accent);
-  background: rgba(245, 166, 35, 0.12);
+  background: rgba(112, 166, 245, 0.14);
   pointer-events: none;
   z-index: 45;
 }
@@ -979,8 +1040,8 @@ input[type='color'] {
   color: var(--muted);
 }
 .bom-table tr.short td {
-  background: var(--badBg);
-  color: #ffc2c2;
+  background: #3a2620;
+  color: var(--shortage);
 }
 .bom-name {
   display: block;
@@ -1570,8 +1631,11 @@ kbd {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  background: var(--badBg);
-  border: 1px solid var(--bad);
+  /* Nothing failed — someone else got there first, and there is a choice to
+     make. Its own hue keeps it out of the vocabulary of errors. */
+  background: #30253a;
+  border: 1px solid var(--conflict);
+  color: var(--conflict);
   border-radius: 6px;
   padding: 4px 8px;
   white-space: nowrap;

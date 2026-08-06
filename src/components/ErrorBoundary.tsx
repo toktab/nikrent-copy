@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
       const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'du-formwork-backup.json';
+      a.download = 'kubi-backup.json';
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {

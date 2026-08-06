@@ -13,7 +13,7 @@
  */
 export const ka = {
   // ── sign in ──
-  'auth.appName': 'Du ფორმვორკის რედაქტორი',
+  'auth.appName': 'კუბი',
   'auth.signInHint': 'შესასვლელად გამოიყენე სამუშაო ელფოსტა',
   'auth.recoverHint': 'შეიყვანე ელფოსტა და გამოგიგზავნით აღდგენის ბმულს',
   'auth.email': 'ელფოსტა',

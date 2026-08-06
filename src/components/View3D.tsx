@@ -40,8 +40,15 @@ function shade(hex: string, factor: number): Rgb {
   return { r: channel(16), g: channel(8), b: channel(0) };
 }
 
-const ACCENT = { r: 245, g: 166, b: 35 };
-const ACCENT_CSS = '#f5a623';
+/**
+ * Selection and measurement are two different things and used to share one
+ * colour, which is how a selected wall ended up outlined in the same amber as
+ * its own panel material. Selection is the accent; the height marker stays
+ * amber, where it belongs with the ground line.
+ */
+const ACCENT = { r: 112, g: 166, b: 245 };
+const ACCENT_CSS = '#70a6f5';
+const MEASURE_CSS = '#efa831';
 
 /** Pull a colour toward the accent so a selected piece reads at a glance. */
 function tint(base: Rgb, amount: number): Rgb {
@@ -631,7 +638,7 @@ function drawEdges(
   }
 
   if (mode === 'dashed' && hidden.length) {
-    ctx.strokeStyle = colour === ACCENT_CSS ? 'rgba(245,166,35,.5)' : 'rgba(190,201,214,.42)';
+    ctx.strokeStyle = colour === ACCENT_CSS ? 'rgba(112,166,245,.5)' : 'rgba(190,201,214,.42)';
     ctx.setLineDash([3, 4]);
     stroke(hidden);
     ctx.setLineDash([]);
@@ -685,7 +692,7 @@ function drawHeightMarker(
   const base = toScreen({ ...at, z: 0 });
   const top = toScreen({ ...at, z: bounds.max.z });
 
-  ctx.strokeStyle = 'rgba(245,166,35,.85)';
+  ctx.strokeStyle = 'rgba(239,168,49,.85)';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([]);
   ctx.beginPath();
@@ -700,7 +707,7 @@ function drawHeightMarker(
     ctx.stroke();
   }
 
-  ctx.fillStyle = '#f5a623';
+  ctx.fillStyle = MEASURE_CSS;
   ctx.font = '600 12px -apple-system, "Segoe UI", "Noto Sans Georgian", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';

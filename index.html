@@ -4,16 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Named for what it does now: this began as a column tool and has since
-         grown walls, elevations and a 3D view. Matches the wordmark in the
-         header, so the tab and the app agree. -->
-    <title>Du ფორმვორკი</title>
+    <!-- კუბი — the unit the business is measured in. Concrete is ordered,
+         poured and billed by the cubic metre. The old name was a formwork
+         manufacturer's, which put a ceiling on a catalog that already takes
+         other suppliers' components. -->
+    <title>კუბი</title>
     <meta name="description" content="ყალიბის დაგეგმვა, უწყისი და მარაგი" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- Without this a phone or tablet paints its own light surround, which
          flashes on load and frames a dark app in white. -->
     <meta name="theme-color" content="#20252b" />
+
+    <!-- A real Georgian cut, not a Latin face falling back to whatever the
+         system happens to have. Noto Sans Georgian and Noto Sans are drawn by
+         the same team on the same skeleton, which matters here because
+         Georgian text and Latin numerals sit side by side constantly —
+         "პანელი 45×300 სმ".
+
+         preconnect because these are on the critical path: the UI is dense and
+         a late swap reflows every panel at once. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Georgian:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
 
     <!-- A drawing is company data. Nothing here should be indexed, and no
          address should travel out in a referrer header. -->

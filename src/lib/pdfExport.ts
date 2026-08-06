@@ -74,7 +74,7 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
   return `
   <div class="doc">
     <header>
-      <h1>${esc(title ?? 'Du ფორმვორკი — მასალების უწყისი')}</h1>
+      <h1>${esc(title ?? 'კუბი — მასალების უწყისი')}</h1>
       <div class="meta">თარიღი: ${esc(date)}</div>
     </header>
 

@@ -11,6 +11,7 @@ import { pickFile, readFileAsText } from '../lib/files';
 import { combo } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
+import { BrandMark } from './BrandMark';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { ProfileMenu } from './ProfileMenu';
@@ -189,7 +190,8 @@ export function Header() {
     <header className="header">
       <div className="bar bar-main">
         <h1>
-          <span>Du</span> ფორმვორკი
+          <BrandMark size={18} />
+          კუბი
         </h1>
 
         <div className="doc-picker">

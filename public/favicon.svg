@@ -1,16 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <!--
-    Formwork seen head-on: panels standing side by side, banded by a waler.
+    კუბი — the app's own geometry. An isometric cube is three rhombi meeting
+    at a corner, which is exactly how the 3D view projects a panel.
 
-    Drawn heavy and with only three elements because a favicon is read at
-    16px, where the app's 2px-stroke icon set turns to grey mush. Solid
-    shapes survive that; outlines do not.
+    A single silhouette rather than the three-facet mark: at 16px the internal
+    seams close up into mush, so the favicon drops to the outline the facets
+    add up to. The tile is self-contained so it holds on any browser theme.
   -->
-  <rect width="64" height="64" rx="12" fill="#20252b"/>
-  <g fill="#f5a623">
-    <rect x="14" y="12" width="9" height="40" rx="1.5"/>
-    <rect x="27.5" y="12" width="9" height="40" rx="1.5"/>
-    <rect x="41" y="12" width="9" height="40" rx="1.5"/>
-  </g>
-  <rect x="9" y="27" width="46" height="8" rx="2" fill="#6ea8d8"/>
+  <rect x="4" y="4" width="92" height="92" rx="18" fill="#1e2228"></rect>
+  <path d="M50,18 L80,35 L80,69 L50,86 L20,69 L20,35 Z" fill="#e6e9ee"></path>
 </svg>
