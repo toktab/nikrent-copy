@@ -21,9 +21,10 @@ import {
   WORLD_H,
   WORLD_W,
 } from '../lib/geometry';
-import { componentThatFits, nearestGap } from '../lib/gap';
+import { componentThatFits, isFace, nearestGap } from '../lib/gap';
 import {
   depthRanks,
+  hiddenSpan,
   isElevation,
   projectPiece,
   VIEW_HINT,
@@ -146,22 +147,52 @@ export function StageCanvas() {
   const nonNull = <T,>(r: T | null): r is T => r !== null;
   const gap = useMemo(() => {
     if (!selectedIds.length) return null;
+
+    // Only the face. A waler crossing behind a panel, a tie rod through it, a
+    // prop holding it up — none of those leave a hole the concrete escapes
+    // through, so the clear air between them and a panel is not a gap and must
+    // not be offered a filler.
     const project = (p: Piece) => {
       const m = byId.get(p.materialId);
-      // The real height rides along: a plan view projects a 90×300 panel to
-      // 90×9, so the 300 that decides whether a filler actually closes the
-      // hole is nowhere in the footprint.
-      return m ? { ...projectPiece(p, m, surfaceView), heightCm: m.h } : null;
+      if (!isFace(m) || !m) return null;
+      // The real height and the depth away from the camera both ride along:
+      // a plan view projects a 90×300 panel to 90×9, so neither the 300 that
+      // decides whether a filler fits nor the lift it stands on survives the
+      // projection.
+      return {
+        ...projectPiece(p, m, surfaceView),
+        heightCm: m.h,
+        span: hiddenSpan(p, m, surfaceView),
+      };
     };
-    const movingBox = unionRect(
-      pieces.filter((p) => selected.has(p.id)).map(project).filter(nonNull),
-    );
+
+    const movingParts = pieces.filter((p) => selected.has(p.id)).map(project).filter(nonNull);
+    const movingBox = unionRect(movingParts);
     if (!movingBox) return null;
+    // The union of several courses spans all of them, which would defeat the
+    // same-course test — so a multi-piece selection only reports a gap when it
+    // sits on one course.
+    const span: [number, number] = [
+      Math.min(...movingParts.map((r) => r.span[0])),
+      Math.max(...movingParts.map((r) => r.span[1])),
+    ];
+
+    // In plan, only along the face. The long side of the footprint is the face
+    // the concrete sees; the short side is its 9 cm thickness, and whatever
+    // sits across that is the opposite side of the same wall. An elevation
+    // shows the silhouette instead, where beside means the next panel in the
+    // run and above means the next course — both real, so neither is excluded.
+    const faceAxis: 'u' | 'v' | undefined = elevation
+      ? undefined
+      : movingBox.w >= movingBox.h
+        ? 'u'
+        : 'v';
+
     const targets = pieces.filter((p) => !selected.has(p.id)).map(project).filter(nonNull);
-    const found = nearestGap(movingBox, targets);
+    const found = nearestGap({ ...movingBox, span, faceAxis }, targets);
     if (!found) return null;
     return { ...found, fill: componentThatFits(found.size, materials, found.againstHeight) };
-  }, [pieces, selected, selectedIds.length, byId, materials, surfaceView]);
+  }, [pieces, selected, selectedIds.length, byId, materials, surfaceView, elevation]);
 
   // ── Keep the store's idea of the viewport size in sync ────────────────────
   useEffect(() => {
@@ -708,7 +739,9 @@ export function StageCanvas() {
           {gap.fill ? (
             <span className="gap-fill">{gap.fill}</span>
           ) : (
-            <span className="gap-cut">ზუსტი ზომა კატალოგში არაა</span>
+            /* Nothing in the catalog is this wide (or the only candidates are
+               wider than the hole, which is the same answer on site). */
+            <span className="gap-cut">ზომაზე ჩამოსაჭრელია</span>
           )}
         </div>
       )}

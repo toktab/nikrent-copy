@@ -55,12 +55,60 @@ describe('nearestGap', () => {
     expect(nearestGap(rect(0, 0, 90, 300), [rect(90, 0, 90, 300)])).toBeNull();
   });
 
+  // The one that got through the first time: a touching neighbour was discarded
+  // as "not a gap", so the panel beyond it won and the drawing reported a 90 cm
+  // hole measured straight through the panel in between.
+  it('does not measure through the panel next to it', () => {
+    const run = [rect(90, 0, 90, 300), rect(180, 0, 90, 300), rect(270, 0, 90, 300)];
+    expect(nearestGap(rect(0, 0, 90, 300), run)).toBeNull();
+  });
+
+  it('reports the leftover at the end of a butted run', () => {
+    const run = [rect(90, 0, 90, 300), rect(180, 0, 90, 300), rect(405, 0, 45, 300)];
+    // 270 is the last butted panel; the next thing is 45 cm past its end.
+    expect(nearestGap(rect(270, 0, 90, 300), run)?.size).toBe(45);
+  });
+
   it('does not call an overlap a gap', () => {
     expect(nearestGap(rect(0, 0, 90, 300), [rect(80, 0, 90, 300)])).toBeNull();
   });
 
   it('ignores a neighbour too far away to be a joint', () => {
     expect(nearestGap(rect(0, 0, 90, 300), [rect(900, 0, 90, 300)], 400)).toBeNull();
+  });
+
+  // In plan a panel on the ground and one on the next lift have the same
+  // footprint, so without the third dimension the clear air between two courses
+  // reads as a hole in a wall.
+  it('does not measure between two different courses', () => {
+    const onGround = { ...rect(0, 0, 90, 9), span: [0, 300] as [number, number] };
+    const nextLift = { ...rect(135, 0, 90, 9), span: [300, 600] as [number, number] };
+    expect(nearestGap(onGround, [nextLift])).toBeNull();
+  });
+
+  // In plan a panel is 90 wide and 9 thick. What sits beyond its length is the
+  // next panel in the run; what sits across its thickness is the far side of
+  // the same wall, and the distance between them is the concrete.
+  it('does not measure across the thickness of a wall', () => {
+    const face = { ...rect(0, 0, 90, 9), faceAxis: 'u' as const };
+    const farSide = rect(0, 36, 90, 9);
+    expect(nearestGap(face, [farSide])).toBeNull();
+  });
+
+  it('still measures along the run when the face axis is set', () => {
+    const face = { ...rect(0, 0, 90, 9), faceAxis: 'u' as const };
+    expect(nearestGap(face, [rect(135, 0, 90, 9)])?.size).toBe(45);
+  });
+
+  it('measures both ways in an elevation, where above is the next course', () => {
+    const silhouette = rect(0, -300, 90, 300);
+    expect(nearestGap(silhouette, [rect(0, -620, 90, 300)])?.axis).toBe('v');
+  });
+
+  it('still measures between two pieces on the same course', () => {
+    const a = { ...rect(0, 0, 90, 9), span: [0, 300] as [number, number] };
+    const b = { ...rect(135, 0, 90, 9), span: [0, 300] as [number, number] };
+    expect(nearestGap(a, [b])?.size).toBe(45);
   });
 });
 
@@ -95,6 +143,28 @@ describe('componentThatFits', () => {
 
   it('offers nothing when the gap has to be cut on site', () => {
     expect(componentThatFits(37, catalog)).toBeUndefined();
+  });
+
+  // The bug this file was reopened for: a 10 cm filler was offered to close a
+  // 9.7 cm hole, because the tolerance was symmetric. Steel-framed ply does not
+  // compress — a part wider than the gap is a wasted trip to the yard.
+  it('never offers a component wider than the gap', () => {
+    expect(componentThatFits(9.7, catalog, 300)).toBeUndefined();
+    expect(componentThatFits(9.9, catalog, 300)).toBeUndefined();
+  });
+
+  it('accepts a hair of arithmetic noise off a drag', () => {
+    expect(componentThatFits(9.95, catalog, 300)).toBe('ჩაკერება 10*300');
+    expect(componentThatFits(10.1, catalog, 300)).toBe('ჩაკერება 10*300');
+  });
+
+  it('takes a component slightly narrower than the gap', () => {
+    expect(componentThatFits(10.4, catalog, 300)).toBe('ჩაკერება 10*300');
+  });
+
+  // An L cannot close a straight run; it belongs where two faces meet.
+  it('does not offer a corner as a fill', () => {
+    expect(componentThatFits(10, [mat('გარე კუთხე', 10, 'corner')])).toBeUndefined();
   });
 
   // A waler is not a face — it never closes a gap in the formwork skin, so it

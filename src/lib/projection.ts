@@ -67,6 +67,24 @@ export function projectPiece(piece: Piece, m: Material, view: ViewAxis): Rect {
 }
 
 /**
+ * How far a piece reaches along the axis the view is looking down.
+ *
+ * The projected rectangle deliberately throws this away — that is what makes a
+ * view a view. But two pieces that merely look adjacent on screen may be a
+ * whole lift apart: in plan, a panel on the ground and one three metres up
+ * occupy the same footprint. Anything reasoning about real neighbours needs
+ * this back.
+ */
+export function hiddenSpan(piece: Piece, m: Material, view: ViewAxis): [number, number] {
+  if (view === 'plan') {
+    const z = piece.z ?? 0;
+    return [z, z + m.h];
+  }
+  const b = pieceBounds(piece, m);
+  return view === 'front' ? [b.y, b.y + b.h] : [b.x, b.x + b.w];
+}
+
+/**
  * A movement across the surface, expressed as a movement through the world.
  *
  * This is what makes one drag handler serve all three views: the surface never

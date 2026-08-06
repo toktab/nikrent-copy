@@ -1,5 +1,25 @@
-import type { Material } from '../types';
+import type { Category, Material } from '../types';
 import type { Rect } from './geometry';
+
+/**
+ * What forms the concrete face.
+ *
+ * Only these can leave a hole the concrete would pour through, so only these
+ * can be a side of a gap. Walers, tie rods, posts and accessories are backing
+ * and hardware — they cross the face rather than make it, and measuring the
+ * clear air between a panel and the waler behind it was producing readings
+ * like "9.7 cm, use a 10 cm filler" for a distance that is not a hole at all.
+ */
+export const FACE_CATEGORIES: ReadonlySet<Category> = new Set<Category>([
+  'panel',
+  'filler',
+  'corner',
+]);
+
+/** True when a component makes up the face, rather than holding it together. */
+export function isFace(m: Material | undefined): boolean {
+  return !!m && FACE_CATEGORIES.has(m.category);
+}
 
 /**
  * The leftover between what is placed and what is next to it.
@@ -28,6 +48,24 @@ import type { Rect } from './geometry';
 export interface GapRect extends Rect {
   /** the component's real height in cm */
   heightCm?: number;
+  /**
+   * Extent along the axis the view looks down, so pieces that merely overlap
+   * on screen are not mistaken for neighbours. In plan a panel on the ground
+   * and one on the next lift share a footprint exactly, and without this the
+   * clear air between two courses reads as a gap to be filled.
+   */
+  span?: [number, number];
+  /**
+   * The direction the formwork face runs, when only one direction is a run.
+   *
+   * In plan a panel is a long thin footprint — 90 × 9 — and the two things
+   * either side of it mean completely different things. Along its length is
+   * the next panel in the run, and the space between them is a hole. Across
+   * its thickness is the opposite face of the same wall, and the space between
+   * them is the concrete. Measuring the second and offering a filler for it is
+   * how you get "26.7 სმ, cut to size" for a 27 cm wall.
+   */
+  faceAxis?: 'u' | 'v';
 }
 
 export interface Gap {
@@ -58,19 +96,34 @@ function overlaps(a0: number, a1: number, b0: number, b1: number): boolean {
  * to overlap vertically, and vice versa — the same test that decides whether
  * two panels are in the same run.
  */
-export function nearestGap(moving: Rect, targets: GapRect[], maxCm = 400): Gap | null {
-  let best: Gap | null = null;
+export function nearestGap(moving: GapRect, targets: GapRect[], maxCm = 400): Gap | null {
+  /**
+   * The nearest thing on each of the four sides, kept apart.
+   *
+   * Taking the smallest gap across all neighbours at once looked right and was
+   * not. With panels butted at 0, 90, 180 and 270, the one at 0 has a
+   * neighbour touching it — no gap — and another 90 cm beyond that. Throw the
+   * zero away as "not a gap" and the 90 wins, and the drawing cheerfully
+   * reports a 90 cm hole measured straight through the panel in between.
+   *
+   * A neighbour that touches does not fail to produce a gap. It proves there
+   * is none on that side. So the nearest thing on each side wins outright, and
+   * only the winner is asked whether it is far enough away to be a hole.
+   */
+  const sides = new Map<string, Gap>();
 
   const consider = (
+    side: string,
     size: number,
     u: number,
     v: number,
     axis: 'u' | 'v',
     againstHeight?: number,
   ) => {
-    // Touching is not a gap, and neither is a whole room away.
-    if (size <= 0.05 || size > maxCm) return;
-    if (!best || size < best.size) best = { size, u, v, axis, againstHeight };
+    // Overlapping counts as touching: either way nothing slides in.
+    const clear = Math.max(size, 0);
+    const held = sides.get(side);
+    if (!held || clear < held.size) sides.set(side, { size: clear, u, v, axis, againstHeight });
   };
 
   const mx1 = moving.x + moving.w;
@@ -80,38 +133,61 @@ export function nearestGap(moving: Rect, targets: GapRect[], maxCm = 400): Gap |
     const tx1 = t.x + t.w;
     const ty1 = t.y + t.h;
 
-    if (overlaps(moving.y, my1, t.y, ty1)) {
-      const midV = (Math.max(moving.y, t.y) + Math.min(my1, ty1)) / 2;
-      if (t.x >= mx1) consider(t.x - mx1, (mx1 + t.x) / 2, midV, 'u', t.heightCm);
-      else if (tx1 <= moving.x) {
-        consider(moving.x - tx1, (tx1 + moving.x) / 2, midV, 'u', t.heightCm);
-      }
+    // Same course, or no joint. Two panels a lift apart look adjacent in plan
+    // and are not touching anything.
+    if (moving.span && t.span && !overlaps(moving.span[0], moving.span[1], t.span[0], t.span[1])) {
+      continue;
     }
 
-    if (overlaps(moving.x, mx1, t.x, tx1)) {
+    if (moving.faceAxis !== 'v' && overlaps(moving.y, my1, t.y, ty1)) {
+      const midV = (Math.max(moving.y, t.y) + Math.min(my1, ty1)) / 2;
+      if (tx1 > moving.x) consider('right', t.x - mx1, (mx1 + t.x) / 2, midV, 'u', t.heightCm);
+      if (t.x < mx1) consider('left', moving.x - tx1, (tx1 + moving.x) / 2, midV, 'u', t.heightCm);
+    }
+
+    if (moving.faceAxis !== 'u' && overlaps(moving.x, mx1, t.x, tx1)) {
       const midU = (Math.max(moving.x, t.x) + Math.min(mx1, tx1)) / 2;
-      if (t.y >= my1) consider(t.y - my1, midU, (my1 + t.y) / 2, 'v', t.heightCm);
-      else if (ty1 <= moving.y) {
-        consider(moving.y - ty1, midU, (ty1 + moving.y) / 2, 'v', t.heightCm);
-      }
+      if (ty1 > moving.y) consider('down', t.y - my1, midU, (my1 + t.y) / 2, 'v', t.heightCm);
+      if (t.y < my1) consider('up', moving.y - ty1, midU, (ty1 + moving.y) / 2, 'v', t.heightCm);
     }
   }
 
+  let best: Gap | null = null;
+  for (const side of sides.values()) {
+    if (side.size <= 0.05 || side.size > maxCm) continue;
+    if (!best || side.size < best.size) best = side;
+  }
   return best;
 }
 
-/** Half a centimetre — tighter than anything anyone cuts on site. */
-const FIT_TOLERANCE = 0.5;
+/**
+ * Formwork panels are rigid steel-framed ply. A component only closes a gap if
+ * it is not wider than the gap — that is physics, not a preference — so the
+ * allowance upward is half a millimetre, which is float noise off a drag and
+ * nothing else. A 9.9 cm hole does not take a 10 cm filler, and the cost of
+ * pretending it does is a trip to the yard for a part that comes straight back.
+ *
+ * Downward there is room to be generous: half a centimetre short still counts
+ * as a fit, because that much disappears into the joint.
+ */
+const OVERSIZE_ALLOWANCE = 0.05;
+const UNDERSIZE_ALLOWANCE = 0.5;
 
 /**
  * A component that closes this gap.
  *
- * Width is what has to match exactly, but height decides whether the answer is
- * usable at all: this catalog has a 45×150 and a 45×300, and offering the 150
- * to close a hole in a 300-tall wall would send someone to the yard for the
- * wrong panel. So a component the same height as the run it joins wins over a
- * merely narrower one, and only when nothing matches does the narrowest win —
- * which is what puts the 5 cm filler ahead of anything else 5 cm wide.
+ * Width has to fit and height has to match. Both have bitten:
+ *
+ * A 10 cm filler was being offered for a 9.7 cm gap, because the first version
+ * treated the tolerance as symmetric. It is not — a component wider than the
+ * hole does not go in, and telling someone it does sends them to the yard for
+ * a part that will come straight back.
+ *
+ * Height matters because this catalog has both a 45×150 and a 45×300. Closing
+ * a hole in a 300-tall wall with the 150 is the same wasted trip, so a
+ * component matching the run it joins beats a merely narrower one. Only when
+ * nothing matches does the narrowest win, which is what puts the 5 cm filler
+ * ahead of anything else 5 cm wide.
  */
 export function componentThatFits(
   gapCm: number,
@@ -120,11 +196,14 @@ export function componentThatFits(
 ): string | undefined {
   let best: Material | undefined;
   const sameHeight = (m: Material) =>
-    againstHeight !== undefined && Math.abs(m.h - againstHeight) <= FIT_TOLERANCE;
+    againstHeight !== undefined && Math.abs(m.h - againstHeight) <= UNDERSIZE_ALLOWANCE;
 
   for (const m of materials) {
+    // A corner is part of the face but cannot close a straight run — it is an
+    // L, and it belongs where two faces meet.
     if (m.category !== 'panel' && m.category !== 'filler') continue;
-    if (Math.abs(m.w - gapCm) > FIT_TOLERANCE) continue;
+    if (m.w > gapCm + OVERSIZE_ALLOWANCE) continue;
+    if (gapCm - m.w > UNDERSIZE_ALLOWANCE) continue;
     if (!best) {
       best = m;
       continue;
