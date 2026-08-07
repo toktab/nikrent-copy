@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allGaps, componentThatFits, nearestGap } from '../gap';
+import { allGaps, componentThatFits, faceRun, nearestGap } from '../gap';
 import type { Material } from '../../types';
 
 const rect = (x: number, y: number, w: number, h: number) => ({ x, y, w, h });
@@ -238,5 +238,54 @@ describe('a corner turns the face', () => {
   it('does not turn the wall thickness into a gap at every corner', () => {
     const gaps = allGaps([innerCorner, farFace, runIntoIt]);
     expect(gaps.some((g) => Math.abs(g.size - 20) < 0.5)).toBe(false);
+  });
+});
+
+describe('faceRun', () => {
+  const panel = mat('პანელი 90*300', 90, 'panel');
+  const filler = mat('ჩაკერება 5*300', 5, 'filler');
+
+  it('reads the run off the thickness, not the shape of the footprint', () => {
+    // A 5 cm ჩაკერება lying in a horizontal run is 5 wide and 9 deep — taller
+    // than it is wide, and still running across. "The long side is the run"
+    // turned it on its side and measured through the wall.
+    expect(faceRun({ w: 5, h: 9 }, filler, false)).toEqual({ faceAxis: 'u' });
+    expect(faceRun({ w: 9, h: 5 }, filler, false)).toEqual({ faceAxis: 'v' });
+  });
+
+  it('agrees with the shape wherever the shape was right', () => {
+    expect(faceRun({ w: 90, h: 9 }, panel, false)).toEqual({ faceAxis: 'u' });
+    expect(faceRun({ w: 9, h: 90 }, panel, false)).toEqual({ faceAxis: 'v' });
+  });
+
+  it('will not be measured from where it faces both ways', () => {
+    expect(faceRun({ w: 24, h: 24 }, mat('გარე კუთხე 300', 24, 'corner'), false))
+      .toEqual({ turnsFace: true });
+    // as deep as it is wide, whatever it is
+    expect(faceRun({ w: 9, h: 9 }, mat('ჩაკერება 9*300', 9, 'filler'), false))
+      .toEqual({ turnsFace: true });
+  });
+
+  it('leaves both directions open in an elevation, where both are real', () => {
+    expect(faceRun({ w: 90, h: 300 }, panel, true)).toEqual({});
+  });
+});
+
+describe('two runs meeting at a corner', () => {
+  // A 20 cm wall turning: the horizontal run's outer face and the vertical
+  // run's west face cross in plan and are never in the same plane. What lies
+  // between them is the other wall's pour.
+  const alongTop = { ...rect(0, -19, 600, 9), faceAxis: 'u' as const };
+  const downSide = { ...rect(636, 10, 9, 200), faceAxis: 'v' as const };
+
+  it('does not report the wall thickness between them', () => {
+    expect(nearestGap(downSide, [alongTop])).toBeNull();
+    expect(allGaps([alongTop, downSide])).toHaveLength(0);
+  });
+
+  it('still finds a real hole between two panels in the same run', () => {
+    const a = { ...rect(0, -19, 90, 9), faceAxis: 'u' as const };
+    const b = { ...rect(95, -19, 90, 9), faceAxis: 'u' as const };
+    expect(nearestGap(a, [b, downSide])?.size).toBe(5);
   });
 });

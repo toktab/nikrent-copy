@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { allGaps, isFace } from '../lib/gap';
+import { allGaps, faceRun, isFace } from '../lib/gap';
 import { hiddenSpan, projectPiece } from '../lib/projection';
 import { useSyncStore } from '../lib/syncEngine';
 import { useOnline } from '../lib/useOnline';
@@ -41,10 +41,7 @@ export function StatusBar() {
         ...r,
         heightCm: m.h,
         span: hiddenSpan(p, m, surfaceView),
-        faceAxis: viewMode === '3d' || surfaceView !== 'plan'
-          ? undefined
-          : ((r.w >= r.h ? 'u' : 'v') as 'u' | 'v'),
-        turnsFace: m.category === 'corner',
+        ...faceRun(r, m, viewMode === '3d' || surfaceView !== 'plan'),
       }];
     });
     return allGaps(rects).length;

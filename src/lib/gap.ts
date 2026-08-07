@@ -109,6 +109,43 @@ export interface Gap {
   fill?: string;
 }
 
+/**
+ * Which way a face piece runs, and whether it can be measured from at all.
+ *
+ * This is read off the component's own thickness, never guessed from the shape
+ * of the footprint. The footprint tells you the two dimensions but not which of
+ * them is the thickness, and "the long one is the run" is wrong for every face
+ * component narrower than the system is thick: a 5 cm ჩაკერება lying in a
+ * horizontal run is 5 wide and 9 deep, so the guess turns it on its side and
+ * measures up and down — through the pour — reporting the wall thickness as a
+ * hole. A corner is the same failure at its limit, square in plan and pointing
+ * both ways at once.
+ *
+ * `depth` is exactly the answer: whichever side of the footprint measures the
+ * component's thickness is the side the concrete is on, and the other one is
+ * the run.
+ */
+export function faceRun(
+  rect: { w: number; h: number },
+  m: Material,
+  elevation: boolean,
+): Pick<GapRect, 'faceAxis' | 'turnsFace'> {
+  // An elevation shows the silhouette instead: beside is the next panel and
+  // above is the next course. Both are real, so neither is excluded.
+  if (elevation) return {};
+  // A corner turns the face however it is drawn, so it never originates.
+  if (m.category === 'corner') return { turnsFace: true };
+
+  const isThickness = (v: number) => Math.abs(v - m.depth) <= 0.5;
+  const flat = isThickness(rect.h);
+  const upright = isThickness(rect.w);
+  if (flat && !upright) return { faceAxis: 'u' };
+  if (upright && !flat) return { faceAxis: 'v' };
+  // As deep as it is wide: no direction along the face that is not also
+  // through the pour, so it is a neighbour and not a vantage point.
+  return { turnsFace: true };
+}
+
 /** Do two 1-D spans share any length at all? */
 function overlaps(a0: number, a1: number, b0: number, b1: number): boolean {
   return Math.min(a1, b1) - Math.max(a0, b0) > 0.01;
@@ -154,6 +191,20 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
   const my1 = moving.y + moving.h;
 
   for (const t of targets) {
+    /**
+     * A hole is between two pieces in the SAME face.
+     *
+     * Where two walls meet, the run ends and a run at right angles takes over.
+     * Those two cross each other's path — a plan view has them overlapping —
+     * but they are never in the same plane, and what lies between them is the
+     * other wall's pour. Measured without this, the panel at the end of one run
+     * looks along itself, past the corner, and reports the thickness of the
+     * wall it just met as an opening. A corner profile is exempt because it
+     * belongs to both faces at once, which is what lets a run that stops short
+     * of its corner still be caught.
+     */
+    if (!t.turnsFace && t.faceAxis !== undefined && t.faceAxis !== moving.faceAxis) continue;
+
     const tx1 = t.x + t.w;
     const ty1 = t.y + t.h;
 

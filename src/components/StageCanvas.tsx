@@ -24,6 +24,7 @@ import {
 import {
   allGaps,
   componentThatFits,
+  faceRun,
   isFace,
   nearestGap,
   voidKey,
@@ -113,22 +114,6 @@ function hiddenAxisDefault(pieces: Piece[], materials: Material[], view: ViewAxi
   return Number.isFinite(min) ? (min + max) / 2 : 0;
 }
 
-/**
- * The direction the formwork face runs, when only one direction is a run.
- *
- * In plan a panel is a long thin footprint — 90 × 9 — and the two things
- * either side of it mean completely different things. Along its length is the
- * next panel in the run and the space between them is a hole; across its
- * thickness is the opposite face of the same wall and the space between them
- * is the concrete. An elevation shows the silhouette instead, where beside is
- * the next panel and above is the next course — both real, so neither is
- * excluded.
- */
-function faceAxisOf(rect: { w: number; h: number }, elevation: boolean): 'u' | 'v' | undefined {
-  if (elevation) return undefined;
-  return rect.w >= rect.h ? 'u' : 'v';
-}
-
 export function StageCanvas() {
   const stageRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction>(null);
@@ -201,8 +186,7 @@ export function StageCanvas() {
         // survives the projection.
         heightCm: m.h,
         span: hiddenSpan(p, m, surfaceView),
-        faceAxis: faceAxisOf(rect, elevation),
-        turnsFace: m.category === 'corner',
+        ...faceRun(rect, m, elevation),
       });
     }
     return out;
@@ -233,14 +217,17 @@ export function StageCanvas() {
       Math.min(...moving.map((r) => r.span![0])),
       Math.max(...moving.map((r) => r.span![1])),
     ];
+    // The union's own footprint says nothing — several courses of a run stack
+    // into a box of any shape — so its orientation comes from the members. They
+    // agree whenever the selection is one run, which is the case worth serving.
+    const axes = new Set(moving.map((r) => r.faceAxis));
     const found = nearestGap(
       {
         ...movingBox,
         span,
-        faceAxis: faceAxisOf(movingBox, elevation),
+        faceAxis: axes.size === 1 ? [...axes][0] : undefined,
         // Selecting a corner on its own must not report the pour beside it as a
-        // hole. A selection that also contains panels is a run again, and the
-        // union of it is measured as one.
+        // hole. A selection that also contains panels is a run again.
         turnsFace: moving.every((r) => r.turnsFace),
       },
       faceRects.filter((r) => !selected.has(r.id)),
