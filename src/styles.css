@@ -2538,6 +2538,15 @@ kbd {
 .offline-text span {
   color: #c3cad4;
 }
+/* The server's own words can be long and technical; the reassurance under
+   them is the part that is always true and always short. */
+.sync-banner-note {
+  color: var(--text-tertiary) !important;
+  font-size: 11.5px;
+}
+.sync-banner-text > span:not(.sync-banner-note) {
+  overflow-wrap: anywhere;
+}
 .sync-banner-actions {
   display: flex;
   gap: 8px;

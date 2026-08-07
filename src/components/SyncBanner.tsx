@@ -88,7 +88,16 @@ export function SyncBanner() {
         <Icon name="warning" size={16} />
         <div className="sync-banner-text">
           <b>შენახვა ვერ მოხერხდა</b>
-          <span>სერვერამდე ვერ მივედი. ცვლილებები ამ კომპიუტერზეა და არ დაიკარგა.</span>
+          {/* Whatever the server actually said, not a guess at it. This used
+              to assert "couldn't reach the server" for every failure, which
+              sent people to check their wifi while the server was sitting
+              there answering clearly — the first real case was a database
+              missing a column the app had started writing. The reassurance
+              still stands whatever the cause, because the queue is local. */}
+          <span>{error || 'უცნობი შეცდომა.'}</span>
+          <span className="sync-banner-note">
+            ცვლილებები ამ კომპიუტერზეა და არ დაიკარგა.
+          </span>
         </div>
         <div className="sync-banner-actions">
           <button className="btn primary small" onClick={() => void flush()}>
