@@ -38,6 +38,8 @@ export interface DrawingSheetOptions {
   /** override the document scale, e.g. when auto-fitting */
   scale?: number;
   showDimensions?: boolean;
+  /** print the drawn layout under the formwork as a setting-out line */
+  showSketch?: boolean;
 }
 
 export interface SheetResult {
@@ -52,7 +54,7 @@ export interface SheetResult {
 const SCALE_LADDER = [10, 20, 25, 50, 100, 200, 500];
 
 export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | null {
-  const { doc, materials, sheet = 'A4', showDimensions = true } = options;
+  const { doc, materials, sheet = 'A4', showDimensions = true, showSketch = true } = options;
   const byId = new Map(materials.map((m) => [m.id, m]));
   const bounds = contentBounds(doc.pieces, byId);
   if (!bounds) return null;
@@ -114,7 +116,7 @@ export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | 
   // on screen. Setting-out lines belong on the sheet: they are what the person
   // on site checks the panels against, and a printed drawing without them is
   // just a pile of panels with no datum.
-  drawSketch(ctx, doc.sketch ?? [], tx, ty, mm);
+  if (showSketch) drawSketch(ctx, doc.sketch ?? [], tx, ty, mm);
 
   for (const piece of doc.pieces) {
     const m = byId.get(piece.materialId);

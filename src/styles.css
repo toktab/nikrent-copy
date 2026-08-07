@@ -1042,6 +1042,14 @@ input[type='color'] {
  */
 .piece {
   position: absolute;
+  /* Above the drawn layout, which is an underlay. Without this a piece is
+     z-index auto and the sketch — a positioned sibling with a z-index of its
+     own — painted straight over every unselected panel, which made a placed
+     panel almost invisible on a drawing that had been set out.
+
+     Elevations override this per piece with their depth rank, and there is no
+     sketch there to compete with: the lines are a plan. */
+  z-index: 10;
   cursor: move;
   transform-origin: center center;
   pointer-events: none;
@@ -1278,7 +1286,9 @@ input[type='color'] {
   position: absolute;
   overflow: visible;
   pointer-events: none;
-  z-index: 8;
+  /* Under the pieces and over the grid. It is what the formwork is set out
+     to, so it belongs behind the formwork. */
+  z-index: 2;
 }
 .sketch-path line {
   stroke: #7f93ad;

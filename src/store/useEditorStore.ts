@@ -74,6 +74,7 @@ const PREF_KEYS = [
   'forceLabels',
   'showOverlaps',
   'showGaps',
+  'showSketch',
   'viewMode',
   'surfaceView',
   'hiddenLines',
@@ -166,6 +167,14 @@ export interface EditorState {
   inspectorTab: InspectorTab;
   /** mark every open gap, not only the one beside the selection */
   showGaps: boolean;
+  /**
+   * Show the drawn layout.
+   *
+   * Off hides it completely: not drawn, not snapped to, not clickable. A line
+   * you cannot see must not grab the pointer or pull a panel towards itself —
+   * that is a layout haunting the drawing rather than guiding it.
+   */
+  showSketch: boolean;
 
   // ── transient UI ──
   selectedIds: string[];
@@ -273,6 +282,7 @@ export interface EditorState {
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
+  setShowSketch: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   /** Switch the surface between plan, front and side, reframing as it goes. */
   setSurfaceView: (view: ViewAxis) => void;
@@ -449,6 +459,7 @@ export const useEditorStore = create<EditorState>()(
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
         inspectorTab: 'bom',
         showGaps: false,
+        showSketch: true,
 
         selectedIds: [],
         clipboard: [],
@@ -658,7 +669,9 @@ export const useEditorStore = create<EditorState>()(
                 // set out on, so the formwork lands on the layout rather than
                 // near it. Plan only — the lines are a plan, and in an
                 // elevation their coordinates mean something else entirely.
-                if (view === 'plan') targets.push(...sketchSnapTargets(s.sketch));
+                if (view === 'plan' && s.showSketch) {
+                  targets.push(...sketchSnapTargets(s.sketch));
+                }
 
                 // tolerance in cm, ~8 screen px so it feels the same at any zoom
                 const snapResult = computeEdgeSnap(movingBox, targets, 8 / s.zoom);
@@ -1079,6 +1092,15 @@ export const useEditorStore = create<EditorState>()(
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
+        setShowSketch: (on) =>
+          set((s) => ({
+            showSketch: on,
+            // Hiding the layout while the pen is out would leave clicks
+            // vanishing into a layer nobody can see.
+            tool: on ? s.tool : 'select',
+            penPoints: on ? s.penPoints : [],
+            selectedSketchIds: on ? s.selectedSketchIds : [],
+          })),
         setViewMode: (mode) => set({ viewMode: mode }),
 
         /**
@@ -1188,6 +1210,8 @@ export const useEditorStore = create<EditorState>()(
         setTool: (tool) =>
           set((s) => ({
             tool,
+            // You cannot draw into a layer you cannot see.
+            showSketch: tool === 'pen' ? true : s.showSketch,
             // Leaving the pen abandons whatever it was halfway through, rather
             // than keeping a dangling path that reappears next time.
             penPoints: tool === 'pen' ? s.penPoints : [],

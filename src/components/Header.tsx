@@ -63,6 +63,7 @@ export function Header() {
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
   const showGaps = useEditorStore((s) => s.showGaps);
   const tool = useEditorStore((s) => s.tool);
+  const showSketch = useEditorStore((s) => s.showSketch);
   const viewMode = useEditorStore((s) => s.viewMode);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
@@ -84,6 +85,7 @@ export function Header() {
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
   const setShowGaps = useEditorStore((s) => s.setShowGaps);
   const setTool = useEditorStore((s) => s.setTool);
+  const setShowSketch = useEditorStore((s) => s.setShowSketch);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
@@ -123,7 +125,13 @@ export function Header() {
     setPrinting(true);
     try {
       const { exportDrawingToPdf } = await import('../lib/drawingPdf');
-      const result = exportDrawingToPdf({ doc: { ...doc, pieces }, materials });
+      // The sheet prints what the screen shows: a layout hidden on screen is
+      // one the user has decided is not part of this drawing any more.
+      const result = exportDrawingToPdf({
+        doc: { ...doc, pieces, sketch: showSketch ? doc.sketch : [] },
+        materials,
+        showSketch,
+      });
       if (!result) setToast('ნახაზი ცარიელია.');
       else if (result.rescaled) {
         setToast(`ნახაზი არ ეტეოდა 1:${doc.scale}-ში — დაიბეჭდა 1:${result.scale} მასშტაბით.`);
@@ -511,6 +519,15 @@ export function Header() {
             >
               ყოველთვის
             </MenuItem>
+            <MenuSep />
+            <MenuItem
+              on={showSketch}
+              onClick={() => setShowSketch(!showSketch)}
+              title="დახაზული გეგმის ჩვენება — გამორთვისას არც ჩანს, არც ებმება"
+            >
+              მონახაზი
+            </MenuItem>
+
             <MenuSep />
             <MenuLabel>შემოწმება</MenuLabel>
             {/* Edge snapping used to live here as a third toggle. It is the

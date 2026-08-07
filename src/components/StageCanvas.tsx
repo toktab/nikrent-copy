@@ -159,6 +159,7 @@ export function StageCanvas() {
   const tool = useEditorStore((s) => s.tool);
   const sketch = useEditorStore((s) => s.sketch);
   const penPoints = useEditorStore((s) => s.penPoints);
+  const showSketch = useEditorStore((s) => s.showSketch);
   const showGaps = useEditorStore((s) => s.showGaps);
   const surfaceView = useEditorStore((s) => s.surfaceView);
 
@@ -690,7 +691,9 @@ export function StageCanvas() {
     // being hit. Tolerance is a screen distance turned back into world cm, so
     // it feels the same at every zoom.
     const world = worldAt(e.clientX, e.clientY);
-    if (world && !isElevation(s.surfaceView)) {
+    // Hidden means gone: a line nobody can see must not take the click that
+    // was meant for the panel sitting on top of it.
+    if (world && s.showSketch && !isElevation(s.surfaceView)) {
       const grab = segmentAt(s.sketch, world, 7 / s.zoom);
       const path = grab && s.sketch.find((k) => k.id === grab.pathId);
       if (grab && path) {
@@ -877,7 +880,7 @@ export function StageCanvas() {
         {elevation && <div className="ground-line" style={{ width: WORLD_W }} />}
 
         {/* The drawn layout, under everything: the formwork is set out to it. */}
-        {!elevation && (
+        {!elevation && showSketch && (
           <SketchLayer
             worldW={WORLD_W}
             worldH={WORLD_H}
