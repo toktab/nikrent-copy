@@ -1137,11 +1137,89 @@ input[type='color'] {
 }
 
 /* ------------------------------------------------------------------ the gap
-   The leftover between the selection and its neighbour: the number a formwork
-   run is decided by, and the one thing this drawing never told anyone. Amber,
-   because an open gap is provisional — the drawing is not done while it is
-   there. Screen space, so it stays legible at any zoom, and centred on the gap
-   itself so it reads as a dimension rather than a notification. */
+   An open hole, marked the way a drawing marks one: the void shaded, a
+   dimension line with a witness tick on each of the two edges, and the part
+   spec on top. Amber throughout, because an unclosed gap is provisional — the
+   drawing is not finished while it is there — and because the height marker in
+   the 3D view already says "measurement" in exactly this colour.
+
+   All of it in screen space, so the strokes stay one pixel and the text stays
+   readable at any zoom, the same way the edge-snap guides work. */
+.gap-void {
+  position: absolute;
+  z-index: 38;
+  background: rgba(239, 168, 49, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(239, 168, 49, 0.3);
+  pointer-events: none;
+}
+
+/* The dimension line runs the way the gap is measured. */
+.gap-void::before {
+  content: '';
+  position: absolute;
+  background: rgba(239, 168, 49, 0.85);
+}
+.gap-void-u::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+}
+.gap-void-v::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+}
+
+/* Witness ticks, standing across the line and sitting exactly on the two
+   edges being measured. Drawn with a repeating gradient rather than two
+   pseudo-elements, because ::before is already the line and an element cannot
+   have three. */
+.gap-void::after {
+  content: '';
+  position: absolute;
+  background-repeat: no-repeat;
+  background-color: transparent;
+}
+.gap-void-u::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 13px;
+  margin-top: -6.5px;
+  background-image: linear-gradient(rgba(239, 168, 49, 0.85), rgba(239, 168, 49, 0.85)),
+    linear-gradient(rgba(239, 168, 49, 0.85), rgba(239, 168, 49, 0.85));
+  background-size: 1px 100%, 1px 100%;
+  background-position: left center, right center;
+}
+.gap-void-v::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 13px;
+  margin-left: -6.5px;
+  background-image: linear-gradient(rgba(239, 168, 49, 0.85), rgba(239, 168, 49, 0.85)),
+    linear-gradient(rgba(239, 168, 49, 0.85), rgba(239, 168, 49, 0.85));
+  background-size: 100% 1px, 100% 1px;
+  background-position: center top, center bottom;
+}
+
+/* Runs from the edge of the void out to a label that could not fit inside it.
+   One stroke, along the axis the label was pushed in — an L would read as a
+   second dimension rather than a pointer. */
+.gap-leader {
+  position: absolute;
+  z-index: 39;
+  pointer-events: none;
+}
+.gap-leader-u {
+  border-left: 1px dashed rgba(239, 168, 49, 0.55);
+}
+.gap-leader-v {
+  border-top: 1px dashed rgba(239, 168, 49, 0.55);
+}
+
 .gap-chip {
   position: absolute;
   z-index: 40;
@@ -1158,6 +1236,13 @@ input[type='color'] {
   white-space: nowrap;
   pointer-events: none;
 }
+/* The bulk pass. Every hole at once, so each one gets the number and nothing
+   else — thirty part names on one drawing is not a check, it is wallpaper. */
+.gap-chip.compact {
+  padding: 2px 6px;
+  font-size: 10.5px;
+  background: rgba(30, 34, 40, 0.9);
+}
 .gap-chip b {
   color: var(--warn);
   font-variant-numeric: tabular-nums;
@@ -1170,6 +1255,15 @@ input[type='color'] {
    is loaded, not after. */
 .gap-cut {
   color: var(--text-tertiary);
+}
+
+.status-gaps {
+  white-space: nowrap;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.status-gaps.open {
+  color: var(--warn);
 }
 
 /* edge-snap alignment guides */

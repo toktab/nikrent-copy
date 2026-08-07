@@ -21,7 +21,15 @@ import {
   WORLD_H,
   WORLD_W,
 } from '../lib/geometry';
-import { componentThatFits, isFace, nearestGap } from '../lib/gap';
+import {
+  allGaps,
+  componentThatFits,
+  isFace,
+  nearestGap,
+  voidKey,
+  type Gap,
+  type GapRect,
+} from '../lib/gap';
 import {
   depthRanks,
   hiddenSpan,
@@ -37,6 +45,7 @@ import { ShapeSvg } from './ShapeSvg';
 import { LabelLayer } from './LabelLayer';
 import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
+import { GapMark } from './GapMark';
 
 /** What the pointer is currently doing on the stage. */
 type Interaction =
@@ -94,6 +103,22 @@ function hiddenAxisDefault(pieces: Piece[], materials: Material[], view: ViewAxi
   return Number.isFinite(min) ? (min + max) / 2 : 0;
 }
 
+/**
+ * The direction the formwork face runs, when only one direction is a run.
+ *
+ * In plan a panel is a long thin footprint — 90 × 9 — and the two things
+ * either side of it mean completely different things. Along its length is the
+ * next panel in the run and the space between them is a hole; across its
+ * thickness is the opposite face of the same wall and the space between them
+ * is the concrete. An elevation shows the silhouette instead, where beside is
+ * the next panel and above is the next course — both real, so neither is
+ * excluded.
+ */
+function faceAxisOf(rect: { w: number; h: number }, elevation: boolean): 'u' | 'v' | undefined {
+  if (elevation) return undefined;
+  return rect.w >= rect.h ? 'u' : 'v';
+}
+
 export function StageCanvas() {
   const stageRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction>(null);
@@ -119,6 +144,7 @@ export function StageCanvas() {
   const guideX = useEditorStore((s) => s.guideX);
   const guideY = useEditorStore((s) => s.guideY);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
+  const showGaps = useEditorStore((s) => s.showGaps);
   const surfaceView = useEditorStore((s) => s.surfaceView);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
@@ -137,6 +163,40 @@ export function StageCanvas() {
   );
 
   /**
+   * Every face piece as the gap check sees it.
+   *
+   * Only the face. A waler crossing behind a panel, a tie rod through it, a
+   * prop holding it up — none of those leave a hole the concrete escapes
+   * through, so the clear air between them and a panel is not a gap and must
+   * not be offered a filler.
+   */
+  const faceRects = useMemo(() => {
+    const out: Array<GapRect & { id: string }> = [];
+    for (const p of pieces) {
+      const m = byId.get(p.materialId);
+      if (!isFace(m) || !m) continue;
+      const rect = projectPiece(p, m, surfaceView);
+      out.push({
+        ...rect,
+        id: p.id,
+        // The real height and the distance away from the camera both ride
+        // along: a plan view projects a 90×300 panel to 90×9, so neither the
+        // 300 that decides whether a filler fits nor the lift it stands on
+        // survives the projection.
+        heightCm: m.h,
+        span: hiddenSpan(p, m, surfaceView),
+        faceAxis: faceAxisOf(rect, elevation),
+      });
+    }
+    return out;
+  }, [pieces, byId, surfaceView, elevation]);
+
+  const withFill = useCallback(
+    (g: Gap): Gap => ({ ...g, fill: componentThatFits(g.size, materials, g.againstHeight) }),
+    [materials],
+  );
+
+  /**
    * The leftover beside whatever is selected.
    *
    * This is the number that decides a formwork run — you butt panels along a
@@ -144,55 +204,39 @@ export function StageCanvas() {
    * filler or cut on site. Derived rather than tracked, so it is there while
    * dragging and still there after letting go.
    */
-  const nonNull = <T,>(r: T | null): r is T => r !== null;
   const gap = useMemo(() => {
     if (!selectedIds.length) return null;
-
-    // Only the face. A waler crossing behind a panel, a tie rod through it, a
-    // prop holding it up — none of those leave a hole the concrete escapes
-    // through, so the clear air between them and a panel is not a gap and must
-    // not be offered a filler.
-    const project = (p: Piece) => {
-      const m = byId.get(p.materialId);
-      if (!isFace(m) || !m) return null;
-      // The real height and the depth away from the camera both ride along:
-      // a plan view projects a 90×300 panel to 90×9, so neither the 300 that
-      // decides whether a filler fits nor the lift it stands on survives the
-      // projection.
-      return {
-        ...projectPiece(p, m, surfaceView),
-        heightCm: m.h,
-        span: hiddenSpan(p, m, surfaceView),
-      };
-    };
-
-    const movingParts = pieces.filter((p) => selected.has(p.id)).map(project).filter(nonNull);
-    const movingBox = unionRect(movingParts);
+    const moving = faceRects.filter((r) => selected.has(r.id));
+    const movingBox = unionRect(moving);
     if (!movingBox) return null;
     // The union of several courses spans all of them, which would defeat the
-    // same-course test — so a multi-piece selection only reports a gap when it
-    // sits on one course.
+    // same-course test — so a multi-piece selection reports a gap only for the
+    // range it actually occupies.
     const span: [number, number] = [
-      Math.min(...movingParts.map((r) => r.span[0])),
-      Math.max(...movingParts.map((r) => r.span[1])),
+      Math.min(...moving.map((r) => r.span![0])),
+      Math.max(...moving.map((r) => r.span![1])),
     ];
+    const found = nearestGap(
+      { ...movingBox, span, faceAxis: faceAxisOf(movingBox, elevation) },
+      faceRects.filter((r) => !selected.has(r.id)),
+    );
+    return found ? withFill(found) : null;
+  }, [faceRects, selected, selectedIds.length, elevation, withFill]);
 
-    // In plan, only along the face. The long side of the footprint is the face
-    // the concrete sees; the short side is its 9 cm thickness, and whatever
-    // sits across that is the opposite side of the same wall. An elevation
-    // shows the silhouette instead, where beside means the next panel in the
-    // run and above means the next course — both real, so neither is excluded.
-    const faceAxis: 'u' | 'v' | undefined = elevation
-      ? undefined
-      : movingBox.w >= movingBox.h
-        ? 'u'
-        : 'v';
-
-    const targets = pieces.filter((p) => !selected.has(p.id)).map(project).filter(nonNull);
-    const found = nearestGap({ ...movingBox, span, faceAxis }, targets);
-    if (!found) return null;
-    return { ...found, fill: componentThatFits(found.size, materials, found.againstHeight) };
-  }, [pieces, selected, selectedIds.length, byId, materials, surfaceView, elevation]);
+  /**
+   * Every open hole at once — the pre-order check, behind its own toggle.
+   *
+   * Minus the one beside the selection, which is already drawn in full: left
+   * in, it shaded the same void twice and stacked a bare number on top of the
+   * part name.
+   */
+  const everyGap = useMemo(() => {
+    if (!showGaps) return [];
+    const selectedKey = gap && voidKey(gap);
+    return allGaps(faceRects)
+      .filter((g) => voidKey(g) !== selectedKey)
+      .map(withFill);
+  }, [showGaps, faceRects, withFill, gap]);
 
   // ── Keep the store's idea of the viewport size in sync ────────────────────
   useEffect(() => {
@@ -727,24 +771,20 @@ export function StageCanvas() {
           wrong place over an elevation. */}
       {!elevation && <LabelLayer />}
 
-      {/* The leftover, in screen space so it stays legible at any zoom. Amber,
-          because an unclosed gap is provisional — the drawing is not finished
-          while it is there. */}
-      {gap && (
-        <div
-          className="gap-chip"
-          style={{ left: gap.u * zoom + panX, top: gap.v * zoom + panY }}
-        >
-          <b>{Math.round(gap.size * 10) / 10} სმ</b>
-          {gap.fill ? (
-            <span className="gap-fill">{gap.fill}</span>
-          ) : (
-            /* Nothing in the catalog is this wide (or the only candidates are
-               wider than the hole, which is the same answer on site). */
-            <span className="gap-cut">ზომაზე ჩამოსაჭრელია</span>
-          )}
-        </div>
-      )}
+      {/* Open gaps, in screen space so the strokes stay one pixel and the text
+          stays readable at any zoom. Amber, because an unclosed gap is
+          provisional — the drawing is not finished while it is there. */}
+      {everyGap.map((g, i) => (
+        <GapMark
+          key={`all-${i}`}
+          gap={g}
+          zoom={zoom}
+          panX={panX}
+          panY={panY}
+          detailed={false}
+        />
+      ))}
+      {gap && <GapMark gap={gap} zoom={zoom} panX={panX} panY={panY} />}
 
       {/* Alignment guides from edge snapping, drawn in screen space. */}
       {guideX !== null && (

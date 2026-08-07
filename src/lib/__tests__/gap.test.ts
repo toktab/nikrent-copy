@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { componentThatFits, nearestGap } from '../gap';
+import { allGaps, componentThatFits, nearestGap } from '../gap';
 import type { Material } from '../../types';
 
 const rect = (x: number, y: number, w: number, h: number) => ({ x, y, w, h });
@@ -19,15 +19,15 @@ describe('nearestGap', () => {
     const gap = nearestGap(moving, [rect(100, 0, 90, 300)]);
     expect(gap?.size).toBe(10);
     expect(gap?.axis).toBe('u');
-    // label sits in the middle of the gap, and halfway down the shared edge
-    expect(gap?.u).toBe(95);
-    expect(gap?.v).toBe(150);
+    // the void itself: 10 wide, starting where the moving box ends, and as
+    // long as the edge the two actually share
+    expect([gap?.x, gap?.y, gap?.w, gap?.h]).toEqual([90, 0, 10, 300]);
   });
 
   it('measures a gap on the left as readily as one on the right', () => {
     const gap = nearestGap(rect(100, 0, 90, 300), [rect(0, 0, 45, 300)]);
     expect(gap?.size).toBe(55);
-    expect(gap?.u).toBe(72.5);
+    expect([gap?.x, gap?.w]).toEqual([45, 55]);
   });
 
   it('ignores a piece that shares no edge — it is not in the same run', () => {
@@ -48,7 +48,7 @@ describe('nearestGap', () => {
     const gap = nearestGap(rect(0, 0, 90, 150), [rect(0, 175, 90, 150)]);
     expect(gap?.size).toBe(25);
     expect(gap?.axis).toBe('v');
-    expect(gap?.v).toBe(162.5);
+    expect([gap?.x, gap?.y, gap?.w, gap?.h]).toEqual([0, 150, 90, 25]);
   });
 
   it('does not call touching panels a gap', () => {
@@ -109,6 +109,38 @@ describe('nearestGap', () => {
     const a = { ...rect(0, 0, 90, 9), span: [0, 300] as [number, number] };
     const b = { ...rect(135, 0, 90, 9), span: [0, 300] as [number, number] };
     expect(nearestGap(a, [b])?.size).toBe(45);
+  });
+});
+
+describe('the void', () => {
+  // Two panels offset from each other only face along part of their edges, and
+  // the hole is that part — not the full height of either one.
+  it('is clipped to the edge the two pieces actually share', () => {
+    const gap = nearestGap(rect(0, 0, 90, 300), [rect(135, 200, 90, 300)]);
+    expect([gap?.x, gap?.y, gap?.w, gap?.h]).toEqual([90, 200, 45, 100]);
+  });
+});
+
+describe('allGaps', () => {
+  it('counts each opening once, not once from either side', () => {
+    const run = [rect(0, 0, 90, 300), rect(135, 0, 90, 300)];
+    const found = allGaps(run);
+    expect(found).toHaveLength(1);
+    expect(found[0].size).toBe(45);
+  });
+
+  it('finds every hole in a run and skips the butted joints', () => {
+    const run = [
+      rect(0, 0, 90, 300),
+      rect(90, 0, 90, 300), // butted — no hole
+      rect(225, 0, 90, 300), // 45 hole before it
+      rect(360, 0, 45, 300), // 45 hole before it
+    ];
+    expect(allGaps(run).map((g) => g.size).sort()).toEqual([45, 45]);
+  });
+
+  it('is silent on a run with no holes at all', () => {
+    expect(allGaps([rect(0, 0, 90, 300), rect(90, 0, 90, 300)])).toEqual([]);
   });
 });
 

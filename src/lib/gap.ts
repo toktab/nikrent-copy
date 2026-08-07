@@ -71,11 +71,21 @@ export interface GapRect extends Rect {
 export interface Gap {
   /** clear distance in cm */
   size: number;
-  /** midpoint of the gap in surface coordinates, for the label */
-  u: number;
-  v: number;
   /** which way the gap is measured — 'u' is across the surface, 'v' is down */
   axis: 'u' | 'v';
+  /**
+   * The opening itself, in surface coordinates.
+   *
+   * Not a midpoint and not a centreline: the actual rectangle of air between
+   * the two pieces, clipped to the length of edge they genuinely share. Two
+   * panels offset from each other only face along part of their edges, and the
+   * hole is that part — which is also, usefully, the shape of the thing that
+   * has to close it.
+   */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
   /** height of the piece on the far side, so a fill can be matched to the run */
   againstHeight?: number;
   /** a catalog component that closes it, if there is one */
@@ -96,7 +106,7 @@ function overlaps(a0: number, a1: number, b0: number, b1: number): boolean {
  * to overlap vertically, and vice versa — the same test that decides whether
  * two panels are in the same run.
  */
-export function nearestGap(moving: GapRect, targets: GapRect[], maxCm = 400): Gap | null {
+export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Gap[] {
   /**
    * The nearest thing on each of the four sides, kept apart.
    *
@@ -112,18 +122,11 @@ export function nearestGap(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
    */
   const sides = new Map<string, Gap>();
 
-  const consider = (
-    side: string,
-    size: number,
-    u: number,
-    v: number,
-    axis: 'u' | 'v',
-    againstHeight?: number,
-  ) => {
+  const consider = (side: string, size: number, g: Omit<Gap, 'size'>) => {
     // Overlapping counts as touching: either way nothing slides in.
     const clear = Math.max(size, 0);
     const held = sides.get(side);
-    if (!held || clear < held.size) sides.set(side, { size: clear, u, v, axis, againstHeight });
+    if (!held || clear < held.size) sides.set(side, { ...g, size: clear });
   };
 
   const mx1 = moving.x + moving.w;
@@ -140,24 +143,77 @@ export function nearestGap(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
     }
 
     if (moving.faceAxis !== 'v' && overlaps(moving.y, my1, t.y, ty1)) {
-      const midV = (Math.max(moving.y, t.y) + Math.min(my1, ty1)) / 2;
-      if (tx1 > moving.x) consider('right', t.x - mx1, (mx1 + t.x) / 2, midV, 'u', t.heightCm);
-      if (t.x < mx1) consider('left', moving.x - tx1, (tx1 + moving.x) / 2, midV, 'u', t.heightCm);
+      // The hole is only as long as the edge the two actually share.
+      const v0 = Math.max(moving.y, t.y);
+      const v1 = Math.min(my1, ty1);
+      const shared = { y: v0, h: v1 - v0, axis: 'u' as const, againstHeight: t.heightCm };
+      if (tx1 > moving.x) {
+        consider('right', t.x - mx1, { ...shared, x: mx1, w: Math.max(t.x - mx1, 0) });
+      }
+      if (t.x < mx1) {
+        consider('left', moving.x - tx1, { ...shared, x: tx1, w: Math.max(moving.x - tx1, 0) });
+      }
     }
 
     if (moving.faceAxis !== 'u' && overlaps(moving.x, mx1, t.x, tx1)) {
-      const midU = (Math.max(moving.x, t.x) + Math.min(mx1, tx1)) / 2;
-      if (ty1 > moving.y) consider('down', t.y - my1, midU, (my1 + t.y) / 2, 'v', t.heightCm);
-      if (t.y < my1) consider('up', moving.y - ty1, midU, (ty1 + moving.y) / 2, 'v', t.heightCm);
+      const u0 = Math.max(moving.x, t.x);
+      const u1 = Math.min(mx1, tx1);
+      const shared = { x: u0, w: u1 - u0, axis: 'v' as const, againstHeight: t.heightCm };
+      if (ty1 > moving.y) {
+        consider('down', t.y - my1, { ...shared, y: my1, h: Math.max(t.y - my1, 0) });
+      }
+      if (t.y < my1) {
+        consider('up', moving.y - ty1, { ...shared, y: ty1, h: Math.max(moving.y - ty1, 0) });
+      }
     }
   }
 
+  return [...sides.values()].filter((g) => g.size > 0.05 && g.size <= maxCm);
+}
+
+/** The single closest opening beside `moving`, or none. */
+export function nearestGap(moving: GapRect, targets: GapRect[], maxCm = 400): Gap | null {
   let best: Gap | null = null;
-  for (const side of sides.values()) {
-    if (side.size <= 0.05 || side.size > maxCm) continue;
-    if (!best || side.size < best.size) best = side;
+  for (const g of gapsAround(moving, targets, maxCm)) {
+    if (!best || g.size < best.size) best = g;
   }
   return best;
+}
+
+/**
+ * Every open hole in the drawing, each counted once.
+ *
+ * The same opening is found twice — once from the panel on its left and once
+ * from the panel on its right — so they are keyed by the void itself. Rounded
+ * to a tenth of a centimetre, because the two passes compute the same
+ * rectangle by different subtractions and floating point does not promise they
+ * come out bit-identical.
+ */
+export function allGaps(rects: GapRect[], maxCm = 400): Gap[] {
+  const seen = new Set<string>();
+  const out: Gap[] = [];
+  for (let i = 0; i < rects.length; i++) {
+    const others = rects.filter((_, j) => j !== i);
+    for (const g of gapsAround(rects[i], others, maxCm)) {
+      const key = voidKey(g);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(g);
+    }
+  }
+  return out;
+}
+
+/**
+ * Identity of an opening, for telling two findings of the same hole apart from
+ * two different holes.
+ *
+ * Rounded to a tenth of a centimetre because the same rectangle is arrived at
+ * by different subtractions depending on which side it was found from, and
+ * floating point does not promise those come out bit-identical.
+ */
+export function voidKey(g: Gap): string {
+  return [g.x, g.y, g.w, g.h].map((n) => Math.round(n * 10)).join(':');
 }
 
 /**

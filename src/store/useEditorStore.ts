@@ -66,6 +66,7 @@ const PREF_KEYS = [
   'showNames',
   'forceLabels',
   'showOverlaps',
+  'showGaps',
   'viewMode',
   'surfaceView',
   'hiddenLines',
@@ -154,6 +155,8 @@ export interface EditorState {
   /** which inspector tab is showing — in the store so the shortage bar can
       open the drawing's bill of materials on the row that is short */
   inspectorTab: InspectorTab;
+  /** mark every open gap, not only the one beside the selection */
+  showGaps: boolean;
 
   // ── transient UI ──
   selectedIds: string[];
@@ -250,6 +253,7 @@ export interface EditorState {
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
+  setShowGaps: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   /** Switch the surface between plan, front and side, reframing as it goes. */
   setSurfaceView: (view: ViewAxis) => void;
@@ -393,6 +397,7 @@ export const useEditorStore = create<EditorState>()(
         paletteOpen: typeof window === 'undefined' || window.innerWidth > 900,
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
         inspectorTab: 'bom',
+        showGaps: false,
 
         selectedIds: [],
         clipboard: [],
@@ -988,6 +993,7 @@ export const useEditorStore = create<EditorState>()(
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
+        setShowGaps: (on) => set({ showGaps: on }),
         setViewMode: (mode) => set({ viewMode: mode }),
 
         /**

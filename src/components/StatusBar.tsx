@@ -1,4 +1,7 @@
+import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { allGaps, isFace } from '../lib/gap';
+import { hiddenSpan, projectPiece } from '../lib/projection';
 import { useSyncStore } from '../lib/syncEngine';
 import { useOnline } from '../lib/useOnline';
 import { combo } from '../lib/platform';
@@ -21,6 +24,30 @@ export function StatusBar() {
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const pending = useSyncStore((s) => s.pendingChanges);
   const online = useOnline();
+  const pieces = useEditorStore((s) => s.pieces);
+  const materials = useEditorStore((s) => s.materials);
+  const showGaps = useEditorStore((s) => s.showGaps);
+
+  // Only counted while the check is on. Running it over every piece on every
+  // keystroke to display a number nobody asked for would be a tax on drawing.
+  const openGaps = useMemo(() => {
+    if (!showGaps) return 0;
+    const byId = new Map(materials.map((m) => [m.id, m]));
+    const rects = pieces.flatMap((p) => {
+      const m = byId.get(p.materialId);
+      if (!isFace(m) || !m) return [];
+      const r = projectPiece(p, m, surfaceView);
+      return [{
+        ...r,
+        heightCm: m.h,
+        span: hiddenSpan(p, m, surfaceView),
+        faceAxis: viewMode === '3d' || surfaceView !== 'plan'
+          ? undefined
+          : ((r.w >= r.h ? 'u' : 'v') as 'u' | 'v'),
+      }];
+    });
+    return allGaps(rects).length;
+  }, [showGaps, pieces, materials, surfaceView, viewMode]);
 
   const view = viewMode === '3d' ? '3D' : VIEW_LABEL[surfaceView];
 
@@ -50,6 +77,11 @@ export function StatusBar() {
         <span className="status-offline" title="ცვლილებები ინახება ლოკალურად">
           <Icon name="offline" size={13} /> ოფლაინ
           {pending && <span className="status-queued">ცვლილებები რიგშია</span>}
+        </span>
+      )}
+      {showGaps && (
+        <span className={`status-gaps${openGaps ? ' open' : ''}`}>
+          {openGaps ? `${openGaps} ხვრელი` : 'ხვრელი არაა'}
         </span>
       )}
       {selected > 0 && (

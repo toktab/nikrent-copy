@@ -61,6 +61,7 @@ export function Header() {
   const forceLabels = useEditorStore((s) => s.forceLabels);
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
+  const showGaps = useEditorStore((s) => s.showGaps);
   const viewMode = useEditorStore((s) => s.viewMode);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
@@ -80,6 +81,7 @@ export function Header() {
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
+  const setShowGaps = useEditorStore((s) => s.setShowGaps);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
@@ -517,6 +519,13 @@ export function Header() {
               title="გადაფარებული ელემენტების მონიშვნა"
             >
               გადაფარება
+            </MenuItem>
+            <MenuItem
+              on={showGaps}
+              onClick={() => setShowGaps(!showGaps)}
+              title="ყველა ღია ხვრელი ნახაზზე — შეკვეთამდე შესამოწმებლად"
+            >
+              ყველა ხვრელი
             </MenuItem>
           </>
         </Menu>
