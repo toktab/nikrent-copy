@@ -51,7 +51,8 @@ export type IconName =
   | 'more'
   | 'sliders'
   | 'lock'
-  | 'offline';
+  | 'offline'
+  | 'pen';
 
 /** Path data only — stroke styling is applied once, on the <svg>. */
 const PATHS: Record<IconName, string> = {
@@ -101,6 +102,9 @@ const PATHS: Record<IconName, string> = {
   // Permission, not progress — carried by a padlock so read-only never rests
   // on colour alone.
   lock: 'M5 11h14v9H5z M8 11V7a4 4 0 0 1 8 0v4',
+  // A drafting pen laying a line, not a signature pen: the nib is on the line
+  // it has just drawn, which is what the tool actually does.
+  pen: 'M3 21h6 M6.5 17.5 18 6a2.1 2.1 0 0 1 3 3L9.5 20.5 5 21l.5-4.5z M15.5 8.5l3 3',
   // Two arcs, a dot and the slash. A full wifi fan has five strokes that turn
   // into grey mush at the 13px this is actually drawn at.
   offline: 'M3 3l18 18 M12 19.5h.01 M8.4 15.9a5.5 5.5 0 0 1 6.2-1 M4.6 11.6a11 11 0 0 1 12.6-1.4',

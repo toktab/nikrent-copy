@@ -95,6 +95,7 @@ interface DocumentRow {
   revision: string;
   scale: number;
   pieces: Piece[];
+  sketch?: unknown;
   version: number;
   updated_at: string;
 }
@@ -143,6 +144,7 @@ function documentToRow(d: DrawingDoc) {
     revision: d.revision,
     scale: d.scale,
     pieces: d.pieces,
+    sketch: d.sketch ?? [],
   };
 }
 
@@ -154,6 +156,8 @@ function rowToDocument(row: DocumentRow): DrawingDoc {
     revision: row.revision,
     scale: row.scale,
     pieces: Array.isArray(row.pieces) ? row.pieces : [],
+    // A drawing saved before the pen existed has no sketch column value.
+    sketch: Array.isArray(row.sketch) ? row.sketch : [],
     updatedAt: new Date(row.updated_at).getTime(),
   };
 }

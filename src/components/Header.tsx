@@ -62,6 +62,7 @@ export function Header() {
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
   const showGaps = useEditorStore((s) => s.showGaps);
+  const tool = useEditorStore((s) => s.tool);
   const viewMode = useEditorStore((s) => s.viewMode);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
@@ -82,6 +83,7 @@ export function Header() {
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
   const setShowGaps = useEditorStore((s) => s.setShowGaps);
+  const setTool = useEditorStore((s) => s.setTool);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
@@ -531,6 +533,27 @@ export function Header() {
         </Menu>
 
         <span className="sep" />
+
+        {/* Draw the layout first, fill it with formwork after. Grouped with the
+            wizards because it is the same kind of thing: a way of getting a
+            whole wall onto the drawing rather than a panel at a time. */}
+        <Tooltip
+          label="ხაზვა — გეგმის მონახაზი"
+          reason={
+            surfaceView === 'plan'
+              ? 'P · სწორი კუთხეები, ბადეზე. Enter — დასრულება'
+              : 'მხოლოდ გეგმაზე — მონახაზი გეგმის ხაზებია'
+          }
+        >
+          <button
+            className={`btn${tool === 'pen' ? ' active' : ''}`}
+            onClick={() => setTool(tool === 'pen' ? 'select' : 'pen')}
+            disabled={viewMode === '3d' || surfaceView !== 'plan'}
+            aria-pressed={tool === 'pen'}
+          >
+            <Icon name="pen" /> <span className="btn-label">ხაზვა</span>
+          </button>
+        </Tooltip>
 
         <button
           className="btn raised"

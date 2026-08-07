@@ -38,6 +38,7 @@ import {
   VIEW_HINT,
   type ViewAxis,
 } from '../lib/projection';
+import { orthogonal, pathAt } from '../lib/sketch';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
@@ -46,6 +47,7 @@ import { LabelLayer } from './LabelLayer';
 import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
 import { GapMark } from './GapMark';
+import { SketchLayer } from './SketchLayer';
 
 /** What the pointer is currently doing on the stage. */
 type Interaction =
@@ -127,6 +129,8 @@ export function StageCanvas() {
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
   const [marquee, setMarquee] = useState<MarqueeBox | null>(null);
+  /** Where the pen's next vertex would land, for the rubber-band preview. */
+  const [penHover, setPenHover] = useState<{ x: number; y: number } | null>(null);
   const [ghost, setGhost] = useState<{
     material: Material;
     x: number;
@@ -144,6 +148,8 @@ export function StageCanvas() {
   const guideX = useEditorStore((s) => s.guideX);
   const guideY = useEditorStore((s) => s.guideY);
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
+  const tool = useEditorStore((s) => s.tool);
+  const sketch = useEditorStore((s) => s.sketch);
   const showGaps = useEditorStore((s) => s.showGaps);
   const surfaceView = useEditorStore((s) => s.surfaceView);
 
@@ -443,6 +449,28 @@ export function StageCanvas() {
 
       const mod = e.metaKey || e.ctrlKey;
 
+      // While the pen is drawing it owns these keys outright: Backspace has to
+      // walk back a vertex rather than delete the selection, and Escape has to
+      // abandon the path rather than clear a selection that is not the point.
+      if (s.tool === 'pen' && !mod) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (s.penPoints.length) s.penCancel();
+          else s.setTool('select');
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          s.penFinish();
+          return;
+        }
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          e.preventDefault();
+          s.penUndoPoint();
+          return;
+        }
+      }
+
       if (mod) {
         switch (e.code) {
           case 'KeyZ':
@@ -506,7 +534,14 @@ export function StageCanvas() {
         s.deleteSelected();
         e.preventDefault();
       }
-      if (e.key === 'Escape') s.setSelection([]);
+      if (e.key === 'Escape') {
+        s.setSelection([]);
+        s.selectSketch(null);
+      }
+      // The pen, on the key the drawing tools of every other app put it on.
+      if (e.code === 'KeyP' || e.key.toLowerCase() === 'p') {
+        s.setTool(s.tool === 'pen' ? 'select' : 'pen');
+      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -566,8 +601,59 @@ export function StageCanvas() {
     };
   }, []);
 
+  /** Pointer position in plan world cm. */
+  const worldAt = useCallback((clientX: number, clientY: number) => {
+    const el = stageRef.current;
+    if (!el) return null;
+    const s = useEditorStore.getState();
+    const r = el.getBoundingClientRect();
+    return {
+      x: (clientX - r.left - s.panX) / s.zoom,
+      y: (clientY - r.top - s.panY) / s.zoom,
+    };
+  }, []);
+
+  /**
+   * Where the next vertex would go: square to the last one, then on the grid.
+   *
+   * That order matters. Snapping first and squaring after can move the point
+   * off the grid again, because squaring replaces one coordinate with the
+   * previous vertex's — which is only on the grid if that one was.
+   */
+  const penTarget = useCallback(
+    (clientX: number, clientY: number) => {
+      const at = worldAt(clientX, clientY);
+      if (!at) return null;
+      const s = useEditorStore.getState();
+      const last = s.penPoints[s.penPoints.length - 1];
+      const squared = last ? orthogonal(last, at) : at;
+      return {
+        x: snapValue(squared.x, s.snapStep, s.snap),
+        y: last && squared.y === last.y ? last.y : snapValue(squared.y, s.snapStep, s.snap),
+      };
+    },
+    [worldAt],
+  );
+
   const onStagePointerDown = useCallback((e: ReactPointerEvent) => {
     const s = useEditorStore.getState();
+
+    // ── the pen owns the surface while it is active ──
+    if (s.tool === 'pen' && e.button === 0 && !spaceRef.current) {
+      e.preventDefault();
+      const at = penTarget(e.clientX, e.clientY);
+      if (!at) return;
+      // Landing back on the first vertex closes the loop, which is how a room
+      // outline gets drawn without a separate command for it.
+      const first = s.penPoints[0];
+      const closes =
+        s.penPoints.length > 2 &&
+        first &&
+        Math.hypot(at.x - first.x, at.y - first.y) * s.zoom < 10;
+      if (closes) s.penFinish(true);
+      else s.penAddPoint(at.x, at.y);
+      return;
+    }
 
     if (spaceRef.current || e.button === 1) {
       e.preventDefault();
@@ -577,16 +663,31 @@ export function StageCanvas() {
     }
     if (e.button !== 0) return;
 
+    // A drawn line has no area, so it is picked by proximity rather than by
+    // being hit. Tolerance is a screen distance turned back into world cm, so
+    // it feels the same at every zoom.
+    const world = worldAt(e.clientX, e.clientY);
+    if (world && !isElevation(s.surfaceView)) {
+      const hit = pathAt(s.sketch, world, 7 / s.zoom);
+      if (hit) {
+        s.selectSketch(hit.id, e.shiftKey);
+        return;
+      }
+    }
+
     // Empty-surface press: clear the selection and start a rubber band.
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
-    if (!e.shiftKey) s.setSelection([]);
+    if (!e.shiftKey) {
+      s.setSelection([]);
+      s.selectSketch(null);
+    }
     interaction.current = {
       type: 'marquee',
       sx: e.clientX - rect.left,
       sy: e.clientY - rect.top,
     };
-  }, []);
+  }, [penTarget, worldAt]);
 
   /**
    * Where a dragged material would land, in surface cm plus the world position
@@ -680,7 +781,13 @@ export function StageCanvas() {
     [dropPosition],
   );
 
-  const cursor = panning ? 'grabbing' : spaceDown ? 'grab' : 'default';
+  const cursor = panning
+    ? 'grabbing'
+    : spaceDown
+      ? 'grab'
+      : tool === 'pen'
+        ? 'crosshair'
+        : 'default';
 
   return (
     <main
@@ -688,6 +795,17 @@ export function StageCanvas() {
       className="stage"
       style={{ cursor }}
       onPointerDown={onStagePointerDown}
+      onPointerMove={(e) => {
+        if (tool !== 'pen') return;
+        setPenHover(penTarget(e.clientX, e.clientY));
+      }}
+      onPointerLeave={() => setPenHover(null)}
+      onDoubleClick={(e) => {
+        // Finishing an open run, the way every polyline tool ends one.
+        if (tool !== 'pen') return;
+        e.preventDefault();
+        useEditorStore.getState().penFinish();
+      }}
       onDragOver={onDragOver}
       onDragLeave={(e) => {
         // Only clear when the pointer actually leaves the stage, not when it
@@ -723,6 +841,16 @@ export function StageCanvas() {
         {/* Ground level. In an elevation this is the slab everything stands on,
             and the one line that makes a height readable at a glance. */}
         {elevation && <div className="ground-line" style={{ width: WORLD_W }} />}
+
+        {/* The drawn layout, under everything: the formwork is set out to it. */}
+        {!elevation && (
+          <SketchLayer
+            worldW={WORLD_W}
+            worldH={WORLD_H}
+            top={0}
+            preview={tool === 'pen' ? penHover : null}
+          />
+        )}
 
         {/* Live drop preview: exactly where the piece will land, snapping included. */}
         {ghost && (
@@ -801,7 +929,10 @@ export function StageCanvas() {
         />
       )}
 
-      {pieces.length === 0 && <EmptyDrawing />}
+      {/* A drawn layout is not an empty drawing. Someone who has set the walls
+          out has started; putting a "nothing here yet" card over their lines
+          would be the app disagreeing with what is plainly on screen. */}
+      {pieces.length === 0 && sketch.length === 0 && <EmptyDrawing />}
 
       {elevation && <div className="surface-hint">{VIEW_HINT[surfaceView]}</div>}
     </main>

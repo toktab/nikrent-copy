@@ -1,8 +1,9 @@
 import { jsPDF } from 'jspdf';
-import type { DrawingDoc, Material, Piece } from '../types';
+import type { DrawingDoc, Material, Piece, SketchPath } from '../types';
 import { contentBounds, pieceBounds, planH, planW } from './geometry';
 import { drawingSizeLabel } from './bom';
 import { barRect, scaledOutline } from './shapePath';
+import { segments } from './sketch';
 import { stampedName } from './files';
 
 /**
@@ -109,6 +110,12 @@ export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | 
   const tx = (wx: number) => offsetX + cmToPx(wx - bounds.x);
   const ty = (wy: number) => offsetY + cmToPx(wy - bounds.y);
 
+  // The layout goes down first, so the formwork sits on it exactly as it does
+  // on screen. Setting-out lines belong on the sheet: they are what the person
+  // on site checks the panels against, and a printed drawing without them is
+  // just a pile of panels with no datum.
+  drawSketch(ctx, doc.sketch ?? [], tx, ty, mm);
+
   for (const piece of doc.pieces) {
     const m = byId.get(piece.materialId);
     if (m) drawPiece(ctx, piece, m, tx, ty, cmToPx);
@@ -125,6 +132,36 @@ export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | 
   drawTitleBlock(ctx, doc, scale, sheet, paper, mm);
 
   return { dataUrl: canvas.toDataURL('image/png'), sheet, scale, rescaled };
+}
+
+/**
+ * The drawn layout, as a setting-out line.
+ *
+ * Long-dashed and thin, which is the drafting convention for a reference line
+ * rather than a built edge — on paper it must be impossible to mistake for a
+ * panel, and there is no colour to rely on.
+ */
+function drawSketch(
+  ctx: CanvasRenderingContext2D,
+  sketch: SketchPath[],
+  tx: (x: number) => number,
+  ty: (y: number) => number,
+  mm: (v: number) => number,
+): void {
+  if (!sketch.length) return;
+  ctx.save();
+  ctx.strokeStyle = '#8a8f96';
+  ctx.lineWidth = mm(0.25);
+  ctx.setLineDash([mm(4), mm(2)]);
+  for (const path of sketch) {
+    for (const [a, b] of segments(path)) {
+      ctx.beginPath();
+      ctx.moveTo(tx(a.x), ty(a.y));
+      ctx.lineTo(tx(b.x), ty(b.y));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function drawPiece(

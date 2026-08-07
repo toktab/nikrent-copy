@@ -1269,6 +1269,59 @@ input[type='color'] {
   color: var(--warn);
 }
 
+/* --------------------------------------------------------- the drawn layout
+   Reference geometry, under the formwork. Deliberately quiet and deliberately
+   cool: this is the thing the panels are being set out to, not a thing on the
+   drawing, and it must never compete with a material colour. A dashed line
+   also reads as "drawn, not built" without needing a legend. */
+.sketch-layer {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 8;
+}
+.sketch-path line {
+  stroke: #7f93ad;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.sketch-path .sketch-vertex {
+  fill: #7f93ad;
+}
+.sketch-path .sketch-len {
+  fill: var(--text-tertiary);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+/* Selected, and about to be deleted if that is what you meant. */
+.sketch-path.chosen line {
+  stroke: var(--accent);
+}
+.sketch-path.chosen .sketch-vertex {
+  fill: var(--accent);
+}
+.sketch-path.chosen .sketch-len {
+  fill: var(--accent);
+}
+
+/* The path being drawn — provisional, so amber, like everything else that is
+   not committed yet. */
+.sketch-draft {
+  fill: none;
+  stroke: var(--warn);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sketch-draft ~ .sketch-vertex,
+.sketch-layer > .sketch-vertex {
+  fill: var(--warn);
+}
+.sketch-rubber {
+  stroke: var(--warn);
+  stroke-dasharray: 6 5;
+  opacity: 0.8;
+}
+
 /* edge-snap alignment guides */
 .guide {
   position: absolute;

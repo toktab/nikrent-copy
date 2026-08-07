@@ -34,6 +34,7 @@ function doc(id: string, patch: Partial<DrawingDoc> = {}): DrawingDoc {
     name: id,
     updatedAt: 0,
     pieces: [],
+    sketch: [],
     projectName: '',
     revision: 'A',
     scale: 50,

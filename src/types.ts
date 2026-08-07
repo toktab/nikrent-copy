@@ -90,12 +90,35 @@ export interface Warehouse {
  * A named drawing. The catalog and stock are company-wide and shared across
  * drawings; only the placed pieces belong to a document.
  */
+/**
+ * A drawn reference line: the wall layout, before any formwork exists.
+ *
+ * Right angles only, which is not a shortcut. Formwork is built square, the
+ * catalog's corner profiles are 90°, and a junction at any other angle has no
+ * component that closes it — so an angled sketch would be drawing something
+ * the tool could never tell you how to build. Consecutive points therefore
+ * always share an x or a y.
+ *
+ * Kept in plan world centimetres, like everything else on the surface. It is
+ * reference geometry and never appears in the bill of materials: nobody
+ * delivers a line.
+ */
+export interface SketchPath {
+  id: string;
+  /** orthogonal polyline, plan world cm */
+  points: Array<{ x: number; y: number }>;
+  /** the last point joins back to the first — a closed room outline */
+  closed?: boolean;
+}
+
 export interface DrawingDoc {
   id: string;
   name: string;
   /** epoch ms of the last edit */
   updatedAt: number;
   pieces: Piece[];
+  /** the layout the formwork is being set out to — see SketchPath */
+  sketch: SketchPath[];
   /** title-block fields for the printable drawing */
   projectName: string;
   revision: string;
@@ -107,6 +130,7 @@ export interface DrawingDoc {
 export interface DocSnapshot {
   materials: Material[];
   pieces: Piece[];
+  sketch: SketchPath[];
   removedBuiltins: string[];
 }
 

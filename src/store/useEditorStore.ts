@@ -12,6 +12,7 @@ import type {
   Material,
   MaterialDraft,
   Piece,
+  SketchPath,
   Warehouse,
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
@@ -29,6 +30,7 @@ import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
 import { planWall } from '../lib/wallWizard';
+import { sketchSnapTargets } from '../lib/sketch';
 import {
   projectPiece,
   projectedContentBounds,
@@ -111,6 +113,8 @@ export interface EditorState {
   materials: Material[];
   /** placed pieces of the active drawing (mirrored into `documents`) */
   pieces: Piece[];
+  /** the drawn layout the formwork is being set out to (also mirrored) */
+  sketch: SketchPath[];
   removedBuiltins: string[];
   documents: DrawingDoc[];
   activeDocId: string;
@@ -160,6 +164,16 @@ export interface EditorState {
 
   // ── transient UI ──
   selectedIds: string[];
+  /** selected reference lines — kept apart from `selectedIds`, which is pieces */
+  selectedSketchIds: string[];
+  /**
+   * What a press on the surface does. The pen draws the layout; select does
+   * everything else. Deliberately not persisted: reopening the app in a mode
+   * that swallows clicks would be baffling.
+   */
+  tool: 'select' | 'pen';
+  /** vertices of the path being drawn, before it is committed */
+  penPoints: Array<{ x: number; y: number }>;
   clipboard: Piece[];
   paletteQuery: string;
   dialog: DialogState;
@@ -276,6 +290,18 @@ export interface EditorState {
   openDialog: (dialog: DialogState) => void;
   closeDialog: () => void;
   setToast: (message: string | null) => void;
+
+  // ── actions: the drawn layout ──
+  setTool: (tool: 'select' | 'pen') => void;
+  /** Add a vertex to the path in progress, already snapped by the caller. */
+  penAddPoint: (x: number, y: number) => void;
+  /** Drop the last vertex — the pen's own undo, mid-path. */
+  penUndoPoint: () => void;
+  /** Commit the path in progress. `closed` joins the last point to the first. */
+  penFinish: (closed?: boolean) => void;
+  /** Abandon the path in progress, keeping the tool active. */
+  penCancel: () => void;
+  selectSketch: (id: string | null, additive?: boolean) => void;
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -286,6 +312,7 @@ function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
     name,
     updatedAt: Date.now(),
     pieces,
+    sketch: [],
     projectName: '',
     revision: 'A',
     scale: 50,
@@ -294,7 +321,12 @@ function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
 
 /** The slice of state that undo/redo restores. */
 function snap(s: EditorState): DocSnapshot {
-  return { materials: s.materials, pieces: s.pieces, removedBuiltins: s.removedBuiltins };
+  return {
+    materials: s.materials,
+    pieces: s.pieces,
+    sketch: s.sketch,
+    removedBuiltins: s.removedBuiltins,
+  };
 }
 
 /**
@@ -335,14 +367,15 @@ const safeStorage = createJSONStorage(() => ({
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => {
-      /** Mirror the working pieces back into the active document. */
+      /** Mirror the working pieces and sketch back into the active document. */
       const syncDoc = (s: EditorState, patch: Partial<EditorState>): Partial<EditorState> => {
-        if (!patch.pieces) return patch;
-        const pieces = patch.pieces;
+        if (!patch.pieces && !patch.sketch) return patch;
+        const pieces = patch.pieces ?? s.pieces;
+        const sketch = patch.sketch ?? s.sketch;
         return {
           ...patch,
           documents: s.documents.map((d) =>
-            d.id === s.activeDocId ? { ...d, pieces, updatedAt: Date.now() } : d,
+            d.id === s.activeDocId ? { ...d, pieces, sketch, updatedAt: Date.now() } : d,
           ),
         };
       };
@@ -369,6 +402,10 @@ export const useEditorStore = create<EditorState>()(
       return {
         materials: SEED_MATERIALS,
         pieces: [],
+        sketch: [],
+        selectedSketchIds: [],
+        tool: 'select',
+        penPoints: [],
         removedBuiltins: [],
         documents: [firstDoc],
         activeDocId: firstDoc.id,
@@ -444,9 +481,12 @@ export const useEditorStore = create<EditorState>()(
               documents,
               activeDocId: active.id,
               pieces: active.pieces,
+              sketch: active.sketch,
               removedBuiltins: [],
               dataLoaded: true,
               selectedIds: [],
+              selectedSketchIds: [],
+              penPoints: [],
               past: [],
               future: [],
             };
@@ -599,6 +639,13 @@ export const useEditorStore = create<EditorState>()(
                   })
                   .filter((r): r is NonNullable<typeof r> => r !== null);
 
+                // The drawn layout snaps too. This is the whole point of
+                // keeping the sketch: a panel butts to the line the wall was
+                // set out on, so the formwork lands on the layout rather than
+                // near it. Plan only — the lines are a plan, and in an
+                // elevation their coordinates mean something else entirely.
+                if (view === 'plan') targets.push(...sketchSnapTargets(s.sketch));
+
                 // tolerance in cm, ~8 screen px so it feels the same at any zoom
                 const snapResult = computeEdgeSnap(movingBox, targets, 8 / s.zoom);
                 extraDu = snapResult.dx;
@@ -735,9 +782,19 @@ export const useEditorStore = create<EditorState>()(
 
         deleteSelected: () =>
           commit((s) => {
-            const selected = new Set(s.selectedIds);
-            if (!selected.size) return {};
-            return { pieces: s.pieces.filter((p) => !selected.has(p.id)), selectedIds: [] };
+            // Delete means "remove what is selected", and a reference line is
+            // a thing that can be selected. Two lists rather than one, because
+            // everything else about a piece — the bill, the gap check, the
+            // inspector — would be wrong if a line could get into `selectedIds`.
+            const pieceIds = new Set(s.selectedIds);
+            const sketchIds = new Set(s.selectedSketchIds);
+            if (!pieceIds.size && !sketchIds.size) return {};
+            return {
+              pieces: pieceIds.size ? s.pieces.filter((p) => !pieceIds.has(p.id)) : s.pieces,
+              sketch: sketchIds.size ? s.sketch.filter((k) => !sketchIds.has(k.id)) : s.sketch,
+              selectedIds: [],
+              selectedSketchIds: [],
+            };
           }),
 
         duplicateSelected: () =>
@@ -847,7 +904,9 @@ export const useEditorStore = create<EditorState>()(
             return {
               ...previous,
               documents: s.documents.map((d) =>
-                d.id === s.activeDocId ? { ...d, pieces: previous.pieces } : d,
+                d.id === s.activeDocId
+                  ? { ...d, pieces: previous.pieces, sketch: previous.sketch }
+                  : d,
               ),
               past: s.past.slice(0, -1),
               future: [snap(s), ...s.future].slice(0, HISTORY_LIMIT),
@@ -862,7 +921,9 @@ export const useEditorStore = create<EditorState>()(
             return {
               ...next,
               documents: s.documents.map((d) =>
-                d.id === s.activeDocId ? { ...d, pieces: next.pieces } : d,
+                d.id === s.activeDocId
+                  ? { ...d, pieces: next.pieces, sketch: next.sketch }
+                  : d,
               ),
               past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
               future: s.future.slice(1),
@@ -891,7 +952,10 @@ export const useEditorStore = create<EditorState>()(
             return {
               activeDocId: id,
               pieces: target.pieces,
+              sketch: target.sketch,
               selectedIds: [],
+              selectedSketchIds: [],
+              penPoints: [],
               past: [],
               future: [],
             };
@@ -912,11 +976,15 @@ export const useEditorStore = create<EditorState>()(
               `${source.name} (ასლი)`,
               source.pieces.map((p) => ({ ...p, id: uid() })),
             );
+            copy.sketch = source.sketch.map((k) => ({ ...k, id: uid('sk') }));
             return {
               documents: [...s.documents, copy],
               activeDocId: copy.id,
               pieces: copy.pieces,
+              sketch: copy.sketch,
               selectedIds: [],
+              selectedSketchIds: [],
+              penPoints: [],
               past: [],
               future: [],
             };
@@ -933,7 +1001,10 @@ export const useEditorStore = create<EditorState>()(
               documents: remaining,
               activeDocId: active.id,
               pieces: active.pieces,
+              sketch: active.sketch,
               selectedIds: [],
+              selectedSketchIds: [],
+              penPoints: [],
               past: [],
               future: [],
             };
@@ -1098,6 +1169,51 @@ export const useEditorStore = create<EditorState>()(
         openDialog: (dialog) => set({ dialog }),
         closeDialog: () => set({ dialog: null }),
         setToast: (message) => set({ toast: message }),
+
+        // ── the drawn layout ────────────────────────────────────────────────
+        setTool: (tool) =>
+          set((s) => ({
+            tool,
+            // Leaving the pen abandons whatever it was halfway through, rather
+            // than keeping a dangling path that reappears next time.
+            penPoints: tool === 'pen' ? s.penPoints : [],
+          })),
+
+        penAddPoint: (x, y) =>
+          set((s) => {
+            const last = s.penPoints[s.penPoints.length - 1];
+            // A click that lands on the previous vertex adds a zero-length
+            // segment, which is invisible and confusing to delete later.
+            if (last && last.x === x && last.y === y) return {};
+            return { penPoints: [...s.penPoints, { x, y }] };
+          }),
+
+        penUndoPoint: () => set((s) => ({ penPoints: s.penPoints.slice(0, -1) })),
+
+        penCancel: () => set({ penPoints: [] }),
+
+        penFinish: (closed = false) =>
+          commit((s) => {
+            // One point is a dot, not a line. Two coincident points likewise.
+            if (s.penPoints.length < 2) return { penPoints: [] };
+            const path: SketchPath = {
+              id: uid('sk'),
+              points: s.penPoints,
+              ...(closed ? { closed: true } : {}),
+            };
+            return { sketch: [...s.sketch, path], penPoints: [] };
+          }),
+
+        selectSketch: (id, additive = false) =>
+          set((s) => {
+            if (!id) return { selectedSketchIds: [] };
+            if (!additive) return { selectedSketchIds: [id], selectedIds: [] };
+            return {
+              selectedSketchIds: s.selectedSketchIds.includes(id)
+                ? s.selectedSketchIds.filter((x) => x !== id)
+                : [...s.selectedSketchIds, id],
+            };
+          }),
       };
     },
     {
@@ -1162,7 +1278,11 @@ export const useEditorStore = create<EditorState>()(
         // Preferences only; the catalog and drawings arrive from the server.
         if (isConfigured) return { ...current, ...saved, dataLoaded: false };
 
-        const { documents, activeDocId, pieces } = restoreDocuments(saved);
+        // `sketch` has to come from the restored active drawing for the same
+        // reason `pieces` does: the top-level copy is a mirror, and a reload
+        // that trusts the mirror over the document shows the lines of whichever
+        // drawing happened to be open when the tab was last written.
+        const { documents, activeDocId, pieces, sketch } = restoreDocuments(saved);
         const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
           ...current,
@@ -1172,7 +1292,12 @@ export const useEditorStore = create<EditorState>()(
           documents,
           activeDocId,
           pieces,
+          sketch,
           selectedIds: [],
+          selectedSketchIds: [],
+          // Reopening in a mode that swallows clicks would be baffling.
+          tool: 'select',
+          penPoints: [],
           clipboard: [],
           past: [],
           future: [],
@@ -1202,6 +1327,7 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
   documents: DrawingDoc[];
   activeDocId: string;
   pieces: Piece[];
+  sketch: SketchPath[];
 } {
   const stored = Array.isArray(saved.documents) ? saved.documents : [];
   const documents = stored
@@ -1211,6 +1337,8 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
       name: typeof d.name === 'string' && d.name ? d.name : 'ნახაზი',
       updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : Date.now(),
       pieces: Array.isArray(d.pieces) ? d.pieces : [],
+      // and the sketch after those — a drawing made before the pen has none
+      sketch: Array.isArray(d.sketch) ? d.sketch : [],
       // title-block fields arrived after named drawings did
       projectName: typeof d.projectName === 'string' ? d.projectName : '',
       revision: typeof d.revision === 'string' && d.revision ? d.revision : 'A',
@@ -1220,11 +1348,16 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
 
   if (!documents.length) {
     const doc = newDoc('ნახაზი 1', Array.isArray(saved.pieces) ? saved.pieces : []);
-    return { documents: [doc], activeDocId: doc.id, pieces: doc.pieces };
+    return { documents: [doc], activeDocId: doc.id, pieces: doc.pieces, sketch: doc.sketch };
   }
 
   const active = documents.find((d) => d.id === saved.activeDocId) ?? documents[0];
-  return { documents, activeDocId: active.id, pieces: active.pieces };
+  return {
+    documents,
+    activeDocId: active.id,
+    pieces: active.pieces,
+    sketch: active.sketch,
+  };
 }
 
 /**
