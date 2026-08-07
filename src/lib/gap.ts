@@ -174,17 +174,13 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
    * is none on that side. So the nearest thing on each side wins outright, and
    * only the winner is asked whether it is far enough away to be a hole.
    */
-  // A corner faces both ways at once, so there is no direction it can be
-  // measured in that does not also point through the concrete — see `turnsFace`.
-  if (moving.turnsFace) return [];
+  const sides = new Map<string, { gap: Gap; toCorner: boolean }>();
 
-  const sides = new Map<string, Gap>();
-
-  const consider = (side: string, size: number, g: Omit<Gap, 'size'>) => {
+  const consider = (side: string, size: number, g: Omit<Gap, 'size'>, toCorner: boolean) => {
     // Overlapping counts as touching: either way nothing slides in.
     const clear = Math.max(size, 0);
     const held = sides.get(side);
-    if (!held || clear < held.size) sides.set(side, { ...g, size: clear });
+    if (!held || clear < held.gap.size) sides.set(side, { gap: { ...g, size: clear }, toCorner });
   };
 
   const mx1 = moving.x + moving.w;
@@ -201,9 +197,19 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
      * looks along itself, past the corner, and reports the thickness of the
      * wall it just met as an opening. A corner profile is exempt because it
      * belongs to both faces at once, which is what lets a run that stops short
-     * of its corner still be caught.
+     * of its corner still be caught. A corner doing the measuring is exempt
+     * too — it has no one plane — but only its findings AGAINST another corner
+     * survive, which is what keeps it from reporting the pour it looks across.
+     * See the filter at the end.
      */
-    if (!t.turnsFace && t.faceAxis !== undefined && t.faceAxis !== moving.faceAxis) continue;
+    if (
+      !moving.turnsFace &&
+      !t.turnsFace &&
+      t.faceAxis !== undefined &&
+      t.faceAxis !== moving.faceAxis
+    ) {
+      continue;
+    }
 
     const tx1 = t.x + t.w;
     const ty1 = t.y + t.h;
@@ -220,10 +226,10 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
       const v1 = Math.min(my1, ty1);
       const shared = { y: v0, h: v1 - v0, axis: 'u' as const, againstHeight: t.heightCm };
       if (tx1 > moving.x) {
-        consider('right', t.x - mx1, { ...shared, x: mx1, w: Math.max(t.x - mx1, 0) });
+        consider('right', t.x - mx1, { ...shared, x: mx1, w: Math.max(t.x - mx1, 0) }, !!t.turnsFace);
       }
       if (t.x < mx1) {
-        consider('left', moving.x - tx1, { ...shared, x: tx1, w: Math.max(moving.x - tx1, 0) });
+        consider('left', moving.x - tx1, { ...shared, x: tx1, w: Math.max(moving.x - tx1, 0) }, !!t.turnsFace);
       }
     }
 
@@ -232,15 +238,29 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
       const u1 = Math.min(mx1, tx1);
       const shared = { x: u0, w: u1 - u0, axis: 'v' as const, againstHeight: t.heightCm };
       if (ty1 > moving.y) {
-        consider('down', t.y - my1, { ...shared, y: my1, h: Math.max(t.y - my1, 0) });
+        consider('down', t.y - my1, { ...shared, y: my1, h: Math.max(t.y - my1, 0) }, !!t.turnsFace);
       }
       if (t.y < my1) {
-        consider('up', moving.y - ty1, { ...shared, y: ty1, h: Math.max(moving.y - ty1, 0) });
+        consider('up', moving.y - ty1, { ...shared, y: ty1, h: Math.max(moving.y - ty1, 0) }, !!t.turnsFace);
       }
     }
   }
 
-  return [...sides.values()].filter((g) => g.size > 0.05 && g.size <= maxCm);
+  return [...sides.values()]
+    /**
+     * A corner reports only what it finds against another corner.
+     *
+     * It has to be allowed to look, because two corners with the run between
+     * them missing is a real hole and no one else can see it — the panels that
+     * would have reported it are the ones that are not there. But a corner also
+     * looks straight across the pour at the far face of its own wall, and that
+     * is not a hole. Everything competes for the nearest-on-each-side place, so
+     * a panel across the pour still wins its side and vetoes it; the side is
+     * then dropped here rather than reported.
+     */
+    .filter((s) => !moving.turnsFace || s.toCorner)
+    .map((s) => s.gap)
+    .filter((g) => g.size > 0.05 && g.size <= maxCm);
 }
 
 /** The single closest opening beside `moving`, or none. */

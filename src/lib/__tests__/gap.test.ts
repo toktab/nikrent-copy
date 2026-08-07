@@ -289,3 +289,38 @@ describe('two runs meeting at a corner', () => {
     expect(nearestGap(a, [b, downSide])?.size).toBe(5);
   });
 });
+
+describe('a corner reporting for itself', () => {
+  // Two corner profiles on one face with the panels between them missing. It
+  // is one of the most visible mistakes there is, and for a while nothing
+  // reported it: the pieces that would have are the ones that are not there.
+  const top = { ...rect(636, 5, 24, 24), turnsFace: true };
+  const bottom = { ...rect(636, 175, 24, 24), turnsFace: true };
+
+  it('measures the run that is not there', () => {
+    expect(nearestGap(top, [bottom])?.size).toBe(146);
+    expect(allGaps([top, bottom])).toHaveLength(1);
+  });
+
+  it('says nothing about the pour it looks across', () => {
+    // the far face of its own wall, one thickness away
+    const farFace = { ...rect(665, 10, 9, 180), faceAxis: 'v' as const };
+    const corner = { ...rect(625, 10, 20, 20), turnsFace: true };
+    expect(nearestGap(corner, [farFace])).toBeNull();
+  });
+
+  // The corner has to be allowed to look, so what stops it reporting nonsense
+  // is that everything competes for the nearest place on each side — a panel
+  // between the two corners wins and takes the side with it.
+  it('is vetoed by the run when the run is there', () => {
+    const between = { ...rect(636, 29, 9, 146), faceAxis: 'v' as const };
+    expect(nearestGap(top, [between, bottom])).toBeNull();
+  });
+
+  it('still reports the shortfall when the run nearly reaches', () => {
+    const short = { ...rect(636, 29, 9, 140), faceAxis: 'v' as const };
+    expect(nearestGap(top, [short, bottom])).toBeNull(); // the panel wins the side
+    // ...and the panel itself is what reports it, which is where it belongs
+    expect(nearestGap(short, [bottom, top])?.size).toBe(6);
+  });
+});
