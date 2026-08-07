@@ -205,3 +205,38 @@ describe('componentThatFits', () => {
     expect(componentThatFits(100, catalog)).toBeUndefined();
   });
 });
+
+describe('a corner turns the face', () => {
+  /**
+   * The corner of a filled 20 cm wall, in plan, looking down on the turn.
+   *
+   * The inner profile is 20 x 20 and SQUARE, so the footprint says nothing
+   * about which way its face runs — and one of the two directions it could be
+   * measured in crosses the pour to the opposite face of the wall.
+   */
+  const innerCorner = { ...rect(625, 10, 20, 20), faceAxis: 'u' as const, turnsFace: true };
+  const farFace = { ...rect(665, 0, 9, 180), faceAxis: 'v' as const };
+  const runIntoIt = { ...rect(535, 10, 90, 9), faceAxis: 'u' as const };
+
+  it('is never measured from — the 20 cm across the pour is not a hole', () => {
+    expect(nearestGap(innerCorner, [farFace, runIntoIt])).toBeNull();
+  });
+
+  it('is still measured TO, so a run that stops short of one is found', () => {
+    // the same run, backed off 12 cm from the corner it should reach
+    const short = { ...rect(523, 10, 90, 9), faceAxis: 'u' as const };
+    const gap = nearestGap(short, [innerCorner, farFace]);
+    expect(gap?.size).toBe(12);
+  });
+
+  it('reports no hole at all in a corner that is properly closed', () => {
+    expect(allGaps([innerCorner, farFace, runIntoIt])).toHaveLength(0);
+  });
+
+  // What the drawing actually showed: a filled L reporting one 20 cm hole per
+  // corner, which is the wall thickness measured straight through the concrete.
+  it('does not turn the wall thickness into a gap at every corner', () => {
+    const gaps = allGaps([innerCorner, farFace, runIntoIt]);
+    expect(gaps.some((g) => Math.abs(g.size - 20) < 0.5)).toBe(false);
+  });
+});

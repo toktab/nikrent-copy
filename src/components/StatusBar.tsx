@@ -44,6 +44,7 @@ export function StatusBar() {
         faceAxis: viewMode === '3d' || surfaceView !== 'plan'
           ? undefined
           : ((r.w >= r.h ? 'u' : 'v') as 'u' | 'v'),
+        turnsFace: m.category === 'corner',
       }];
     });
     return allGaps(rects).length;

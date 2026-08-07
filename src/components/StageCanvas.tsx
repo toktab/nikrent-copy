@@ -202,6 +202,7 @@ export function StageCanvas() {
         heightCm: m.h,
         span: hiddenSpan(p, m, surfaceView),
         faceAxis: faceAxisOf(rect, elevation),
+        turnsFace: m.category === 'corner',
       });
     }
     return out;
@@ -233,7 +234,15 @@ export function StageCanvas() {
       Math.max(...moving.map((r) => r.span![1])),
     ];
     const found = nearestGap(
-      { ...movingBox, span, faceAxis: faceAxisOf(movingBox, elevation) },
+      {
+        ...movingBox,
+        span,
+        faceAxis: faceAxisOf(movingBox, elevation),
+        // Selecting a corner on its own must not report the pour beside it as a
+        // hole. A selection that also contains panels is a run again, and the
+        // union of it is measured as one.
+        turnsFace: moving.every((r) => r.turnsFace),
+      },
       faceRects.filter((r) => !selected.has(r.id)),
     );
     return found ? withFill(found) : null;

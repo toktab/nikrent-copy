@@ -66,6 +66,23 @@ export interface GapRect extends Rect {
    * how you get "26.7 სმ, cut to size" for a 27 cm wall.
    */
   faceAxis?: 'u' | 'v';
+  /**
+   * This piece turns the face rather than running along it — a corner profile.
+   *
+   * It is a neighbour but never a vantage point. `faceAxis` keeps the check
+   * from measuring across a wall instead of along it, and it works out which
+   * way a face runs from the footprint: 90 × 9 runs across, 9 × 90 runs down.
+   * A corner profile is SQUARE in plan — 24 × 24, 20 × 20 — so that reasoning
+   * has nothing to bite on, and whichever way it guesses is half wrong, because
+   * a corner genuinely faces both ways. Looking out from one, one direction
+   * runs along a face and the other goes through the pour to the far side: a
+   * filled 20 cm wall reported a 20 cm hole at every corner.
+   *
+   * So a corner is measured TO and never FROM. Nothing is lost by that. A run
+   * that stops short of its corner is still found from the last panel in it,
+   * with the corner as the thing it fails to reach.
+   */
+  turnsFace?: boolean;
 }
 
 export interface Gap {
@@ -120,6 +137,10 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
    * is none on that side. So the nearest thing on each side wins outright, and
    * only the winner is asked whether it is far enough away to be a hole.
    */
+  // A corner faces both ways at once, so there is no direction it can be
+  // measured in that does not also point through the concrete — see `turnsFace`.
+  if (moving.turnsFace) return [];
+
   const sides = new Map<string, Gap>();
 
   const consider = (side: string, size: number, g: Omit<Gap, 'size'>) => {
