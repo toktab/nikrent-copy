@@ -14,8 +14,9 @@ import type { Gap } from '../lib/gap';
  *                two edges, so the endpoints are exact. Same amber line and
  *                ticks as the height marker in the 3D view, because it is the
  *                same statement and should not be a second language.
- *   the label  — what to order. Centred on the void when it fits, and pushed
- *                clear on a leader when it does not.
+ *   the label  — what to order. Always clear of the dimension line rather than
+ *                across it, and pushed out of the void on a leader when it is
+ *                too wide to sit inside.
  *
  * Drawn in screen space rather than inside the zoomed world layer, so the
  * strokes stay one pixel and the text stays readable at every zoom, exactly
@@ -42,6 +43,28 @@ interface Props {
  */
 const LABEL_WIDTH_PX = { detailed: 190, compact: 48 };
 
+/**
+ * Where the label's near edge goes, in screen pixels.
+ *
+ * Separated out and tested because it has been wrong twice, in the same way
+ * both times: the label ended up across the dimension line it was annotating.
+ * The CSS anchors the label by the edge this returns — `translate(-50%,-100%)`
+ * for a horizontal dimension, `translate(0,-50%)` for a vertical one — so
+ * "clear of the line" is exactly "this point is past the line", which is what
+ * the tests assert.
+ */
+export function labelAnchor(
+  box: { left: number; top: number; width: number; height: number },
+  axis: 'u' | 'v',
+  inside: boolean,
+): { x: number; y: number } {
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  return axis === 'u'
+    ? { x: cx, y: inside ? cy - 6 : box.top - 16 }
+    : { x: inside ? cx + 9 : box.left + box.width + 16, y: cy };
+}
+
 export function GapMark({ gap, zoom, panX, panY, detailed = true }: Props) {
   const left = gap.x * zoom + panX;
   const top = gap.y * zoom + panY;
@@ -55,13 +78,19 @@ export function GapMark({ gap, zoom, panX, panY, detailed = true }: Props) {
   const cx = left + width / 2;
   const cy = top + height / 2;
 
-  // Pushed clear along the axis the gap is NOT measured in, so the label never
-  // covers the two edges it is describing.
-  const label = inside
-    ? { x: cx, y: cy }
-    : gap.axis === 'u'
-      ? { x: cx, y: top - 20 }
-      : { x: left + width + 20, y: cy };
+  /**
+   * The label always sits clear of the dimension line, on the same side.
+   *
+   * Sitting it on the line hid the very thing it annotates: a 227 px label
+   * across a 308 px dimension leaves two short stubs and no line. So a
+   * horizontal dimension is labelled above and a vertical one beside, which is
+   * where dimension text goes on any drawing.
+   *
+   * The anchor is the label's near edge rather than its centre — centring it
+   * on a point 20 px past the void still swung half the label back across the
+   * line it had just been moved off.
+   */
+  const label = labelAnchor({ left, top, width, height }, gap.axis, inside);
 
   // From the edge of the void, not its middle — a leader that starts inside
   // the thing it points at is just a line crossing it out.
@@ -89,7 +118,7 @@ export function GapMark({ gap, zoom, panX, panY, detailed = true }: Props) {
         />
       )}
       <div
-        className={`gap-chip${detailed ? '' : ' compact'}`}
+        className={`gap-chip gap-place-${gap.axis}${detailed ? '' : ' compact'}`}
         style={{ left: label.x, top: label.y }}
       >
         <b>

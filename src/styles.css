@@ -1223,7 +1223,6 @@ input[type='color'] {
 .gap-chip {
   position: absolute;
   z-index: 40;
-  transform: translate(-50%, -50%);
   display: flex;
   align-items: baseline;
   gap: 7px;
@@ -1236,6 +1235,19 @@ input[type='color'] {
   white-space: nowrap;
   pointer-events: none;
 }
+/* Never on the line. Sitting the label across its own dimension hid the very
+   thing it annotates, so it clears the line the way dimension text does on a
+   drawing: above a horizontal one, beside a vertical one.
+
+   Anchored by its near edge, not its centre. Centring it swung half the label
+   straight back over the line it had just been moved off. */
+.gap-place-u {
+  transform: translate(-50%, -100%);
+}
+.gap-place-v {
+  transform: translate(0, -50%);
+}
+
 /* The bulk pass. Every hole at once, so each one gets the number and nothing
    else — thirty part names on one drawing is not a check, it is wallpaper. */
 .gap-chip.compact {
