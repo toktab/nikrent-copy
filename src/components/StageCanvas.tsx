@@ -645,12 +645,36 @@ export function StageCanvas() {
       const at = worldAt(clientX, clientY);
       if (!at) return null;
       const s = useEditorStore.getState();
+      /**
+       * A layout lands on whole centimetres at worst.
+       *
+       * With the grid off nothing rounded at all, so the pointer's own position
+       * — a screen pixel divided by the zoom — became the wall length, and a leg
+       * drawn as 180 was stored as 180.2. Nobody dimensions a wall to a fifth of
+       * a millimetre.
+       */
+      const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+      const round = (v: number) => Math.round(v / step) * step;
+
       const last = s.penPoints[s.penPoints.length - 1];
-      const squared = last ? orthogonal(last, at) : at;
-      return {
-        x: snapValue(squared.x, s.snapStep, s.snap),
-        y: last && squared.y === last.y ? last.y : snapValue(squared.y, s.snapStep, s.snap),
-      };
+      if (!last) return { x: round(at.x), y: round(at.y) };
+
+      /**
+       * Round the LENGTH of the leg, not the coordinate it ends at.
+       *
+       * The same thing while the run starts on the grid, and the only one of
+       * the two that keeps a dimension round once it does not: rounding the
+       * coordinate measures the leg from wherever the previous vertex happened
+       * to land, so an off-grid start made every leg after it off-grid too. The
+       * shared coordinate is carried across untouched, so the leg stays exactly
+       * square rather than nearly.
+       */
+      const squared = orthogonal(last, at);
+      const across = squared.y === last.y;
+      const length = round(across ? squared.x - last.x : squared.y - last.y);
+      return across
+        ? { x: last.x + length, y: last.y }
+        : { x: last.x, y: last.y + length };
     },
     [worldAt],
   );
@@ -825,7 +849,7 @@ export function StageCanvas() {
   return (
     <main
       ref={stageRef}
-      className="stage"
+      className={`stage${tool === 'pen' ? ' drawing' : ''}`}
       style={{ cursor }}
       onPointerDown={onStagePointerDown}
       onPointerMove={(e) => {

@@ -563,7 +563,7 @@ export function Header() {
           }
         >
           <button
-            className={`btn${tool === 'pen' ? ' active' : ''}`}
+            className={`btn${tool === 'pen' ? ' engaged' : ''}`}
             onClick={() => setTool(tool === 'pen' ? 'select' : 'pen')}
             disabled={viewMode === '3d' || surfaceView !== 'plan'}
             aria-pressed={tool === 'pen'}

@@ -1264,12 +1264,17 @@ export const useEditorStore = create<EditorState>()(
             // Snapped after the move, not before: the move is constrained to
             // one axis, so snapping the raw pointer delta would put the leg on
             // the grid in a direction it is not allowed to travel in.
+            //
+            // Whole centimetres even with the grid off, for the same reason the
+            // pen rounds: dragging a wall to 180.2 is not a dimension anybody
+            // asked for, and it is the neighbouring legs that inherit it.
+            const step = s.snap ? Math.max(s.snapStep, 1) : 1;
             const snapped = {
               ...moved,
               points: moved.points.map((p, i) =>
                 baseline.points[i] && p.x === baseline.points[i].x && p.y === baseline.points[i].y
                   ? p
-                  : { x: snapValue(p.x, s.snapStep, s.snap), y: snapValue(p.y, s.snapStep, s.snap) },
+                  : { x: snapValue(p.x, step, true), y: snapValue(p.y, step, true) },
               ),
             };
             return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)) };

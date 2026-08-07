@@ -159,6 +159,24 @@ kbd {
   color: var(--text);
   font-weight: 600;
 }
+/**
+ * A TOOL that is currently on, as opposed to a menu that happens to be open.
+ *
+ * `.active` is two shades of grey apart from `.btn`, which is right for "this
+ * popover is showing" and nowhere near enough for a mode that changes what
+ * clicking on the drawing does. Someone with the pen armed and the toolbar out
+ * of the corner of their eye could not tell, and found out by clicking.
+ */
+.btn.engaged {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink);
+  font-weight: 650;
+}
+.btn.engaged:hover:not(:disabled) {
+  background: #8ab8f7;
+  border-color: #8ab8f7;
+}
 .btn.primary {
   /* Was accent2, which is a material colour for rebar and steel — it has no
      business being UI chrome. Primary action is the accent, like every other
@@ -1032,6 +1050,31 @@ input.stock-input.bad {
   overflow: hidden;
   background: var(--surface);
   min-width: 0;
+}
+
+/**
+ * Drawing mode, said on the surface itself.
+ *
+ * The crosshair has to beat every child: a panel carries `cursor: move` and a
+ * drawn leg carries it too, so with the pen armed the pointer turned into a
+ * move cursor over exactly the things you are drawing around — which reads as
+ * "you are about to drag this", the opposite of what the click will do.
+ *
+ * The ring is there because a cursor is a poor place to keep state. It is the
+ * accent at low strength: unmistakable once you have seen it, and quiet enough
+ * to draw inside for an hour.
+ */
+.stage.drawing,
+.stage.drawing * {
+  cursor: crosshair !important;
+}
+.stage.drawing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  z-index: 40;
 }
 .world {
   position: absolute;
