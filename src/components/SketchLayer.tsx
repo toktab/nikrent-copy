@@ -1,5 +1,5 @@
 import { useEditorStore } from '../store/useEditorStore';
-import { segments, pathLength } from '../lib/sketch';
+import { isHorizontal, legLength, pathLength, segments } from '../lib/sketch';
 import type { SketchPath } from '../types';
 
 /**
@@ -48,6 +48,11 @@ export function SketchLayer({ worldW, worldH, top, preview }: Props) {
       {/* The path in progress: same geometry, drawn as provisional. */}
       {tool === 'pen' && penPoints.length > 0 && (
         <>
+          {/* Each leg already placed, measured. Reading the run back as it is
+              drawn is the difference between laying out a plan and guessing. */}
+          {segments({ id: 'draft', points: penPoints }).map(([a, b], i) => (
+            <LegLabel key={i} a={a} b={b} hair={hair} className="sketch-measure" />
+          ))}
           <polyline
             className="sketch-draft"
             points={penPoints.map((p) => `${p.x},${p.y}`).join(' ')}
@@ -59,18 +64,67 @@ export function SketchLayer({ worldW, worldH, top, preview }: Props) {
           {/* The leg that would be drawn by the next click, already squared
               and snapped, so the constraint is visible before committing. */}
           {preview && (
-            <line
-              className="sketch-rubber"
-              x1={penPoints[penPoints.length - 1].x}
-              y1={penPoints[penPoints.length - 1].y}
-              x2={preview.x}
-              y2={preview.y}
-              strokeWidth={hair}
-            />
+            <>
+              <line
+                className="sketch-rubber"
+                x1={penPoints[penPoints.length - 1].x}
+                y1={penPoints[penPoints.length - 1].y}
+                x2={preview.x}
+                y2={preview.y}
+                strokeWidth={hair}
+              />
+              {/* The leg you are about to commit, and what the run comes to if
+                  you do. Both are decisions being made right now. */}
+              <LegLabel
+                a={penPoints[penPoints.length - 1]}
+                b={preview}
+                hair={hair}
+                className="sketch-measure live"
+                extra={`სულ ${Math.round(
+                  pathLength({ id: 'd', points: [...penPoints, preview] }),
+                )}`}
+              />
+            </>
           )}
         </>
       )}
     </svg>
+  );
+}
+
+/**
+ * One leg's length, set just off the line and along it — the same place a
+ * dimension goes on a drawing, and clear of the line it describes.
+ */
+function LegLabel({
+  a,
+  b,
+  hair,
+  className,
+  extra,
+}: {
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+  hair: number;
+  className: string;
+  extra?: string;
+}) {
+  const len = Math.round(legLength(a, b));
+  if (!len) return null;
+  const across = isHorizontal(a, b);
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  return (
+    <text
+      className={className}
+      x={across ? mx : mx + hair * 4}
+      y={across ? my - hair * 3 : my}
+      fontSize={hair * 8}
+      textAnchor={across ? 'middle' : 'start'}
+      dominantBaseline={across ? 'auto' : 'middle'}
+    >
+      {len} სმ{extra ? ` · ${extra}` : ''}
+    </text>
   );
 }
 
@@ -92,6 +146,12 @@ function PathShape({
       {legs.map(([a, b], i) => (
         <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={hair} />
       ))}
+      {/* Every leg measured, but only on the path being worked on. All of them
+          at once on a busy layout is not a drawing, it is a wall of numbers. */}
+      {chosen &&
+        legs.map(([a, b], i) => (
+          <LegLabel key={`m${i}`} a={a} b={b} hair={hair} className="sketch-measure" />
+        ))}
       {/* Vertices, so a corner reads as a decision rather than a kink. */}
       {path.points.map((p, i) => (
         <circle key={i} className="sketch-vertex" cx={p.x} cy={p.y} r={hair * 2} />

@@ -8,7 +8,7 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { Material, Piece } from '../types';
+import type { Material, Piece, SketchPath } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
 import {
   computeEdgeSnap,
@@ -38,7 +38,7 @@ import {
   VIEW_HINT,
   type ViewAxis,
 } from '../lib/projection';
-import { orthogonal, pathAt } from '../lib/sketch';
+import { orthogonal, segmentAt, type SegmentHit } from '../lib/sketch';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
@@ -54,6 +54,14 @@ type Interaction =
   | { type: 'pan'; sx: number; sy: number; px: number; py: number }
   | { type: 'move'; sx: number; sy: number; baseline: Piece[]; moved: boolean }
   | { type: 'marquee'; sx: number; sy: number }
+  | {
+      type: 'sketch';
+      sx: number;
+      sy: number;
+      hit: SegmentHit;
+      baseline: SketchPath;
+      moved: boolean;
+    }
   | null;
 
 /** A press has to travel this far before it counts as a drag rather than a click. */
@@ -150,6 +158,7 @@ export function StageCanvas() {
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
   const tool = useEditorStore((s) => s.tool);
   const sketch = useEditorStore((s) => s.sketch);
+  const penPoints = useEditorStore((s) => s.penPoints);
   const showGaps = useEditorStore((s) => s.showGaps);
   const surfaceView = useEditorStore((s) => s.surfaceView);
 
@@ -366,6 +375,18 @@ export function StageCanvas() {
         s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline);
         return;
       }
+      if (it.type === 'sketch') {
+        const dx = e.clientX - it.sx;
+        const dy = e.clientY - it.sy;
+        if (!it.moved) {
+          if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+          s.beginDrag();
+          it.moved = true;
+        }
+        s.dragSketch(it.hit, dx / s.zoom, dy / s.zoom, it.baseline);
+        return;
+      }
+
       // marquee: track the rubber band in stage-relative screen pixels
       const rect = stageRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -414,7 +435,9 @@ export function StageCanvas() {
         }
         setMarquee(null);
       }
-      if (it?.type === 'move' && it.moved) useEditorStore.getState().endDrag();
+      if ((it?.type === 'move' || it?.type === 'sketch') && it.moved) {
+        useEditorStore.getState().endDrag();
+      }
       interaction.current = null;
       setPanning(false);
     };
@@ -668,9 +691,20 @@ export function StageCanvas() {
     // it feels the same at every zoom.
     const world = worldAt(e.clientX, e.clientY);
     if (world && !isElevation(s.surfaceView)) {
-      const hit = pathAt(s.sketch, world, 7 / s.zoom);
-      if (hit) {
-        s.selectSketch(hit.id, e.shiftKey);
+      const grab = segmentAt(s.sketch, world, 7 / s.zoom);
+      const path = grab && s.sketch.find((k) => k.id === grab.pathId);
+      if (grab && path) {
+        s.selectSketch(path.id, e.shiftKey);
+        // Selecting and grabbing are the same press: a layout is adjusted by
+        // pushing a wall, and asking for a click first would only be ceremony.
+        interaction.current = {
+          type: 'sketch',
+          sx: e.clientX,
+          sy: e.clientY,
+          hit: grab,
+          baseline: path,
+          moved: false,
+        };
         return;
       }
     }
@@ -932,7 +966,7 @@ export function StageCanvas() {
       {/* A drawn layout is not an empty drawing. Someone who has set the walls
           out has started; putting a "nothing here yet" card over their lines
           would be the app disagreeing with what is plainly on screen. */}
-      {pieces.length === 0 && sketch.length === 0 && <EmptyDrawing />}
+      {pieces.length === 0 && sketch.length === 0 && penPoints.length === 0 && <EmptyDrawing />}
 
       {elevation && <div className="surface-hint">{VIEW_HINT[surfaceView]}</div>}
     </main>

@@ -30,7 +30,12 @@ import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
 import { planWall } from '../lib/wallWizard';
-import { sketchSnapTargets } from '../lib/sketch';
+import {
+  moveEndpoint,
+  moveSegment,
+  sketchSnapTargets,
+  type SegmentHit,
+} from '../lib/sketch';
 import {
   projectPiece,
   projectedContentBounds,
@@ -302,6 +307,15 @@ export interface EditorState {
   /** Abandon the path in progress, keeping the tool active. */
   penCancel: () => void;
   selectSketch: (id: string | null, additive?: boolean) => void;
+  /**
+   * Live drag of one leg, or of one end of an open run.
+   *
+   * Takes the path as it was when the drag started rather than an incremental
+   * delta, so a drag that wanders and comes back lands exactly where it began
+   * instead of accumulating rounding — the same reason piece dragging works
+   * from a baseline.
+   */
+  dragSketch: (hit: SegmentHit, dx: number, dy: number, baseline: SketchPath) => void;
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -1202,6 +1216,26 @@ export const useEditorStore = create<EditorState>()(
               ...(closed ? { closed: true } : {}),
             };
             return { sketch: [...s.sketch, path], penPoints: [] };
+          }),
+
+        dragSketch: (hit, dx, dy, baseline) =>
+          apply((s) => {
+            const moved =
+              hit.endpoint !== undefined
+                ? moveEndpoint(baseline, hit.endpoint, dx, dy)
+                : moveSegment(baseline, hit.index, dx, dy);
+            // Snapped after the move, not before: the move is constrained to
+            // one axis, so snapping the raw pointer delta would put the leg on
+            // the grid in a direction it is not allowed to travel in.
+            const snapped = {
+              ...moved,
+              points: moved.points.map((p, i) =>
+                baseline.points[i] && p.x === baseline.points[i].x && p.y === baseline.points[i].y
+                  ? p
+                  : { x: snapValue(p.x, s.snapStep, s.snap), y: snapValue(p.y, s.snapStep, s.snap) },
+              ),
+            };
+            return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)) };
           }),
 
         selectSketch: (id, additive = false) =>

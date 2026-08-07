@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   distanceToPath,
+  legLength,
+  moveEndpoint,
+  moveSegment,
   orthogonal,
   pathAt,
   pathLength,
+  segmentAt,
   segments,
   sketchSnapTargets,
 } from '../sketch';
@@ -121,5 +125,106 @@ describe('picking', () => {
 
   it('picks nothing when the pointer is not near a line', () => {
     expect(pathAt([room], { x: 200, y: 90 }, 10)).toBeNull();
+  });
+});
+
+describe('editing', () => {
+  // The invariant the whole editing model exists to protect. Anything that
+  // leaves a leg off-square has drawn something the tool cannot cost.
+  const square = (p: SketchPath) =>
+    segments(p).every(([a, b]) => a.x === b.x || a.y === b.y);
+
+  const L = () => path([[0, 0], [300, 0], [300, 200]]);
+
+  describe('moveSegment', () => {
+    it('slides a horizontal leg up and down, and nothing else', () => {
+      const moved = moveSegment(L(), 0, 0, -50);
+      expect(moved.points).toEqual([
+        { x: 0, y: -50 },
+        { x: 300, y: -50 },
+        { x: 300, y: 200 },
+      ]);
+      expect(square(moved)).toBe(true);
+    });
+
+    it('slides a vertical leg left and right', () => {
+      const moved = moveSegment(L(), 1, 40, 0);
+      expect(moved.points).toEqual([
+        { x: 0, y: 0 },
+        { x: 340, y: 0 },
+        { x: 340, y: 200 },
+      ]);
+      expect(square(moved)).toBe(true);
+    });
+
+    // Sliding a leg along itself would only shorten its neighbours for nothing.
+    it('ignores movement along the leg', () => {
+      expect(moveSegment(L(), 0, 999, 0).points).toEqual(L().points);
+      expect(moveSegment(L(), 1, 0, 999).points).toEqual(L().points);
+    });
+
+    it('changes the neighbouring legs by exactly the distance moved', () => {
+      const before = segments(L()).map(([a, b]) => legLength(a, b));
+      const after = segments(moveSegment(L(), 0, 0, -50)).map(([a, b]) => legLength(a, b));
+      expect(after[0]).toBe(before[0]); // the leg itself keeps its length
+      expect(after[1]).toBe(before[1] + 50); // its neighbour absorbs the move
+    });
+
+    it('moves the closing leg of a room without opening it', () => {
+      const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
+      const moved = moveSegment(room, 3, -60, 0);
+      expect(moved.points[3]).toEqual({ x: -60, y: 300 });
+      expect(moved.points[0]).toEqual({ x: -60, y: 0 });
+      expect(square(moved)).toBe(true);
+    });
+
+    it('leaves an out-of-range leg alone', () => {
+      expect(moveSegment(L(), 9, 10, 10).points).toEqual(L().points);
+    });
+  });
+
+  describe('moveEndpoint', () => {
+    it('extends an open run from its first vertex, along its own leg', () => {
+      const moved = moveEndpoint(L(), 0, -80, 25);
+      expect(moved.points[0]).toEqual({ x: -80, y: 0 });
+      expect(square(moved)).toBe(true);
+    });
+
+    it('extends from the last vertex along its leg', () => {
+      const moved = moveEndpoint(L(), 2, 25, 90);
+      expect(moved.points[2]).toEqual({ x: 300, y: 290 });
+      expect(square(moved)).toBe(true);
+    });
+
+    // A closed room has no ends to pull, and a middle vertex belongs to two
+    // legs at once — that is what moveSegment is for.
+    it('refuses a closed path and a middle vertex', () => {
+      const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
+      expect(moveEndpoint(room, 0, 50, 0).points).toEqual(room.points);
+      expect(moveEndpoint(L(), 1, 50, 50).points).toEqual(L().points);
+    });
+  });
+
+  describe('segmentAt', () => {
+    it('finds the leg under the pointer', () => {
+      expect(segmentAt([L()], { x: 150, y: 4 }, 10)).toMatchObject({ index: 0 });
+      expect(segmentAt([L()], { x: 296, y: 120 }, 10)).toMatchObject({ index: 1 });
+    });
+
+    // The end is the smaller target and the one you have to aim at, so it wins
+    // inside the tolerance even though the leg passes through it too.
+    it('prefers an end vertex to the leg it sits on', () => {
+      expect(segmentAt([L()], { x: 2, y: 2 }, 10)?.endpoint).toBe(0);
+      expect(segmentAt([L()], { x: 300, y: 198 }, 10)?.endpoint).toBe(2);
+    });
+
+    it('offers no endpoint on a closed room', () => {
+      const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
+      expect(segmentAt([room], { x: 2, y: 2 }, 10)?.endpoint).toBeUndefined();
+    });
+
+    it('finds nothing out in the open', () => {
+      expect(segmentAt([L()], { x: 150, y: 120 }, 10)).toBeNull();
+    });
   });
 });

@@ -112,3 +112,138 @@ export function pathAt(paths: SketchPath[], at: Point, tolerance: number): Sketc
   }
   return best;
 }
+
+/**
+ * Editing an orthogonal path without ever leaving it un-orthogonal.
+ *
+ * Dragging a vertex is the obvious idea and the wrong one: a vertex belongs to
+ * two legs at right angles, so moving it freely breaks both, and the fixes
+ * cascade down the path. Dragging a *leg* has no such problem. A horizontal leg
+ * only moves up and down; that changes the length of the vertical legs either
+ * side of it and nothing else, because they were already perpendicular to the
+ * direction it moved in. The right angles survive by construction rather than
+ * by being repaired.
+ *
+ * Which is also how the edit is described on site: not "put that corner there"
+ * but "that wall needs to come out 20 centimetres".
+ */
+
+/** True for a leg that runs across rather than down. */
+export function isHorizontal(a: Point, b: Point): boolean {
+  return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
+}
+
+/** Length of one leg in cm. */
+export function legLength(a: Point, b: Point): number {
+  return Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+}
+
+/** The two vertex indices a leg joins, wrapping for the closing leg. */
+function legEnds(path: SketchPath, index: number): [number, number] {
+  const n = path.points.length;
+  return index === n - 1 ? [n - 1, 0] : [index, index + 1];
+}
+
+/**
+ * Slide one leg sideways. Movement along its own axis is dropped — that would
+ * only slide the leg through itself and shorten its neighbours for nothing.
+ */
+export function moveSegment(
+  path: SketchPath,
+  index: number,
+  dx: number,
+  dy: number,
+): SketchPath {
+  const legs = segments(path);
+  if (index < 0 || index >= legs.length) return path;
+  const [a, b] = legs[index];
+  const horizontal = isHorizontal(a, b);
+  const [i, j] = legEnds(path, index);
+  const points = path.points.map((p, k) =>
+    k === i || k === j
+      ? horizontal
+        ? { x: p.x, y: p.y + dy }
+        : { x: p.x + dx, y: p.y }
+      : p,
+  );
+  return { ...path, points };
+}
+
+/**
+ * Extend or shorten an open run from one of its ends.
+ *
+ * Only along the leg it belongs to. Moving an end vertex sideways would tip its
+ * leg off square, and the way to move a whole wall is to drag the wall.
+ */
+export function moveEndpoint(
+  path: SketchPath,
+  vertex: number,
+  dx: number,
+  dy: number,
+): SketchPath {
+  const n = path.points.length;
+  if (path.closed || n < 2) return path;
+  if (vertex !== 0 && vertex !== n - 1) return path;
+  const neighbour = vertex === 0 ? 1 : n - 2;
+  const horizontal = isHorizontal(path.points[vertex], path.points[neighbour]);
+  const points = path.points.map((p, k) =>
+    k === vertex
+      ? horizontal
+        ? { x: p.x + dx, y: p.y }
+        : { x: p.x, y: p.y + dy }
+      : p,
+  );
+  return { ...path, points };
+}
+
+export interface SegmentHit {
+  pathId: string;
+  /** index into `segments(path)` */
+  index: number;
+  /** set when the pointer is on an end vertex rather than the leg's middle */
+  endpoint?: number;
+}
+
+/**
+ * What the pointer is over: an end vertex if it is near one, otherwise a leg.
+ *
+ * Endpoints win inside the tolerance because they are the smaller target and
+ * the one you have to aim at; a leg can be grabbed anywhere along its length.
+ */
+export function segmentAt(
+  paths: SketchPath[],
+  at: Point,
+  tolerance: number,
+): SegmentHit | null {
+  let best: SegmentHit | null = null;
+  let bestD = tolerance;
+
+  for (const path of paths) {
+    if (!path.closed) {
+      const ends = [0, path.points.length - 1];
+      for (const v of ends) {
+        const p = path.points[v];
+        if (!p) continue;
+        const d = Math.hypot(at.x - p.x, at.y - p.y);
+        if (d <= bestD) {
+          bestD = d;
+          best = { pathId: path.id, index: v === 0 ? 0 : path.points.length - 2, endpoint: v };
+        }
+      }
+    }
+  }
+  if (best) return best;
+
+  for (const path of paths) {
+    segments(path).forEach(([a, b], index) => {
+      const nx = Math.max(Math.min(a.x, b.x), Math.min(at.x, Math.max(a.x, b.x)));
+      const ny = Math.max(Math.min(a.y, b.y), Math.min(at.y, Math.max(a.y, b.y)));
+      const d = Math.hypot(at.x - nx, at.y - ny);
+      if (d <= bestD) {
+        bestD = d;
+        best = { pathId: path.id, index };
+      }
+    });
+  }
+  return best;
+}

@@ -1322,6 +1322,34 @@ input[type='color'] {
   opacity: 0.8;
 }
 
+/* Leg lengths. Amber while drawing, because a measurement in progress is a
+   measurement, and the same colour the height marker and the gap use. */
+.sketch-measure {
+  fill: var(--warn);
+  font-family: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: rgba(28, 32, 38, 0.85);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+/* The leg about to be committed reads louder than the ones already placed. */
+.sketch-measure.live {
+  fill: var(--text);
+}
+/* On a finished path the numbers are a reading, not a decision. */
+.sketch-path.chosen .sketch-measure {
+  fill: var(--accent);
+}
+
+/* A leg is grabbable, and says so before it is grabbed. */
+.stage .sketch-hit {
+  pointer-events: stroke;
+  cursor: move;
+}
+
 /* edge-snap alignment guides */
 .guide {
   position: absolute;
