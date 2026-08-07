@@ -284,6 +284,26 @@ textarea {
 select {
   cursor: pointer;
 }
+
+/**
+ * No spinner on a number field.
+ *
+ * It sits *inside* the box, so on the stock field it was eating about 15 of
+ * the 22 pixels of text room and leaving space for a single digit. Nobody
+ * clicks a stepper two hundred times to record a delivery either — they type
+ * the number. Arrow keys still step it, which is the part that was worth
+ * having.
+ */
+input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
 input::placeholder,
 textarea::placeholder {
   color: var(--text-tertiary);
@@ -987,14 +1007,20 @@ input[type='color'] {
 .mat-menu:focus-visible {
   opacity: 1;
 }
-.stock-input {
-  width: 44px;
-  padding: 4px 6px;
+/* `input.stock-input`, not `.stock-input`: the generic `input[type='number']`
+   rule above is an attribute selector and outranks a bare class, so the
+   padding here was silently losing to it and the field was 10px-padded when
+   it meant to be 6. */
+input.stock-input {
+  /* Room for four digits. A yard with 1200 panels is a real yard, and a count
+     you cannot see all of is a count you cannot check. */
+  width: 54px;
+  padding: 5px 7px;
   font-size: 11.5px;
   text-align: right;
   flex: 0 0 auto;
 }
-.stock-input.bad {
+input.stock-input.bad {
   border-color: var(--shortage);
   color: var(--shortage);
 }
@@ -1278,10 +1304,16 @@ input[type='color'] {
 }
 
 /* --------------------------------------------------------- the drawn layout
-   Reference geometry, under the formwork. Deliberately quiet and deliberately
-   cool: this is the thing the panels are being set out to, not a thing on the
-   drawing, and it must never compete with a material colour. A dashed line
-   also reads as "drawn, not built" without needing a legend. */
+   Reference geometry, under the formwork: the thing the panels are being set
+   out to, not a thing on the drawing. So it stays cool and uncoloured, well
+   clear of every material hue.
+
+   It was quiet to the point of being lost. At a 1.5px hairline in #7f93ad it
+   sat within a shade of --gridMajor and the same weight as the grid, so the
+   line could not be followed across the surface — which is the one thing a
+   setting-out line has to allow. Brighter than anything the grid can be, and
+   thicker than any of it, without borrowing a colour that already means
+   something. */
 .sketch-layer {
   position: absolute;
   overflow: visible;
@@ -1291,12 +1323,22 @@ input[type='color'] {
   z-index: 2;
 }
 .sketch-path line {
-  stroke: #7f93ad;
+  stroke: #c5d3e4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+/* A dark rim under the line, so it separates from the grid where the two run
+   along each other — which on a layout drawn to the module is most of the way. */
+.sketch-path .sketch-under {
+  stroke: rgba(20, 23, 28, 0.85);
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 .sketch-path .sketch-vertex {
-  fill: #7f93ad;
+  fill: #eaf1fa;
+  stroke: rgba(20, 23, 28, 0.85);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
 }
 .sketch-path .sketch-len {
   fill: var(--text-tertiary);

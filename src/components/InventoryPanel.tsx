@@ -1,3 +1,4 @@
+import { keepWheelOffNumber } from '../lib/numberField';
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
@@ -193,6 +194,7 @@ export function InventoryPanel() {
                     <td className="num">
                       <input
                         className={`stock-input${shortage ? ' bad' : ''}`}
+                        onWheel={keepWheelOffNumber}
                         type="number"
                         min={0}
                         step={1}

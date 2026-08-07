@@ -1,3 +1,4 @@
+import { keepWheelOffNumber } from '../lib/numberField';
 import { useMemo } from 'react';
 import type { Material } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
@@ -153,6 +154,7 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
 
       <input
         className={`stock-input${shortage ? ' bad' : ''}`}
+        onWheel={keepWheelOffNumber}
         type="number"
         min={0}
         step={1}

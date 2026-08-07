@@ -143,8 +143,22 @@ function PathShape({
 
   return (
     <g className={`sketch-path${chosen ? ' chosen' : ''}`}>
+      {/* Drawn twice: a dark rim, then the line on top of it. A single stroke
+          disappeared wherever it ran along a grid line, and a layout set out
+          on the module runs along one nearly the whole way. */}
       {legs.map(([a, b], i) => (
-        <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={hair} />
+        <line
+          key={`u${i}`}
+          className="sketch-under"
+          x1={a.x}
+          y1={a.y}
+          x2={b.x}
+          y2={b.y}
+          strokeWidth={hair * 3.4}
+        />
+      ))}
+      {legs.map(([a, b], i) => (
+        <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={hair * 1.8} />
       ))}
       {/* Every leg measured, but only on the path being worked on. All of them
           at once on a busy layout is not a drawing, it is a wall of numbers. */}
@@ -154,7 +168,7 @@ function PathShape({
         ))}
       {/* Vertices, so a corner reads as a decision rather than a kink. */}
       {path.points.map((p, i) => (
-        <circle key={i} className="sketch-vertex" cx={p.x} cy={p.y} r={hair * 2} />
+        <circle key={i} className="sketch-vertex" cx={p.x} cy={p.y} r={hair * 2.4} />
       ))}
       {/* How much wall this is, which is the first thing anyone wants from a
           layout and would otherwise mean adding up the legs by hand. */}
