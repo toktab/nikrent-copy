@@ -213,6 +213,7 @@ export type DialogState =
   | { kind: 'array' }
   | { kind: 'column-wizard' }
   | { kind: 'wall-wizard' }
+  | { kind: 'sketch-fill'; pathId: string }
   | { kind: 'templates' }
   | { kind: 'warehouses' }
   | { kind: 'title-block' }

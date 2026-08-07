@@ -5,6 +5,9 @@ import { categoryLabel } from '../data/categories';
 import { totalStock } from '../lib/inventory';
 import { PiecePreview } from './ShapeSvg';
 import { Icon } from './Icon';
+import { isHorizontal, legLength, pathLength, segments } from '../lib/sketch';
+import { keepWheelOffNumber } from '../lib/numberField';
+import type { SketchPath } from '../types';
 
 /** Inspector for the current selection — one piece in detail, or a group summary. */
 export function DetailsPanel() {
@@ -21,6 +24,18 @@ export function DetailsPanel() {
     () => pieces.filter((p) => selectedIds.includes(p.id)),
     [pieces, selectedIds],
   );
+
+  const selectedSketch = useEditorStore((s) =>
+    s.selectedSketchIds.length === 1
+      ? (s.sketch.find((k) => k.id === s.selectedSketchIds[0]) ?? null)
+      : null,
+  );
+
+  // A drawn run is a selection too, and until it could be measured and filled
+  // from here, picking one put nothing at all in the inspector.
+  if (!selectedPieces.length && selectedSketch) {
+    return <SketchDetails path={selectedSketch} />;
+  }
 
   if (!selectedPieces.length) {
     return (
@@ -257,6 +272,111 @@ function RotationField({ rot }: { rot: number }) {
         value={Math.round(rot)}
         onChange={(e) => setRotation(Number(e.target.value))}
       />
+    </span>
+  );
+}
+
+/**
+ * A drawn run: what it measures, and what to do with it.
+ *
+ * The legs are listed because a layout is specified leg by leg — "the north
+ * wall is 4.27 m" — and dragging cannot land on 427 however carefully it is
+ * done. Reading them back is half the value; typing over one is the other half.
+ */
+function SketchDetails({ path }: { path: SketchPath }) {
+  const openDialog = useEditorStore((s) => s.openDialog);
+  const deleteSelected = useEditorStore((s) => s.deleteSelected);
+  const legs = segments(path);
+  const closed = !!path.closed && path.points.length > 2;
+
+  return (
+    <div className="details">
+      <div className="kv">
+        <span className="k">მონიშნულია</span>
+        <b>{closed ? 'ჩაკეტილი კონტური' : 'ხაზი'}</b>
+      </div>
+      <div className="kv">
+        <span className="k">სულ სიგრძე</span>
+        <b>{Math.round(pathLength(path))} სმ</b>
+      </div>
+      <div className="kv">
+        <span className="k">მონაკვეთი</span>
+        <span>
+          {legs.length} · {legs.length > 1 ? `${legs.length - (closed ? 0 : 1)} კუთხე` : 'სწორი'}
+        </span>
+      </div>
+
+      <div className="leg-list">
+        {legs.map(([a, b], i) => (
+          <div className="kv" key={i}>
+            <span className="k">
+              {i + 1}. {isHorizontal(a, b) ? 'ჰორიზონტალური' : 'ვერტიკალური'}
+            </span>
+            <LegField pathId={path.id} index={i} cm={legLength(a, b)} locked={closed} />
+          </div>
+        ))}
+      </div>
+
+      <div className="row-actions">
+        <button
+          className="btn small primary"
+          onClick={() => openDialog({ kind: 'sketch-fill', pathId: path.id })}
+        >
+          <Icon name="wall" /> შევსება ყალიბით
+        </button>
+        <button className="btn small danger" onClick={deleteSelected}>
+          <Icon name="trash" /> წაშლა
+        </button>
+      </div>
+
+      {closed && (
+        <p className="hint-note">
+          ჩაკეტილ კონტურში მონაკვეთის სიგრძის აკრეფა შეუძლებელია — ცვლილებას სხვაგან
+          წასასვლელი არ აქვს და კონტური იშლება. გადაათრიე მონაკვეთი ნახაზზე.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** One leg's length, typed. Committed on blur and Enter, like the others. */
+function LegField({
+  pathId,
+  index,
+  cm,
+  locked,
+}: {
+  pathId: string;
+  index: number;
+  cm: number;
+  locked: boolean;
+}) {
+  const setLegLength = useEditorStore((s) => s.setLegLength);
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? String(Math.round(cm * 10) / 10);
+
+  const commit = (raw: string) => {
+    const n = Number(raw.replace(',', '.'));
+    if (Number.isFinite(n) && n > 0) setLegLength(pathId, index, n);
+    setDraft(null);
+  };
+
+  return (
+    <span className="rot-field">
+      <input
+        type="number"
+        min={1}
+        step="any"
+        value={value}
+        disabled={locked}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onWheel={keepWheelOffNumber}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+        }}
+      />
+      <span className="deg">სმ</span>
     </span>
   );
 }

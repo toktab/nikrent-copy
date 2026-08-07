@@ -15,6 +15,7 @@ import { ArrayDialog } from './components/ArrayDialog';
 import { DocumentsDialog } from './components/DocumentsDialog';
 import { ColumnWizardDialog } from './components/ColumnWizardDialog';
 import { WallWizardDialog } from './components/WallWizardDialog';
+import { SketchFillDialog } from './components/SketchFillDialog';
 import { TemplatesDialog } from './components/TemplatesDialog';
 import { WarehousesDialog } from './components/WarehousesDialog';
 import { TitleBlockDialog } from './components/TitleBlockDialog';
@@ -82,6 +83,7 @@ export default function App() {
       {dialog?.kind === 'documents' && <DocumentsDialog />}
       {dialog?.kind === 'column-wizard' && <ColumnWizardDialog />}
       {dialog?.kind === 'wall-wizard' && <WallWizardDialog />}
+      {dialog?.kind === 'sketch-fill' && <SketchFillDialog pathId={dialog.pathId} />}
       {dialog?.kind === 'templates' && <TemplatesDialog />}
       {dialog?.kind === 'warehouses' && <WarehousesDialog />}
       {dialog?.kind === 'title-block' && <TitleBlockDialog />}

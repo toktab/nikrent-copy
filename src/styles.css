@@ -1766,6 +1766,22 @@ input.stock-input.bad {
   accent-color: var(--accent);
   margin: 2px 0 0;
 }
+
+/* The legs of a drawn run, listed so each one can be typed exactly. Long
+   layouts scroll inside the list rather than pushing the fill button out of
+   reach at the bottom of the panel. */
+.leg-list {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 2px 0;
+  padding-right: 2px;
+}
+.leg-list .kv {
+  padding: 3px 0;
+}
+.leg-list .rot-field input[type='number'] {
+  width: 66px;
+}
 .field-hint {
   font-size: 10.5px;
   color: var(--muted);

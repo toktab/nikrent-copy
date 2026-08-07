@@ -33,9 +33,11 @@ import { planWall } from '../lib/wallWizard';
 import {
   moveEndpoint,
   moveSegment,
+  segments,
   sketchSnapTargets,
   type SegmentHit,
 } from '../lib/sketch';
+import { legDir, planSketchFill, type SketchFillSpec } from '../lib/sketchFill';
 import {
   projectPiece,
   projectedContentBounds,
@@ -326,6 +328,17 @@ export interface EditorState {
    * from a baseline.
    */
   dragSketch: (hit: SegmentHit, dx: number, dy: number, baseline: SketchPath) => void;
+  /**
+   * Set one leg to an exact length, in cm.
+   *
+   * A wall is specified as 4.27 m, not as a number of grid squares, and no
+   * amount of careful dragging gets you there. The rest of the run travels with
+   * the leg so the corners it already has survive; a closed room has no free
+   * end for the slack to go to, so it is left alone.
+   */
+  setLegLength: (pathId: string, index: number, cm: number) => void;
+  /** Build the formwork for a drawn run. */
+  fillSketch: (pathId: string, spec: SketchFillSpec) => { added: number; warnings: string[] };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -1261,6 +1274,42 @@ export const useEditorStore = create<EditorState>()(
             };
             return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)) };
           }),
+
+        setLegLength: (pathId, index, cm) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path || path.closed || !(cm > 0)) return {};
+            const legs = segments(path);
+            const leg = legs[index];
+            if (!leg) return {};
+            const [a, b] = leg;
+            const dir = legDir(a, b);
+            const delta = cm - (Math.abs(b.x - a.x) + Math.abs(b.y - a.y));
+            if (!delta) return {};
+            // Everything past this leg moves with it, so the legs beyond keep
+            // their own lengths and the corners stay square.
+            const points = path.points.map((p, i) =>
+              i > index ? { x: p.x + dir.x * delta, y: p.y + dir.y * delta } : p,
+            );
+            return { sketch: s.sketch.map((k) => (k.id === pathId ? { ...k, points } : k)) };
+          }),
+
+        fillSketch: (pathId, spec) => {
+          const state = get();
+          const path = state.sketch.find((k) => k.id === pathId);
+          if (!path) return { added: 0, warnings: ['ნახაზი ვერ მოიძებნა.'] };
+          const plan = planSketchFill(path, spec, state.materials);
+          if (plan.pieces.length) {
+            commit((s) => ({
+              pieces: [...s.pieces, ...plan.pieces],
+              selectedIds: plan.pieces.map((p) => p.id),
+              // The formwork is what you are working on now, not the line it
+              // was set out to.
+              selectedSketchIds: [],
+            }));
+          }
+          return { added: plan.pieces.length, warnings: plan.warnings };
+        },
 
         selectSketch: (id, additive = false) =>
           set((s) => {
