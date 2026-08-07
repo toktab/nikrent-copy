@@ -6,7 +6,7 @@ import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { usageByMaterial } from '../lib/bom';
 import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
 import { Swatch } from './ShapeSvg';
-import { Tooltip } from './Tooltip';
+import { Menu, MenuItem } from './Menu';
 import { Icon } from './Icon';
 
 /** Left-hand material palette: search, grouped list, drag source, inline stock. */
@@ -166,36 +166,53 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
         onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
       />
 
-      <div className="mat-actions">
-        <Tooltip
-          label="რედაქტირება"
-          reason={canManage ? undefined : ADMIN_ONLY_TITLE}
-          icon={canManage ? undefined : 'lock'}
-        >
+      {/* One menu, in flow, always holding its 26px.
+
+          These were two buttons revealed on hover, floating over the right of
+          the row — which put them exactly on top of the stock field, so the
+          number could not be typed at all: reaching for the input summoned the
+          thing covering it. Stock is entered every time a delivery lands;
+          editing a component happens once a month. The frequent one keeps its
+          place and the rare ones move behind a menu. */}
+      <Menu
+        align="right"
+        trigger={(open) => (
           <button
-            className="btn icon ghost small"
-            disabled={!canManage}
-            aria-label={`${m.name} — რედაქტირება`}
-            onClick={() => openDialog({ kind: 'material', materialId: m.id })}
+            className={`btn icon ghost small mat-menu${open ? ' active' : ''}`}
+            aria-label={`${m.name} — მოქმედებები`}
           >
-            <Icon name="pencil" size={14} />
+            <Icon name="more" size={14} />
           </button>
-        </Tooltip>
-        <Tooltip
-          label="წაშლა"
-          reason={canManage ? undefined : ADMIN_ONLY_TITLE}
-          icon={canManage ? undefined : 'lock'}
-        >
-          <button
-            className="btn icon ghost small danger"
-            disabled={!canManage}
-            aria-label={`${m.name} — წაშლა`}
-            onClick={askDelete}
-          >
-            <Icon name="trash" size={14} />
-          </button>
-        </Tooltip>
-      </div>
+        )}
+      >
+        {(close) => (
+          <>
+            <MenuItem
+              icon="pencil"
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_TITLE}
+              onClick={() => {
+                openDialog({ kind: 'material', materialId: m.id });
+                close();
+              }}
+            >
+              რედაქტირება
+            </MenuItem>
+            <MenuItem
+              icon="trash"
+              danger
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_TITLE}
+              onClick={() => {
+                askDelete();
+                close();
+              }}
+            >
+              წაშლა
+            </MenuItem>
+          </>
+        )}
+      </Menu>
     </div>
   );
 }

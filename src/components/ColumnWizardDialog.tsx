@@ -1,3 +1,4 @@
+import { dropOrigin } from '../lib/geometry';
 import { useMemo, useState } from 'react';
 import type { ColumnSpec } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
@@ -30,19 +31,22 @@ export function ColumnWizardDialog() {
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
-  // Drop the assembly near the top-left of what the user is currently looking at.
+  // Centred on what the user is looking at — see `dropOrigin`.
   const spec: ColumnSpec = useMemo(
-    () => ({
+    () => {
+      const at = dropOrigin({ panX, panY, zoom, stageW, stageH }, n(sectionX), n(sectionY));
+      return {
       sectionX: n(sectionX),
       sectionY: n(sectionY),
       height: n(height),
       walerSpacing: n(walerSpacing),
-      originX: Math.round((0 - panX) / zoom + 40),
-      originY: Math.round((0 - panY) / zoom + 40),
+      originX: at.x,
+      originY: at.y,
       includeWalers,
       includeTies,
       includeCorners,
-    }),
+      };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sectionX, sectionY, height, walerSpacing, includeWalers, includeTies, includeCorners, panX, panY, zoom, stageW, stageH],
   );

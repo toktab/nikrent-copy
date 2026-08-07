@@ -331,3 +331,44 @@ export function dragOnHeight(dyScreen: number, cam: Camera, zoom: number): numbe
 }
 
 export { sub as subtract };
+
+/**
+ * Zoom while holding one screen point still.
+ *
+ * The renderer places a world point at
+ *
+ *     screen = size / 2 + pan + project(world − centre) · zoom
+ *
+ * so changing `zoom` alone pulls everything towards `size / 2`. In the 3D view
+ * that meant every notch dragged the model away from whatever the user was
+ * pointing at and towards the middle of the canvas, and they had to pan back
+ * after each one. Holding the point under the cursor still and solving the
+ * expression above for the new pan gives
+ *
+ *     pan' = pan + (point − size / 2 − pan) · (1 − factor)
+ *
+ * The factor has to be the one actually applied rather than the one requested:
+ * against either end of the range the zoom stops changing, and a correction
+ * computed from the requested factor would keep sliding the model sideways
+ * while the scale no longer moved.
+ */
+export function zoomAbout(
+  point: { x: number; y: number },
+  size: { w: number; h: number },
+  pan: { x: number; y: number },
+  zoom: number,
+  factor: number,
+  min = 0.02,
+  max = 40,
+): { zoom: number; pan: { x: number; y: number } } {
+  const next = Math.max(min, Math.min(max, zoom * factor));
+  const applied = zoom > 0 ? next / zoom : 1;
+  if (applied === 1) return { zoom: next, pan };
+  return {
+    zoom: next,
+    pan: {
+      x: pan.x + (point.x - size.w / 2 - pan.x) * (1 - applied),
+      y: pan.y + (point.y - size.h / 2 - pan.y) * (1 - applied),
+    },
+  };
+}

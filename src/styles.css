@@ -861,7 +861,7 @@ input[type='color'] {
 }
 .matlist {
   overflow-y: auto;
-  padding: 0 8px 16px;
+  padding: 0 6px 16px;
   flex: 1 1 auto;
 }
 .cathead {
@@ -900,8 +900,8 @@ input[type='color'] {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 6px;
+  padding: 5px 6px;
   border-radius: var(--r);
   box-shadow: inset 0 0 0 1px transparent;
   user-select: none;
@@ -972,32 +972,23 @@ input[type='color'] {
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
 }
-.mat-actions {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding-left: 10px;
-  /* The row's own ground, so the actions cover the stock field cleanly rather
-     than sitting on top of a half-legible number. */
-  background: linear-gradient(90deg, transparent, var(--panel) 12px);
+/* In flow, always holding its width. It used to float over the right of the
+   row on hover, which put it exactly on top of the stock field: reaching for
+   the input summoned the thing covering it, and the number could not be typed
+   at all. Quiet until the row is hovered, but the space is never given up. */
+.mat-menu {
+  flex: 0 0 auto;
   opacity: 0;
-  pointer-events: none;
+  transition: opacity 0.12s;
 }
-.mat:hover .mat-actions,
-.mat:focus-within .mat-actions {
+.mat:hover .mat-menu,
+.mat:focus-within .mat-menu,
+.mat-menu.active,
+.mat-menu:focus-visible {
   opacity: 1;
-  pointer-events: auto;
-}
-.mat.shortage:hover .mat-actions,
-.mat.shortage:focus-within .mat-actions {
-  background: linear-gradient(90deg, transparent, #2a2823 12px);
 }
 .stock-input {
-  width: 46px;
+  width: 44px;
   padding: 4px 6px;
   font-size: 11.5px;
   text-align: right;
@@ -2237,19 +2228,21 @@ kbd {
 /* Fixed 288 + 300 px panels leave no canvas on a small laptop or a tablet. */
 /* The design asks for an icons-only palette below 1280. Not followed on
    purpose: these rows are "პანელი 90*300" against "პანელი 75*300" — identical
-   swatches whose entire identity is the text. Icons-only would make the panel
-   unusable rather than compact, so it narrows instead. */
+   swatches whose entire identity is the text.
+
+   It used to narrow at 1280 instead, which turned out to be the same mistake
+   more politely: at 236px a row is swatch + name + stock + menu with nothing
+   to spare, and 33 of 41 names truncated to "პანელი 45…". Narrowing a panel
+   whose whole job is telling two similar names apart defeats the panel. The
+   canvas gives up the 52px instead. */
 @media (max-width: 1280px) {
-  .palette {
-    width: 236px;
-  }
   .inspector {
     width: 252px;
   }
 }
 @media (max-width: 1024px) {
   .palette {
-    width: 212px;
+    width: 240px;
   }
   .inspector {
     width: 224px;

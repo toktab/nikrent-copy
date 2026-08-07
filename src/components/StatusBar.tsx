@@ -81,7 +81,7 @@ export function StatusBar() {
       )}
       {showGaps && (
         <span className={`status-gaps${openGaps ? ' open' : ''}`}>
-          {openGaps ? `${openGaps} ხვრელი` : 'ხვრელი არაა'}
+          {openGaps ? `${openGaps} ნაპრალი` : 'ნაპრალი არაა'}
         </span>
       )}
       {selected > 0 && (

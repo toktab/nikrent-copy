@@ -14,6 +14,7 @@ import {
   isFrontFacing,
   piecePrism,
   project,
+  zoomAbout,
   type Camera,
   type Vec3,
 } from '../lib/iso3d';
@@ -133,13 +134,31 @@ export function View3D() {
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [cam, setCam] = useState<Camera>(DEFAULT_CAMERA);
   const [zoom, setZoom] = useState(1);
+  /**
+   * The live zoom, for the wheel handler.
+   *
+   * Wheel events arrive faster than React re-renders, so several notches land
+   * against the same stale `zoom` from the closure. The ref carries the value
+   * forward within a burst, which matters here because the pan correction is
+   * computed from the zoom that was actually in effect.
+   */
+  const zoomRef = useRef(zoom);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  /** Live pan, for the same reason as `zoomRef`. */
+  const panRef = useRef(pan);
   const [centre, setCentre] = useState<Vec3>({ x: 0, y: 0, z: 0 });
   const [axis, setAxis] = useState<MoveAxis>('ground');
   const [blocked, setBlocked] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  // Anything that sets zoom outside the wheel — fitting, entering the view —
+  // has to bring the ref with it.
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = pan;
+  }, [zoom, pan]);
 
   const fit = useCallback(() => {
     const result = fitZoom(pieces, byId, cam, size.w, size.h);
@@ -208,11 +227,28 @@ export function View3D() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const action = wheel.current.classify(e, el.clientHeight);
-      if (action.kind === 'zoom') {
-        setZoom((z) => Math.max(0.02, Math.min(40, z * action.factor)));
-      } else {
-        setPan((p) => ({ x: p.x - action.dx, y: p.y - action.dy }));
+      if (action.kind !== 'zoom') {
+        const moved = { x: panRef.current.x - action.dx, y: panRef.current.y - action.dy };
+        panRef.current = moved;
+        setPan(moved);
+        return;
       }
+
+      // Zoom about the pointer rather than the middle of the canvas. The
+      // arithmetic, and why the applied factor is the one that matters, live
+      // in `zoomAbout` — it has the tests.
+      const r = el.getBoundingClientRect();
+      const next = zoomAbout(
+        { x: e.clientX - r.left, y: e.clientY - r.top },
+        { w: el.clientWidth, h: el.clientHeight },
+        panRef.current,
+        zoomRef.current,
+        action.factor,
+      );
+      zoomRef.current = next.zoom;
+      panRef.current = next.pan;
+      setZoom(next.zoom);
+      setPan(next.pan);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);

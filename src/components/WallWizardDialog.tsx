@@ -1,3 +1,4 @@
+import { dropOrigin } from '../lib/geometry';
 import { useMemo, useState } from 'react';
 import type { WallSpec } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
@@ -18,6 +19,8 @@ export function WallWizardDialog() {
   const setToast = useEditorStore((s) => s.setToast);
   const panX = useEditorStore((s) => s.panX);
   const panY = useEditorStore((s) => s.panY);
+  const stageW = useEditorStore((s) => s.stageW);
+  const stageH = useEditorStore((s) => s.stageH);
   const zoom = useEditorStore((s) => s.zoom);
 
   const [length, setLength] = useState('300');
@@ -31,24 +34,27 @@ export function WallWizardDialog() {
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
-  // Drop the assembly near the top-left of what the user is currently looking at.
+  // Centred on what the user is looking at — see `dropOrigin`.
   const spec: WallSpec = useMemo(
-    () => ({
+    () => {
+      const at = dropOrigin({ panX, panY, zoom, stageW, stageH }, n(length), n(thickness));
+      return {
       length: n(length),
       thickness: n(thickness),
       height: n(height),
       walerSpacing: n(walerSpacing),
       tieSpacing: n(tieSpacing),
-      originX: Math.round((0 - panX) / zoom + 40),
-      originY: Math.round((0 - panY) / zoom + 40),
+      originX: at.x,
+      originY: at.y,
       includeWalers,
       includeTies,
       includeStopEnds,
-    }),
+      };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       length, thickness, height, walerSpacing, tieSpacing,
-      includeWalers, includeTies, includeStopEnds, panX, panY, zoom,
+      includeWalers, includeTies, includeStopEnds, panX, panY, zoom, stageW, stageH,
     ],
   );
 

@@ -236,3 +236,36 @@ export function niceStep(zoom: number): number {
 export function fmtCm(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
 }
+
+/**
+ * Where to drop a freshly generated assembly, in world cm.
+ *
+ * The wizards used to place their output at the world point behind the stage's
+ * top-left pixel, plus 40 cm. Three things were wrong with that: the top-left
+ * pixel is under the ruler gutter, 40 cm is 8 px at 20% zoom and 224 px at
+ * 560%, and a column is built *outwards* from its origin — the walers sit at
+ * origin − panelDepth − walerDepth — so the assembly reached back past the
+ * corner it was measured from and off the screen.
+ *
+ * The middle of what the user is looking at has none of those problems, and it
+ * is where anyone would expect a thing they just asked for to appear. The
+ * caller passes the assembly's own plan size so the box is centred rather than
+ * hung off its corner.
+ */
+export function dropOrigin(
+  view: { panX: number; panY: number; zoom: number; stageW: number; stageH: number },
+  sizeX: number,
+  sizeY: number,
+): { x: number; y: number } {
+  const { panX, panY, zoom, stageW, stageH } = view;
+  // A zero stage means the canvas has not been measured yet — on the very
+  // first render, before the ResizeObserver reports. The world origin is a
+  // better answer than dividing by nothing.
+  if (!(zoom > 0) || !(stageW > 0) || !(stageH > 0)) return { x: 0, y: 0 };
+  const centreX = (stageW / 2 - panX) / zoom;
+  const centreY = (stageH / 2 - panY) / zoom;
+  return {
+    x: Math.round(centreX - (Number.isFinite(sizeX) ? sizeX : 0) / 2),
+    y: Math.round(centreY - (Number.isFinite(sizeY) ? sizeY : 0) / 2),
+  };
+}

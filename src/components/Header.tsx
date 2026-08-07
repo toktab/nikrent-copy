@@ -523,9 +523,9 @@ export function Header() {
             <MenuItem
               on={showGaps}
               onClick={() => setShowGaps(!showGaps)}
-              title="ყველა ღია ხვრელი ნახაზზე — შეკვეთამდე შესამოწმებლად"
+              title="ყველა ღია ნაპრალი ნახაზზე — შეკვეთამდე შესამოწმებლად"
             >
-              ყველა ხვრელი
+              ყველა ნაპრალი
             </MenuItem>
           </>
         </Menu>
