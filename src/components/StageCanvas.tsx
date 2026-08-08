@@ -586,10 +586,16 @@ export function StageCanvas() {
         s.setSelection([]);
         s.selectSketch(null);
       }
-      // The pen, on the key the drawing tools of every other app put it on.
-      if (e.code === 'KeyP' || e.key.toLowerCase() === 'p') {
-        s.setTool(s.tool === 'pen' ? 'select' : 'pen');
-      }
+      /**
+       * The two tools, each on its own key rather than sharing a toggle.
+       *
+       * A toggle makes the key mean different things depending on a mode you
+       * cannot see from the keyboard, so you press it and find out. One key per
+       * tool always lands where it says, which is what makes it usable without
+       * looking. `code` first so the physical key works on a Georgian layout.
+       */
+      if (e.code === 'KeyG' || e.key.toLowerCase() === 'g') s.setTool('pen');
+      if (e.code === 'KeyV' || e.key.toLowerCase() === 'v') s.setTool('select');
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
