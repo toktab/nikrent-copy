@@ -63,6 +63,14 @@ export const PREFS_KEY = 'du-formwork-prefs';
 
 const HISTORY_LIMIT = 80;
 
+/**
+ * How far the pointer has to travel before it counts as having gone somewhere.
+ *
+ * The same figure the stage uses to tell a click from a drag, and it means the
+ * same thing here — see `penAddPoint`.
+ */
+const DRAG_THRESHOLD_PX = 3;
+
 /** Settings that belong to one person on one machine, not to the company. */
 const PREF_KEYS = [
   'zoom',
@@ -1233,9 +1241,19 @@ export const useEditorStore = create<EditorState>()(
         penAddPoint: (x, y) =>
           set((s) => {
             const last = s.penPoints[s.penPoints.length - 1];
-            // A click that lands on the previous vertex adds a zero-length
-            // segment, which is invisible and confusing to delete later.
-            if (last && last.x === x && last.y === y) return {};
+            /**
+             * A vertex the pointer never really moved to.
+             *
+             * Judged in screen pixels rather than centimetres, because that is
+             * where the intent is: a hand that has not moved has not asked for
+             * a leg, however many centimetres a pixel happens to be worth at
+             * this zoom. Double-clicking to finish a run is the case that made
+             * it necessary — the second click of the pair lands a pixel from
+             * the first and used to plant a 2 cm stub before the run ended.
+             */
+            if (last && Math.hypot(x - last.x, y - last.y) * s.zoom < DRAG_THRESHOLD_PX) {
+              return {};
+            }
             return { penPoints: [...s.penPoints, { x, y }] };
           }),
 
