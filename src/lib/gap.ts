@@ -1,5 +1,6 @@
 import type { Category, Material } from '../types';
-import type { Rect } from './geometry';
+import { planH, planW, type Rect } from './geometry';
+import { legThickness } from './shapePath';
 
 /**
  * What forms the concrete face.
@@ -56,33 +57,40 @@ export interface GapRect extends Rect {
    */
   span?: [number, number];
   /**
-   * The direction the formwork face runs, when only one direction is a run.
+   * The face planes this piece lies in.
    *
-   * In plan a panel is a long thin footprint — 90 × 9 — and the two things
-   * either side of it mean completely different things. Along its length is
-   * the next panel in the run, and the space between them is a hole. Across
-   * its thickness is the opposite face of the same wall, and the space between
-   * them is the concrete. Measuring the second and offering a filler for it is
-   * how you get "26.7 სმ, cut to size" for a 27 cm wall.
+   * This is the whole model, and everything the check used to get wrong came
+   * from not having it. A formwork face is a plane; a panel occupies a stretch
+   * of exactly one, and a corner profile occupies a stretch of two, one along
+   * each of its legs. A hole is a length of face with nothing in it — so it can
+   * only ever be between two pieces lying in the SAME plane.
+   *
+   * Every false reading this check has produced was the same mistake: a
+   * distance measured between two pieces that were never in one plane, which
+   * means the space between them is the pour and not a hole. The wall thickness
+   * reported at every corner, the 5 cm filler measured sideways through the
+   * wall, an outer corner and an inner corner reported across the concrete
+   * between them — one rule retires all of them, and no piece needs a special
+   * case to be understood.
+   *
+   * Absent for a view where the idea does not apply: an elevation shows the
+   * silhouette, where beside is the next panel and above is the next course.
    */
-  faceAxis?: 'u' | 'v';
-  /**
-   * This piece turns the face rather than running along it — a corner profile.
-   *
-   * It is a neighbour but never a vantage point. `faceAxis` keeps the check
-   * from measuring across a wall instead of along it, and it works out which
-   * way a face runs from the footprint: 90 × 9 runs across, 9 × 90 runs down.
-   * A corner profile is SQUARE in plan — 24 × 24, 20 × 20 — so that reasoning
-   * has nothing to bite on, and whichever way it guesses is half wrong, because
-   * a corner genuinely faces both ways. Looking out from one, one direction
-   * runs along a face and the other goes through the pour to the far side: a
-   * filled 20 cm wall reported a 20 cm hole at every corner.
-   *
-   * So a corner is measured TO and never FROM. Nothing is lost by that. A run
-   * that stops short of its corner is still found from the last panel in it,
-   * with the corner as the thing it fails to reach.
-   */
-  turnsFace?: boolean;
+  bands?: FaceBand[];
+}
+
+/**
+ * One face plane a piece lies in, as the strip it occupies across the run.
+ *
+ * `axis` is the direction pieces in this face run — 'u' across, 'v' down — and
+ * `from`/`to` fix the plane itself: the y-range of a face that runs across, the
+ * x-range of one that runs down. Two pieces are in the same face when they
+ * agree on all three.
+ */
+export interface FaceBand {
+  axis: 'u' | 'v';
+  from: number;
+  to: number;
 }
 
 export interface Gap {
@@ -110,40 +118,81 @@ export interface Gap {
 }
 
 /**
- * Which way a face piece runs, and whether it can be measured from at all.
+ * The face planes a placed piece lies in.
  *
- * This is read off the component's own thickness, never guessed from the shape
- * of the footprint. The footprint tells you the two dimensions but not which of
- * them is the thickness, and "the long one is the run" is wrong for every face
- * component narrower than the system is thick: a 5 cm ჩაკერება lying in a
- * horizontal run is 5 wide and 9 deep, so the guess turns it on its side and
- * measures up and down — through the pour — reporting the wall thickness as a
- * hole. A corner is the same failure at its limit, square in plan and pointing
- * both ways at once.
+ * A panel or a filler lies in one: the plane its inner surface sits on, found
+ * by asking which side of the footprint measures the component's own thickness.
+ * That is read from `depth` and never guessed from the shape — "the long side
+ * is the run" is wrong for every face component narrower than the system is
+ * thick, and a 5 cm ჩაკერება lying in a horizontal run is 5 wide and 9 deep.
  *
- * `depth` is exactly the answer: whichever side of the footprint measures the
- * component's thickness is the side the concrete is on, and the other one is
- * the run.
+ * A corner profile lies in two, one along each leg, which is exactly what a
+ * corner is for: it is the piece that belongs to both faces at once, so the run
+ * arriving along either of them can be measured against it.
  */
-export function faceRun(
-  rect: { w: number; h: number },
+export function faceBands(
+  rect: Rect,
   m: Material,
+  rot: number,
   elevation: boolean,
-): Pick<GapRect, 'faceAxis' | 'turnsFace'> {
-  // An elevation shows the silhouette instead: beside is the next panel and
-  // above is the next course. Both are real, so neither is excluded.
-  if (elevation) return {};
-  // A corner turns the face however it is drawn, so it never originates.
-  if (m.category === 'corner') return { turnsFace: true };
+): FaceBand[] | undefined {
+  if (elevation) return undefined;
+
+  const x1 = rect.x + rect.w;
+  const y1 = rect.y + rect.h;
+
+  if (m.shape === 'L') {
+    const t = legThickness(planW(m), planH(m));
+    // An L is drawn with its legs down the LEFT and along the BOTTOM; each
+    // quarter turn carries both round one place.
+    const quarter = ((Math.round(rot / 90) % 4) + 4) % 4;
+    const legs: Array<'left' | 'bottom' | 'top' | 'right'> = [
+      'left', 'bottom', 'top', 'left', 'right', 'top', 'bottom', 'right',
+    ].slice(quarter * 2, quarter * 2 + 2) as Array<'left' | 'bottom' | 'top' | 'right'>;
+    return legs.map((leg): FaceBand => {
+      switch (leg) {
+        case 'left':
+          return { axis: 'v', from: rect.x, to: rect.x + t };
+        case 'right':
+          return { axis: 'v', from: x1 - t, to: x1 };
+        case 'top':
+          return { axis: 'u', from: rect.y, to: rect.y + t };
+        default:
+          return { axis: 'u', from: y1 - t, to: y1 };
+      }
+    });
+  }
 
   const isThickness = (v: number) => Math.abs(v - m.depth) <= 0.5;
   const flat = isThickness(rect.h);
   const upright = isThickness(rect.w);
-  if (flat && !upright) return { faceAxis: 'u' };
-  if (upright && !flat) return { faceAxis: 'v' };
-  // As deep as it is wide: no direction along the face that is not also
-  // through the pour, so it is a neighbour and not a vantage point.
-  return { turnsFace: true };
+  if (flat && !upright) return [{ axis: 'u', from: rect.y, to: y1 }];
+  if (upright && !flat) return [{ axis: 'v', from: rect.x, to: x1 }];
+  // As deep as it is wide and not an L: which plane it presents cannot be read,
+  // so it is left without one and takes no part in measuring.
+  return [];
+}
+
+/** Face planes both pieces lie in, as the directions they can be measured along. */
+function sharedFaces(a: GapRect, b: GapRect): { u: boolean; v: boolean } {
+  // Neither piece lies in a plane the check can name — an elevation, where the
+  // silhouette makes beside the next panel and above the next course, and both
+  // are real. Only when NEITHER has planes: one of each would mean guessing at
+  // the other, and guessing is what produced every false reading so far.
+  if (!a.bands && !b.bands) return { u: true, v: true };
+  if (!a.bands || !b.bands) return { u: false, v: false };
+  let u = false;
+  let v = false;
+  for (const p of a.bands) {
+    for (const q of b.bands) {
+      if (p.axis !== q.axis) continue;
+      // The same plane, to within the half-millimetre that survives a rotation.
+      if (Math.abs(p.from - q.from) > 0.5 || Math.abs(p.to - q.to) > 0.5) continue;
+      if (p.axis === 'u') u = true;
+      else v = true;
+    }
+  }
+  return { u, v };
 }
 
 /** Do two 1-D spans share any length at all? */
@@ -174,42 +223,27 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
    * is none on that side. So the nearest thing on each side wins outright, and
    * only the winner is asked whether it is far enough away to be a hole.
    */
-  const sides = new Map<string, { gap: Gap; toCorner: boolean }>();
+  const sides = new Map<string, Gap>();
 
-  const consider = (side: string, size: number, g: Omit<Gap, 'size'>, toCorner: boolean) => {
+  const consider = (side: string, size: number, g: Omit<Gap, 'size'>) => {
     // Overlapping counts as touching: either way nothing slides in.
     const clear = Math.max(size, 0);
     const held = sides.get(side);
-    if (!held || clear < held.gap.size) sides.set(side, { gap: { ...g, size: clear }, toCorner });
+    if (!held || clear < held.size) sides.set(side, { ...g, size: clear });
   };
 
   const mx1 = moving.x + moving.w;
   const my1 = moving.y + moving.h;
 
   for (const t of targets) {
-    /**
-     * A hole is between two pieces in the SAME face.
-     *
-     * Where two walls meet, the run ends and a run at right angles takes over.
-     * Those two cross each other's path — a plan view has them overlapping —
-     * but they are never in the same plane, and what lies between them is the
-     * other wall's pour. Measured without this, the panel at the end of one run
-     * looks along itself, past the corner, and reports the thickness of the
-     * wall it just met as an opening. A corner profile is exempt because it
-     * belongs to both faces at once, which is what lets a run that stops short
-     * of its corner still be caught. A corner doing the measuring is exempt
-     * too — it has no one plane — but only its findings AGAINST another corner
-     * survive, which is what keeps it from reporting the pour it looks across.
-     * See the filter at the end.
-     */
-    if (
-      !moving.turnsFace &&
-      !t.turnsFace &&
-      t.faceAxis !== undefined &&
-      t.faceAxis !== moving.faceAxis
-    ) {
-      continue;
-    }
+    // The one rule: a hole is a length of face with nothing in it, so the two
+    // pieces either side of it have to be in the same face. Everything that
+    // used to need a special case — the far side of the wall, the run at right
+    // angles round a corner, an outer profile and an inner one facing each
+    // other across the pour — simply shares no plane with the piece measuring,
+    // and is not a neighbour at all.
+    const face = sharedFaces(moving, t);
+    if (!face.u && !face.v) continue;
 
     const tx1 = t.x + t.w;
     const ty1 = t.y + t.h;
@@ -220,50 +254,35 @@ export function gapsAround(moving: GapRect, targets: GapRect[], maxCm = 400): Ga
       continue;
     }
 
-    if (moving.faceAxis !== 'v' && overlaps(moving.y, my1, t.y, ty1)) {
+    if (face.u && overlaps(moving.y, my1, t.y, ty1)) {
       // The hole is only as long as the edge the two actually share.
       const v0 = Math.max(moving.y, t.y);
       const v1 = Math.min(my1, ty1);
       const shared = { y: v0, h: v1 - v0, axis: 'u' as const, againstHeight: t.heightCm };
       if (tx1 > moving.x) {
-        consider('right', t.x - mx1, { ...shared, x: mx1, w: Math.max(t.x - mx1, 0) }, !!t.turnsFace);
+        consider('right', t.x - mx1, { ...shared, x: mx1, w: Math.max(t.x - mx1, 0) });
       }
       if (t.x < mx1) {
-        consider('left', moving.x - tx1, { ...shared, x: tx1, w: Math.max(moving.x - tx1, 0) }, !!t.turnsFace);
+        consider('left', moving.x - tx1, { ...shared, x: tx1, w: Math.max(moving.x - tx1, 0) });
       }
     }
 
-    if (moving.faceAxis !== 'u' && overlaps(moving.x, mx1, t.x, tx1)) {
+    if (face.v && overlaps(moving.x, mx1, t.x, tx1)) {
       const u0 = Math.max(moving.x, t.x);
       const u1 = Math.min(mx1, tx1);
       const shared = { x: u0, w: u1 - u0, axis: 'v' as const, againstHeight: t.heightCm };
       if (ty1 > moving.y) {
-        consider('down', t.y - my1, { ...shared, y: my1, h: Math.max(t.y - my1, 0) }, !!t.turnsFace);
+        consider('down', t.y - my1, { ...shared, y: my1, h: Math.max(t.y - my1, 0) });
       }
       if (t.y < my1) {
-        consider('up', moving.y - ty1, { ...shared, y: ty1, h: Math.max(moving.y - ty1, 0) }, !!t.turnsFace);
+        consider('up', moving.y - ty1, { ...shared, y: ty1, h: Math.max(moving.y - ty1, 0) });
       }
     }
   }
 
-  return [...sides.values()]
-    /**
-     * A corner reports only what it finds against another corner.
-     *
-     * It has to be allowed to look, because two corners with the run between
-     * them missing is a real hole and no one else can see it — the panels that
-     * would have reported it are the ones that are not there. But a corner also
-     * looks straight across the pour at the far face of its own wall, and that
-     * is not a hole. Everything competes for the nearest-on-each-side place, so
-     * a panel across the pour still wins its side and vetoes it; the side is
-     * then dropped here rather than reported.
-     */
-    .filter((s) => !moving.turnsFace || s.toCorner)
-    .map((s) => s.gap)
-    .filter((g) => g.size > 0.05 && g.size <= maxCm);
+  return [...sides.values()].filter((g) => g.size > 0.05 && g.size <= maxCm);
 }
 
-/** The single closest opening beside `moving`, or none. */
 export function nearestGap(moving: GapRect, targets: GapRect[], maxCm = 400): Gap | null {
   let best: Gap | null = null;
   for (const g of gapsAround(moving, targets, maxCm)) {

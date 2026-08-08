@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { allGaps, componentThatFits, faceRun, nearestGap } from '../gap';
+import { allGaps, componentThatFits, faceBands, nearestGap } from '../gap';
 import type { Material } from '../../types';
 
 const rect = (x: number, y: number, w: number, h: number) => ({ x, y, w, h });
+
+/**
+ * A rect that lies in one face plane — a panel or a filler. The plane is the
+ * strip its own thickness occupies, which is the y-range of a face running
+ * across and the x-range of one running down.
+ */
+const across = (x: number, y: number, w: number, h: number) => ({
+  ...rect(x, y, w, h),
+  bands: [{ axis: 'u' as const, from: y, to: y + h }],
+});
+const down = (x: number, y: number, w: number, h: number) => ({
+  ...rect(x, y, w, h),
+  bands: [{ axis: 'v' as const, from: x, to: x + w }],
+});
 
 const mat = (name: string, w: number, category: Material['category'], h = 300): Material =>
   ({ id: name, name, category, w, h, depth: 9, shape: 'rect', color: '#000', stock: {} }) as Material;
@@ -90,14 +104,13 @@ describe('nearestGap', () => {
   // next panel in the run; what sits across its thickness is the far side of
   // the same wall, and the distance between them is the concrete.
   it('does not measure across the thickness of a wall', () => {
-    const face = { ...rect(0, 0, 90, 9), faceAxis: 'u' as const };
+    const face = across(0, 0, 90, 9);
     const farSide = rect(0, 36, 90, 9);
     expect(nearestGap(face, [farSide])).toBeNull();
   });
 
-  it('still measures along the run when the face axis is set', () => {
-    const face = { ...rect(0, 0, 90, 9), faceAxis: 'u' as const };
-    expect(nearestGap(face, [rect(135, 0, 90, 9)])?.size).toBe(45);
+  it('still measures along the run to the next piece in the same face', () => {
+    expect(nearestGap(across(0, 0, 90, 9), [across(135, 0, 90, 9)])?.size).toBe(45);
   });
 
   it('measures both ways in an elevation, where above is the next course', () => {
@@ -206,121 +219,115 @@ describe('componentThatFits', () => {
   });
 });
 
-describe('a corner turns the face', () => {
-  /**
-   * The corner of a filled 20 cm wall, in plan, looking down on the turn.
-   *
-   * The inner profile is 20 x 20 and SQUARE, so the footprint says nothing
-   * about which way its face runs — and one of the two directions it could be
-   * measured in crosses the pour to the opposite face of the wall.
-   */
-  const innerCorner = { ...rect(625, 10, 20, 20), faceAxis: 'u' as const, turnsFace: true };
-  const farFace = { ...rect(665, 0, 9, 180), faceAxis: 'v' as const };
-  const runIntoIt = { ...rect(535, 10, 90, 9), faceAxis: 'u' as const };
-
-  it('is never measured from — the 20 cm across the pour is not a hole', () => {
-    expect(nearestGap(innerCorner, [farFace, runIntoIt])).toBeNull();
-  });
-
-  it('is still measured TO, so a run that stops short of one is found', () => {
-    // the same run, backed off 12 cm from the corner it should reach
-    const short = { ...rect(523, 10, 90, 9), faceAxis: 'u' as const };
-    const gap = nearestGap(short, [innerCorner, farFace]);
-    expect(gap?.size).toBe(12);
-  });
-
-  it('reports no hole at all in a corner that is properly closed', () => {
-    expect(allGaps([innerCorner, farFace, runIntoIt])).toHaveLength(0);
-  });
-
-  // What the drawing actually showed: a filled L reporting one 20 cm hole per
-  // corner, which is the wall thickness measured straight through the concrete.
-  it('does not turn the wall thickness into a gap at every corner', () => {
-    const gaps = allGaps([innerCorner, farFace, runIntoIt]);
-    expect(gaps.some((g) => Math.abs(g.size - 20) < 0.5)).toBe(false);
-  });
-});
-
-describe('faceRun', () => {
+describe('faceBands', () => {
   const panel = mat('პანელი 90*300', 90, 'panel');
   const filler = mat('ჩაკერება 5*300', 5, 'filler');
+  const outer = { ...mat('გარე კუთხე 300', 24, 'corner'), depth: 24, shape: 'L' as const };
 
-  it('reads the run off the thickness, not the shape of the footprint', () => {
-    // A 5 cm ჩაკერება lying in a horizontal run is 5 wide and 9 deep — taller
-    // than it is wide, and still running across. "The long side is the run"
-    // turned it on its side and measured through the wall.
-    expect(faceRun({ w: 5, h: 9 }, filler, false)).toEqual({ faceAxis: 'u' });
-    expect(faceRun({ w: 9, h: 5 }, filler, false)).toEqual({ faceAxis: 'v' });
+  it('puts a panel in the plane its own thickness occupies', () => {
+    expect(faceBands(rect(0, 100, 90, 9), panel, 0, false)).toEqual([
+      { axis: 'u', from: 100, to: 109 },
+    ]);
+    expect(faceBands(rect(100, 0, 9, 90), panel, 90, false)).toEqual([
+      { axis: 'v', from: 100, to: 109 },
+    ]);
   });
 
-  it('agrees with the shape wherever the shape was right', () => {
-    expect(faceRun({ w: 90, h: 9 }, panel, false)).toEqual({ faceAxis: 'u' });
-    expect(faceRun({ w: 9, h: 90 }, panel, false)).toEqual({ faceAxis: 'v' });
+  // 5 wide and 9 deep: taller than it is wide, and still lying in a face that
+  // runs across. Read off the shape it would be stood on end.
+  it('is not fooled by a filler narrower than the system is thick', () => {
+    expect(faceBands(rect(0, 100, 5, 9), filler, 0, false)).toEqual([
+      { axis: 'u', from: 100, to: 109 },
+    ]);
   });
 
-  it('will not be measured from where it faces both ways', () => {
-    expect(faceRun({ w: 24, h: 24 }, mat('გარე კუთხე 300', 24, 'corner'), false))
-      .toEqual({ turnsFace: true });
-    // as deep as it is wide, whatever it is
-    expect(faceRun({ w: 9, h: 9 }, mat('ჩაკერება 9*300', 9, 'filler'), false))
-      .toEqual({ turnsFace: true });
+  // The whole reason a corner is a corner: it belongs to both faces it joins,
+  // so a run arriving along either can be measured against it.
+  it('puts a corner in two planes, one along each leg', () => {
+    // drawn with its legs down the left and along the bottom
+    expect(faceBands(rect(0, 0, 24, 24), outer, 0, false)).toEqual([
+      { axis: 'v', from: 0, to: 9 },
+      { axis: 'u', from: 15, to: 24 },
+    ]);
+    // a half turn puts them on the right and the top
+    expect(faceBands(rect(0, 0, 24, 24), outer, 180, false)).toEqual([
+      { axis: 'v', from: 15, to: 24 },
+      { axis: 'u', from: 0, to: 9 },
+    ]);
   });
 
-  it('leaves both directions open in an elevation, where both are real', () => {
-    expect(faceRun({ w: 90, h: 300 }, panel, true)).toEqual({});
-  });
-});
-
-describe('two runs meeting at a corner', () => {
-  // A 20 cm wall turning: the horizontal run's outer face and the vertical
-  // run's west face cross in plan and are never in the same plane. What lies
-  // between them is the other wall's pour.
-  const alongTop = { ...rect(0, -19, 600, 9), faceAxis: 'u' as const };
-  const downSide = { ...rect(636, 10, 9, 200), faceAxis: 'v' as const };
-
-  it('does not report the wall thickness between them', () => {
-    expect(nearestGap(downSide, [alongTop])).toBeNull();
-    expect(allGaps([alongTop, downSide])).toHaveLength(0);
-  });
-
-  it('still finds a real hole between two panels in the same run', () => {
-    const a = { ...rect(0, -19, 90, 9), faceAxis: 'u' as const };
-    const b = { ...rect(95, -19, 90, 9), faceAxis: 'u' as const };
-    expect(nearestGap(a, [b, downSide])?.size).toBe(5);
+  it('has nothing to say about an elevation, where both directions are real', () => {
+    expect(faceBands(rect(0, 0, 90, 300), panel, 0, true)).toBeUndefined();
   });
 });
 
-describe('a corner reporting for itself', () => {
-  // Two corner profiles on one face with the panels between them missing. It
-  // is one of the most visible mistakes there is, and for a while nothing
-  // reported it: the pieces that would have are the ones that are not there.
-  const top = { ...rect(636, 5, 24, 24), turnsFace: true };
-  const bottom = { ...rect(636, 175, 24, 24), turnsFace: true };
+describe('only pieces in the same face make a hole between them', () => {
+  // A 20 cm wall running east, its two faces 20 apart.
+  const northFace = across(0, -19, 600, 9);
+  const southFace = across(0, 10, 600, 9);
 
-  it('measures the run that is not there', () => {
-    expect(nearestGap(top, [bottom])?.size).toBe(146);
-    expect(allGaps([top, bottom])).toHaveLength(1);
+  it('never measures across the pour to the other face', () => {
+    expect(nearestGap(northFace, [southFace])).toBeNull();
+    expect(allGaps([northFace, southFace])).toHaveLength(0);
   });
 
-  it('says nothing about the pour it looks across', () => {
-    // the far face of its own wall, one thickness away
-    const farFace = { ...rect(665, 10, 9, 180), faceAxis: 'v' as const };
-    const corner = { ...rect(625, 10, 20, 20), turnsFace: true };
-    expect(nearestGap(corner, [farFace])).toBeNull();
+  it('measures along the face, where a hole can actually be', () => {
+    const a = across(0, -19, 90, 9);
+    const b = across(95, -19, 90, 9);
+    expect(nearestGap(a, [b, southFace])?.size).toBe(5);
   });
 
-  // The corner has to be allowed to look, so what stops it reporting nonsense
-  // is that everything competes for the nearest place on each side — a panel
-  // between the two corners wins and takes the side with it.
-  it('is vetoed by the run when the run is there', () => {
-    const between = { ...rect(636, 29, 9, 146), faceAxis: 'v' as const };
-    expect(nearestGap(top, [between, bottom])).toBeNull();
-  });
-
-  it('still reports the shortfall when the run nearly reaches', () => {
-    const short = { ...rect(636, 29, 9, 140), faceAxis: 'v' as const };
-    expect(nearestGap(top, [short, bottom])).toBeNull(); // the panel wins the side
-    // ...and the panel itself is what reports it, which is where it belongs
-    expect(nearestGap(short, [bottom, top])?.size).toBe(6);
+  // Two runs at right angles cross in plan and are never in one plane; what
+  // lies between them is the other wall's pour.
+  it('says nothing between two runs meeting at a corner', () => {
+    const turning = down(636, 10, 9, 200);
+    expect(nearestGap(turning, [northFace])).toBeNull();
+    expect(allGaps([northFace, turning])).toHaveLength(0);
   });
 });
+
+describe('corners', () => {
+  /**
+   * The corner of a 20 cm wall running east then south, as the fill builds it:
+   * an outer profile wrapping the outside and an inner one filling the void,
+   * sitting diagonally across the pour from each other.
+   */
+  const outerCorner = { ...rect(650, -19, 24, 24), bands: [
+    { axis: 'u' as const, from: -19, to: -10 },
+    { axis: 'v' as const, from: 665, to: 674 },
+  ] };
+  const innerCorner = { ...rect(625, 10, 20, 20), bands: [
+    { axis: 'u' as const, from: 10, to: 19 },
+    { axis: 'v' as const, from: 636, to: 645 },
+  ] };
+
+  // The reading that would not go away: two profiles at one corner, reported
+  // against each other through the concrete between them.
+  it('are not measured against each other across the pour', () => {
+    expect(nearestGap(outerCorner, [innerCorner])).toBeNull();
+    expect(nearestGap(innerCorner, [outerCorner])).toBeNull();
+    expect(allGaps([outerCorner, innerCorner])).toHaveLength(0);
+  });
+
+  it('are measured against the run that arrives along either of their legs', () => {
+    // the north face stopping 12 cm short of the outer profile
+    const short = across(500, -19, 138, 9);
+    expect(nearestGap(short, [outerCorner])?.size).toBe(12);
+  });
+
+  it('say nothing when the run reaches them', () => {
+    const reaches = across(500, -19, 150, 9);
+    expect(nearestGap(reaches, [outerCorner])).toBeNull();
+  });
+
+  // Two corners on one face with the panels between them missing: a real hole,
+  // and one that only the corners themselves can report.
+  it('report the run that is missing between them', () => {
+    const far = { ...rect(400, -19, 24, 24), bands: [
+      { axis: 'u' as const, from: -19, to: -10 },
+      { axis: 'v' as const, from: 400, to: 409 },
+    ] };
+    expect(nearestGap(outerCorner, [far])?.size).toBe(226);
+  });
+});
+

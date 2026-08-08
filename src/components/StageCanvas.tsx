@@ -24,7 +24,7 @@ import {
 import {
   allGaps,
   componentThatFits,
-  faceRun,
+  faceBands,
   isFace,
   nearestGap,
   voidKey,
@@ -186,7 +186,7 @@ export function StageCanvas() {
         // survives the projection.
         heightCm: m.h,
         span: hiddenSpan(p, m, surfaceView),
-        ...faceRun(rect, m, elevation),
+        bands: faceBands(rect, m, p.rot, elevation),
       });
     }
     return out;
@@ -217,18 +217,16 @@ export function StageCanvas() {
       Math.min(...moving.map((r) => r.span![0])),
       Math.max(...moving.map((r) => r.span![1])),
     ];
-    // The union's own footprint says nothing — several courses of a run stack
-    // into a box of any shape — so its orientation comes from the members. They
-    // agree whenever the selection is one run, which is the case worth serving.
-    const axes = new Set(moving.map((r) => r.faceAxis));
+    // The union's own footprint says nothing about which planes it lies in —
+    // several courses of a run stack into a box of any shape — so the selection
+    // presents every plane its members do, and is measured against each.
     const found = nearestGap(
       {
         ...movingBox,
         span,
-        faceAxis: axes.size === 1 ? [...axes][0] : undefined,
-        // Selecting a corner on its own must not report the pour beside it as a
-        // hole. A selection that also contains panels is a run again.
-        turnsFace: moving.every((r) => r.turnsFace),
+        bands: moving.some((r) => !r.bands)
+          ? undefined
+          : moving.flatMap((r) => r.bands ?? []),
       },
       faceRects.filter((r) => !selected.has(r.id)),
     );
