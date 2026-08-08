@@ -9,7 +9,7 @@ import {
   panelHeights,
   placeAt,
 } from './formwork';
-import { isHorizontal, legLength, pathLength, type Point } from './sketch';
+import { isHorizontal, isOrthogonal, legLength, pathLength, type Point } from './sketch';
 
 /**
  * Fills a drawn layout with formwork.
@@ -226,6 +226,16 @@ export function planSketchFill(
   const legCount = closed ? n : n - 1;
 
   if (legCount < 1) return fail('ხაზს ორი წერტილი მაინც სჭირდება.');
+  /**
+   * Everything below reads a leg as lying on an axis — the offset lines, the
+   * corner treatment, the way a panel is turned. A run drawn at an angle can be
+   * described, and the pen will draw one, but nothing in the catalog closes a
+   * junction that is not ninety degrees, so this says no rather than building
+   * something that cannot be delivered.
+   */
+  if (!isOrthogonal(path)) {
+    return fail('დახრილი ხაზის შევსება შეუძლებელია — კატალოგში მხოლოდ 90° კუთხეებია.');
+  }
   if (!(spec.thickness > 0)) return fail('კედლის სისქე ნულზე მეტი უნდა იყოს.');
   if (!(spec.height > 0)) return fail('სიმაღლე ნულზე მეტი უნდა იყოს.');
 

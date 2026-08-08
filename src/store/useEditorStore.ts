@@ -31,14 +31,17 @@ import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory
 import { planColumn } from '../lib/columnWizard';
 import { planWall } from '../lib/wallWizard';
 import {
-  moveEndpoint,
   moveSegment,
+  moveVertex,
   segments,
   sketchSnapTargets,
+  translatePath,
   type SegmentHit,
 } from '../lib/sketch';
 import { legDir, planSketchFill, type SketchFillSpec } from '../lib/sketchFill';
+import { faceBands } from '../lib/gap';
 import {
+  isElevation,
   projectPiece,
   projectedContentBounds,
   unprojectDelta,
@@ -88,6 +91,7 @@ const PREF_KEYS = [
   'panY',
   'snap',
   'snapStep',
+  'orthoLock',
   'edgeSnap',
   'showDims',
   'showNames',
@@ -168,6 +172,15 @@ export interface EditorState {
   snapStep: number;
   /** snap dragged pieces to the edges of nearby pieces, not just the grid */
   edgeSnap: boolean;
+  /**
+   * Hold the pen to right angles.
+   *
+   * On by default, because formwork is built square and a layout that is not
+   * describes something the catalog cannot close. Off for the wall that does
+   * not obey — a splayed bay, a site boundary — which the tool should be able
+   * to draw even though it cannot fill it.
+   */
+  orthoLock: boolean;
   showDims: boolean;
   showNames: boolean;
   forceLabels: boolean;
@@ -297,6 +310,7 @@ export interface EditorState {
   setSnap: (on: boolean) => void;
   setSnapStep: (step: number) => void;
   setEdgeSnap: (on: boolean) => void;
+  setOrthoLock: (on: boolean) => void;
   setShowDims: (on: boolean) => void;
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
@@ -345,7 +359,18 @@ export interface EditorState {
    * instead of accumulating rounding — the same reason piece dragging works
    * from a baseline.
    */
-  dragSketch: (hit: SegmentHit, dx: number, dy: number, baseline: SketchPath) => void;
+  dragSketch: (
+    hit: SegmentHit,
+    dx: number,
+    dy: number,
+    baseline: SketchPath,
+    /** slide the whole run instead of the one part that was grabbed */
+    whole?: boolean,
+  ) => void;
+  /** Slide every selected run at once, from the shapes they had when the drag began. */
+  dragSketchAll: (dx: number, dy: number, baselines: SketchPath[]) => void;
+  /** Replace the sketch selection outright — used by the rubber band. */
+  selectSketchMany: (ids: string[], additive?: boolean) => void;
   /**
    * Set one leg to an exact length, in cm.
    *
@@ -478,6 +503,7 @@ export const useEditorStore = create<EditorState>()(
         snap: true,
         snapStep: 5,
         edgeSnap: true,
+        orthoLock: true,
         showDims: true,
         showNames: true,
         forceLabels: false,
@@ -688,6 +714,26 @@ export const useEditorStore = create<EditorState>()(
 
             if (s.edgeSnap) {
               const shift = unprojectDelta(duCm, dvCm, view);
+              /**
+               * The faces a piece presents, as lines to align on.
+               *
+               * A corner profile's legs are inside its bounding box, and they
+               * are what has to finish up flush — with a panel, or with the leg
+               * of the corner across from it. Aligning by the box alone works
+               * from two sides of an L and is impossible from the other two.
+               */
+              const snapLines = (rect: ReturnType<typeof projectPiece>, m: Material, rot: number) => {
+                const bands = faceBands(rect, m, rot, isElevation(view));
+                if (!bands?.length) return {};
+                const xLines: number[] = [];
+                const yLines: number[] = [];
+                for (const b of bands) {
+                  if (b.axis === 'v') xLines.push(b.from, b.to);
+                  else yLines.push(b.from, b.to);
+                }
+                return { xLines, yLines };
+              };
+
               const movingRects = baseline
                 .filter((p) => selected.has(p.id))
                 .map((p) => {
@@ -699,7 +745,8 @@ export const useEditorStore = create<EditorState>()(
                     y: p.y + shift.dy,
                     z: (p.z ?? 0) + shift.dz,
                   };
-                  return projectPiece(moved, m, view);
+                  const rect = projectPiece(moved, m, view);
+                  return { ...rect, ...snapLines(rect, m, p.rot) };
                 })
                 .filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -709,7 +756,9 @@ export const useEditorStore = create<EditorState>()(
                   .filter((p) => !selected.has(p.id))
                   .map((p) => {
                     const m = byId.get(p.materialId);
-                    return m ? projectPiece(p, m, view) : null;
+                    if (!m) return null;
+                    const rect = projectPiece(p, m, view);
+                    return { ...rect, ...snapLines(rect, m, p.rot) };
                   })
                   .filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -1140,6 +1189,7 @@ export const useEditorStore = create<EditorState>()(
         setSnap: (on) => set({ snap: on }),
         setSnapStep: (step) => set({ snapStep: step }),
         setEdgeSnap: (on) => set({ edgeSnap: on }),
+        setOrthoLock: (on) => set({ orthoLock: on }),
         setShowDims: (on) => set({ showDims: on }),
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
@@ -1305,11 +1355,12 @@ export const useEditorStore = create<EditorState>()(
             return { sketch: [...s.sketch, path], penPoints: [] };
           }),
 
-        dragSketch: (hit, dx, dy, baseline) =>
+        dragSketch: (hit, dx, dy, baseline, whole = false) =>
           apply((s) => {
-            const moved =
-              hit.endpoint !== undefined
-                ? moveEndpoint(baseline, hit.endpoint, dx, dy)
+            const moved = whole
+              ? translatePath(baseline, dx, dy)
+              : hit.vertex !== undefined
+                ? moveVertex(baseline, hit.vertex, dx, dy)
                 : moveSegment(baseline, hit.index, dx, dy);
             // Snapped after the move, not before: the move is constrained to
             // one axis, so snapping the raw pointer delta would put the leg on
@@ -1365,6 +1416,28 @@ export const useEditorStore = create<EditorState>()(
           }
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
+
+        dragSketchAll: (dx, dy, baselines) =>
+          apply((s) => {
+            const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+            const sdx = snapValue(dx, step, true);
+            const sdy = snapValue(dy, step, true);
+            if (!sdx && !sdy) return {};
+            const byId = new Map(baselines.map((b) => [b.id, b]));
+            return {
+              sketch: s.sketch.map((k) => {
+                const base = byId.get(k.id);
+                return base ? translatePath(base, sdx, sdy) : k;
+              }),
+            };
+          }),
+
+        selectSketchMany: (ids, additive = false) =>
+          set((s) => ({
+            selectedSketchIds: additive
+              ? [...new Set([...s.selectedSketchIds, ...ids])]
+              : ids,
+          })),
 
         selectSketch: (id, additive = false) =>
           set((s) => {

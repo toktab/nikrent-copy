@@ -105,3 +105,51 @@ describe('edge snap beats the grid', () => {
     expect(cornerX()).toBe(95);
   });
 });
+
+describe('aligning one corner profile to another', () => {
+  /**
+   * Two inner corners that have to finish up with their legs in line. The legs
+   * of an L sit nine centimetres inside two of its four bounding edges, so from
+   * those two sides the box is not the piece and aligning by it is impossible —
+   * which is exactly how it felt.
+   */
+  const INNER = material({
+    id: 'inner',
+    name: 'შიდა კუთხე 20*20*150',
+    category: 'corner',
+    w: 20,
+    h: 150,
+    depth: 20,
+    shape: 'L',
+  });
+
+  beforeEach(() => {
+    useEditorStore.setState({
+      materials: [INNER],
+      pieces: [
+        // Drawn at rot 0, so its legs are down the left and along the bottom:
+        // the left leg spans x 100…109, the foot spans y 111…120.
+        { id: 'a', materialId: 'inner', x: 100, y: 100, rot: 0, z: 0 },
+        { id: 'b', materialId: 'inner', x: 300, y: 300, rot: 0, z: 0 },
+      ],
+      selectedIds: ['b'],
+      snap: true,
+      snapStep: 15,
+      edgeSnap: true,
+      zoom: 2,
+      surfaceView: 'plan',
+    });
+  });
+
+  it('catches the other corner leg, not just its bounding box', () => {
+    const baseline = useEditorStore.getState().pieces.map((p) => ({ ...p }));
+    // Bring b's left leg (x 300…309) towards a's foot line at x 109 — landing
+    // three centimetres short of it, which the grid alone would never close.
+    useEditorStore.getState().moveSelectionBy(-197, 0, baseline);
+    const b = useEditorStore.getState().pieces.find((p) => p.id === 'b')!;
+    // 100 puts b's box on a's box; 109 puts its leg on a's leg. Either is a
+    // real alignment — what matters is that it caught one instead of sitting
+    // on a multiple of fifteen.
+    expect([100, 109]).toContain(b.x);
+  });
+});

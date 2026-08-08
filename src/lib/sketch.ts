@@ -43,7 +43,7 @@ export function segments(path: SketchPath): Array<[Point, Point]> {
 /** Total drawn length in cm — the run of wall the layout describes. */
 export function pathLength(path: SketchPath): number {
   let total = 0;
-  for (const [a, b] of segments(path)) total += Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+  for (const [a, b] of segments(path)) total += legLength(a, b);
   return total;
 }
 
@@ -133,9 +133,16 @@ export function isHorizontal(a: Point, b: Point): boolean {
   return Math.abs(b.x - a.x) >= Math.abs(b.y - a.y);
 }
 
-/** Length of one leg in cm. */
+/**
+ * Length of one leg in cm.
+ *
+ * The straight-line distance, not the sum of the two sides. They agree for
+ * every leg drawn square, and only differ once a run is allowed to turn at
+ * something other than a right angle — where the sum is not a length anybody
+ * would recognise: it calls a 3-4-5 leg seven metres long.
+ */
 export function legLength(a: Point, b: Point): number {
-  return Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+  return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
 /** The two vertex indices a leg joins, wrapping for the closing leg. */
@@ -157,58 +164,75 @@ export function moveSegment(
   const legs = segments(path);
   if (index < 0 || index >= legs.length) return path;
   const [a, b] = legs[index];
-  const horizontal = isHorizontal(a, b);
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const len = Math.hypot(vx, vy);
+  if (!len) return path;
+
+  // Only the part of the drag that is square to the leg counts. For a leg
+  // lying on an axis this is the old behaviour exactly — a horizontal one
+  // moves in y and ignores x — and it keeps meaning the same thing once a leg
+  // is allowed to lie at an angle, where "sideways" is no longer either axis.
+  const nx = -vy / len;
+  const ny = vx / len;
+  const along = dx * nx + dy * ny;
   const [i, j] = legEnds(path, index);
   const points = path.points.map((p, k) =>
-    k === i || k === j
-      ? horizontal
-        ? { x: p.x, y: p.y + dy }
-        : { x: p.x + dx, y: p.y }
-      : p,
+    k === i || k === j ? { x: p.x + nx * along, y: p.y + ny * along } : p,
   );
   return { ...path, points };
 }
 
 /**
- * Extend or shorten an open run from one of its ends.
+ * Move one junction, anywhere.
  *
- * Only along the leg it belongs to. Moving an end vertex sideways would tip its
- * leg off square, and the way to move a whole wall is to drag the wall.
+ * Free, and deliberately so. It used to be locked to the leg's own axis, which
+ * kept every run square but left no way to draw anything that is not — and a
+ * junction is exactly where somebody reaches when a wall does not meet another
+ * at ninety degrees. The two tools now divide cleanly: drag a LEG and the right
+ * angles survive by construction; drag a JUNCTION and you are moving that
+ * corner, wherever you put it.
  */
-export function moveEndpoint(
+export function moveVertex(
   path: SketchPath,
   vertex: number,
   dx: number,
   dy: number,
 ): SketchPath {
-  const n = path.points.length;
-  if (path.closed || n < 2) return path;
-  if (vertex !== 0 && vertex !== n - 1) return path;
-  const neighbour = vertex === 0 ? 1 : n - 2;
-  const horizontal = isHorizontal(path.points[vertex], path.points[neighbour]);
+  if (vertex < 0 || vertex >= path.points.length) return path;
   const points = path.points.map((p, k) =>
-    k === vertex
-      ? horizontal
-        ? { x: p.x + dx, y: p.y }
-        : { x: p.x, y: p.y + dy }
-      : p,
+    k === vertex ? { x: p.x + dx, y: p.y + dy } : p,
   );
   return { ...path, points };
+}
+
+/** Slide a whole run without changing its shape. */
+export function translatePath(path: SketchPath, dx: number, dy: number): SketchPath {
+  if (!dx && !dy) return path;
+  return { ...path, points: path.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+}
+
+/** True when every leg lies on an axis — what the formwork generator needs. */
+export function isOrthogonal(path: SketchPath): boolean {
+  return segments(path).every(([a, b]) => a.x === b.x || a.y === b.y);
 }
 
 export interface SegmentHit {
   pathId: string;
   /** index into `segments(path)` */
   index: number;
-  /** set when the pointer is on an end vertex rather than the leg's middle */
-  endpoint?: number;
+  /** set when the pointer is on a junction rather than the middle of a leg */
+  vertex?: number;
 }
 
 /**
- * What the pointer is over: an end vertex if it is near one, otherwise a leg.
+ * What the pointer is over: a junction if it is near one, otherwise a leg.
  *
- * Endpoints win inside the tolerance because they are the smaller target and
+ * Junctions win inside the tolerance because they are the smaller target and
  * the one you have to aim at; a leg can be grabbed anywhere along its length.
+ * Every junction counts, not just the two free ends — the corner where two
+ * walls meet is the thing most often being moved, and for a long time it was
+ * the one thing on a layout that could not be picked up.
  */
 export function segmentAt(
   paths: SketchPath[],
@@ -219,18 +243,15 @@ export function segmentAt(
   let bestD = tolerance;
 
   for (const path of paths) {
-    if (!path.closed) {
-      const ends = [0, path.points.length - 1];
-      for (const v of ends) {
-        const p = path.points[v];
-        if (!p) continue;
-        const d = Math.hypot(at.x - p.x, at.y - p.y);
-        if (d <= bestD) {
-          bestD = d;
-          best = { pathId: path.id, index: v === 0 ? 0 : path.points.length - 2, endpoint: v };
-        }
+    path.points.forEach((p, v) => {
+      const d = Math.hypot(at.x - p.x, at.y - p.y);
+      if (d <= bestD) {
+        bestD = d;
+        // The leg reported alongside is the one this junction starts, clamped
+        // for the last vertex of an open run, which starts none.
+        best = { pathId: path.id, index: Math.min(v, Math.max(0, path.points.length - 2)), vertex: v };
       }
-    }
+    });
   }
   if (best) return best;
 

@@ -639,7 +639,7 @@ export function StageCanvas() {
    * previous vertex's — which is only on the grid if that one was.
    */
   const penTarget = useCallback(
-    (clientX: number, clientY: number) => {
+    (clientX: number, clientY: number, free = false) => {
       const at = worldAt(clientX, clientY);
       if (!at) return null;
       const s = useEditorStore.getState();
@@ -656,6 +656,17 @@ export function StageCanvas() {
 
       const last = s.penPoints[s.penPoints.length - 1];
       if (!last) return { x: round(at.x), y: round(at.y) };
+
+      /**
+       * A leg that does not have to lie on an axis.
+       *
+       * Both ends still land on whole centimetres, so the run is dimensioned
+       * even though its length is now a diagonal and rarely a round number.
+       * Nothing downstream can build it — the generator says so rather than
+       * guessing — but a layout has to be able to describe the wall that is
+       * actually there before anyone can decide what to do about it.
+       */
+      if (free || !s.orthoLock) return { x: round(at.x), y: round(at.y) };
 
       /**
        * Round the LENGTH of the leg, not the coordinate it ends at.
@@ -683,7 +694,7 @@ export function StageCanvas() {
     // ── the pen owns the surface while it is active ──
     if (s.tool === 'pen' && e.button === 0 && !spaceRef.current) {
       e.preventDefault();
-      const at = penTarget(e.clientX, e.clientY);
+      const at = penTarget(e.clientX, e.clientY, e.altKey);
       if (!at) return;
       // Landing back on the first vertex closes the loop, which is how a room
       // outline gets drawn without a separate command for it.
@@ -852,7 +863,7 @@ export function StageCanvas() {
       onPointerDown={onStagePointerDown}
       onPointerMove={(e) => {
         if (tool !== 'pen') return;
-        setPenHover(penTarget(e.clientX, e.clientY));
+        setPenHover(penTarget(e.clientX, e.clientY, e.altKey));
       }}
       onPointerLeave={() => setPenHover(null)}
       onDoubleClick={(e) => {

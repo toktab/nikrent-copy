@@ -148,6 +148,22 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
   return hits;
 }
 
+/**
+ * A box to align, plus any line inside it that is worth aligning to.
+ *
+ * The bounding box is not the whole story for every piece. An L-profile's legs
+ * lie nine centimetres inside two of its four edges, and those leg faces are
+ * exactly what has to end up flush with a panel or with another corner — so
+ * aligning one corner to another by its box alone is impossible from the two
+ * sides where the box is not the piece.
+ */
+export interface SnapRect extends Rect {
+  /** extra vertical lines to align on, in world cm */
+  xLines?: number[];
+  /** extra horizontal lines to align on */
+  yLines?: number[];
+}
+
 export interface EdgeSnap {
   dx: number;
   dy: number;
@@ -162,16 +178,20 @@ export interface EdgeSnap {
  * landing 2 cm apart. Grid snapping alone cannot do this because panel widths
  * are not multiples of the grid step.
  */
-export function computeEdgeSnap(moving: Rect, targets: Rect[], tolerance: number): EdgeSnap {
-  const movingX = [moving.x, moving.x + moving.w / 2, moving.x + moving.w];
-  const movingY = [moving.y, moving.y + moving.h / 2, moving.y + moving.h];
+export function computeEdgeSnap(
+  moving: SnapRect,
+  targets: SnapRect[],
+  tolerance: number,
+): EdgeSnap {
+  const movingX = [moving.x, moving.x + moving.w / 2, moving.x + moving.w, ...(moving.xLines ?? [])];
+  const movingY = [moving.y, moving.y + moving.h / 2, moving.y + moving.h, ...(moving.yLines ?? [])];
 
   let bestX: { delta: number; line: number } | null = null;
   let bestY: { delta: number; line: number } | null = null;
 
   for (const t of targets) {
-    const targetX = [t.x, t.x + t.w / 2, t.x + t.w];
-    const targetY = [t.y, t.y + t.h / 2, t.y + t.h];
+    const targetX = [t.x, t.x + t.w / 2, t.x + t.w, ...(t.xLines ?? [])];
+    const targetY = [t.y, t.y + t.h / 2, t.y + t.h, ...(t.yLines ?? [])];
 
     for (const mx of movingX) {
       for (const tx of targetX) {

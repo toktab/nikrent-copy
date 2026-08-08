@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   distanceToPath,
   legLength,
-  moveEndpoint,
+  moveVertex,
   moveSegment,
   orthogonal,
   pathAt,
@@ -183,25 +183,30 @@ describe('editing', () => {
     });
   });
 
-  describe('moveEndpoint', () => {
-    it('extends an open run from its first vertex, along its own leg', () => {
-      const moved = moveEndpoint(L(), 0, -80, 25);
-      expect(moved.points[0]).toEqual({ x: -80, y: 0 });
-      expect(square(moved)).toBe(true);
+  describe('moveVertex', () => {
+    it('moves the junction it is given and nothing else', () => {
+      const moved = moveVertex(L(), 1, 40, -25);
+      expect(moved.points).toEqual([
+        { x: 0, y: 0 },
+        { x: 340, y: -25 },
+        { x: 300, y: 200 },
+      ]);
     });
 
-    it('extends from the last vertex along its leg', () => {
-      const moved = moveEndpoint(L(), 2, 25, 90);
-      expect(moved.points[2]).toEqual({ x: 300, y: 290 });
-      expect(square(moved)).toBe(true);
+    // Free on purpose. Dragging a LEG is the square-preserving tool; dragging a
+    // JUNCTION is how a run is made to meet something at an angle, which is the
+    // whole reason it exists.
+    it('lets a run leave the right angle behind', () => {
+      expect(square(moveVertex(L(), 1, 40, -25))).toBe(false);
     });
 
-    // A closed room has no ends to pull, and a middle vertex belongs to two
-    // legs at once — that is what moveSegment is for.
-    it('refuses a closed path and a middle vertex', () => {
-      const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
-      expect(moveEndpoint(room, 0, 50, 0).points).toEqual(room.points);
-      expect(moveEndpoint(L(), 1, 50, 50).points).toEqual(L().points);
+    it('moves an end of an open run as readily as a middle', () => {
+      expect(moveVertex(L(), 0, -80, 25).points[0]).toEqual({ x: -80, y: 25 });
+      expect(moveVertex(L(), 2, 25, 90).points[2]).toEqual({ x: 325, y: 290 });
+    });
+
+    it('leaves an out-of-range vertex alone', () => {
+      expect(moveVertex(L(), 9, 10, 10).points).toEqual(L().points);
     });
   });
 
@@ -214,13 +219,21 @@ describe('editing', () => {
     // The end is the smaller target and the one you have to aim at, so it wins
     // inside the tolerance even though the leg passes through it too.
     it('prefers an end vertex to the leg it sits on', () => {
-      expect(segmentAt([L()], { x: 2, y: 2 }, 10)?.endpoint).toBe(0);
-      expect(segmentAt([L()], { x: 300, y: 198 }, 10)?.endpoint).toBe(2);
+      expect(segmentAt([L()], { x: 2, y: 2 }, 10)?.vertex).toBe(0);
+      expect(segmentAt([L()], { x: 300, y: 198 }, 10)?.vertex).toBe(2);
     });
 
-    it('offers no endpoint on a closed room', () => {
+    // Every junction is grabbable, including the corners of a closed room and
+    // the middle of an open run — the corner where two walls meet is the thing
+    // most often being moved.
+    it('offers the junctions of a closed room too', () => {
       const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
-      expect(segmentAt([room], { x: 2, y: 2 }, 10)?.endpoint).toBeUndefined();
+      expect(segmentAt([room], { x: 2, y: 2 }, 10)?.vertex).toBe(0);
+      expect(segmentAt([room], { x: 398, y: 302 }, 10)?.vertex).toBe(2);
+    });
+
+    it('offers a junction in the middle of an open run', () => {
+      expect(segmentAt([L()], { x: 298, y: 3 }, 10)?.vertex).toBe(1);
     });
 
     it('finds nothing out in the open', () => {
