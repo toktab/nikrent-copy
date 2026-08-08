@@ -71,6 +71,16 @@ const HISTORY_LIMIT = 80;
  */
 const DRAG_THRESHOLD_PX = 3;
 
+/**
+ * How close an edge has to come before the drag latches onto it, in screen px.
+ *
+ * Generous on purpose. This is the only thing that puts a piece exactly against
+ * another one, and being a few pixels out is not a decision anybody made — it
+ * is a hand on a mouse. Too wide and a piece refuses to sit near a neighbour
+ * without touching it; twelve pixels leaves plenty of room to mean it.
+ */
+const EDGE_SNAP_PX = 12;
+
 /** Settings that belong to one person on one machine, not to the company. */
 const PREF_KEYS = [
   'zoom',
@@ -646,20 +656,38 @@ export const useEditorStore = create<EditorState>()(
             const view = s.surfaceView;
 
             // 1. grid snap, applied to the drag delta so repeated snapping
-            //    cannot creep away from the original positions
+            //    cannot creep away from the original positions. Only used where
+            //    nothing better is in reach — see below.
             const gridDu = snapValue(duCm, s.snapStep, s.snap);
             const gridDv = snapValue(dvCm, s.snapStep, s.snap);
 
-            // 2. edge snap: nudge the whole selection so its bounding box lines
-            //    up with a nearby piece. Panel widths are not grid multiples,
-            //    so this is what actually makes panels butt together.
-            let extraDu = 0;
-            let extraDv = 0;
+            /**
+             * 2. edge snap: line the selection up with a piece already placed.
+             *
+             * Measured from where the pointer actually is, not from where the
+             * grid has just put it, and it WINS the axis it catches on.
+             *
+             * It used to be a nudge applied on top of grid snapping, and that
+             * worked by luck: panels are 30 to 90 in fifteens, so the grid left
+             * them within a few millimetres of flush and the nudge finished the
+             * job. Nothing else in the system is on the grid. A corner profile
+             * has a 24 cm leg standing off a 9 cm panel, and the faces it has to
+             * meet sit 10 and 19 either side of a centreline — so the grid drags
+             * it up to half a step away from where it belongs and the nudge
+             * cannot reach back. Corners could be aligned only by eye, one pixel
+             * at a time, which is what a snap is supposed to spare you.
+             *
+             * Object beats grid is what every drawing tool does, and it is the
+             * right way round: the grid is a convenience, another piece's edge
+             * is the answer.
+             */
             let guideX: number | null = null;
             let guideY: number | null = null;
+            let snapDu: number | null = null;
+            let snapDv: number | null = null;
 
             if (s.edgeSnap) {
-              const shift = unprojectDelta(gridDu, gridDv, view);
+              const shift = unprojectDelta(duCm, dvCm, view);
               const movingRects = baseline
                 .filter((p) => selected.has(p.id))
                 .map((p) => {
@@ -694,16 +722,20 @@ export const useEditorStore = create<EditorState>()(
                   targets.push(...sketchSnapTargets(s.sketch));
                 }
 
-                // tolerance in cm, ~8 screen px so it feels the same at any zoom
-                const snapResult = computeEdgeSnap(movingBox, targets, 8 / s.zoom);
-                extraDu = snapResult.dx;
-                extraDv = snapResult.dy;
+                // In cm, but held at a constant number of screen pixels so the
+                // pull feels the same however far in you are zoomed.
+                const snapResult = computeEdgeSnap(movingBox, targets, EDGE_SNAP_PX / s.zoom);
+                // An axis that caught takes the raw drag plus its correction,
+                // landing exactly on the edge it found. An axis that caught
+                // nothing falls back to the grid.
+                if (snapResult.guideX !== null) snapDu = duCm + snapResult.dx;
+                if (snapResult.guideY !== null) snapDv = dvCm + snapResult.dy;
                 guideX = snapResult.guideX;
                 guideY = snapResult.guideY;
               }
             }
 
-            const move = unprojectDelta(gridDu + extraDu, gridDv + extraDv, view);
+            const move = unprojectDelta(snapDu ?? gridDu, snapDv ?? gridDv, view);
             return {
               guideX,
               guideY,
