@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   distanceToPath,
   legLength,
+  closestOnLeg,
+  insertVertex,
+  legAngle,
   moveVertex,
+  setLegAngle,
+  setLegLength,
   moveSegment,
   orthogonal,
   pathAt,
@@ -239,5 +244,84 @@ describe('editing', () => {
     it('finds nothing out in the open', () => {
       expect(segmentAt([L()], { x: 150, y: 120 }, 10)).toBeNull();
     });
+  });
+});
+
+describe('putting a junction on an existing leg', () => {
+  const L = () => path([[0, 0], [300, 0], [300, 200]]);
+
+  it('finds the point on the line nearest the pointer', () => {
+    expect(closestOnLeg({ x: 0, y: 0 }, { x: 300, y: 0 }, { x: 120, y: 40 })).toEqual({
+      x: 120,
+      y: 0,
+    });
+  });
+
+  it('does not run off the end of the leg it was given', () => {
+    expect(closestOnLeg({ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 400, y: 0 })).toEqual({
+      x: 100,
+      y: 0,
+    });
+  });
+
+  it('splits the leg in two and changes nothing else', () => {
+    const split = insertVertex(L(), 0, { x: 120, y: 0 });
+    expect(split.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 120, y: 0 },
+      { x: 300, y: 0 },
+      { x: 300, y: 200 },
+    ]);
+    // The run is the same shape and the same length until the new junction moves.
+    expect(pathLength(split)).toBe(pathLength(L()));
+  });
+});
+
+describe('bearings', () => {
+  it('reads 0 east and turns clockwise on screen', () => {
+    expect(legAngle({ x: 0, y: 0 }, { x: 100, y: 0 })).toBe(0);
+    expect(legAngle({ x: 0, y: 0 }, { x: 0, y: 100 })).toBe(90);
+    expect(legAngle({ x: 0, y: 0 }, { x: -100, y: 0 })).toBe(180);
+    expect(legAngle({ x: 0, y: 0 }, { x: 0, y: -100 })).toBe(270);
+  });
+
+  it('swings a leg to an exact angle', () => {
+    const turned = setLegAngle(path([[0, 0], [100, 0]]), 0, 90);
+    expect(turned.points[1].x).toBeCloseTo(0, 6);
+    expect(turned.points[1].y).toBeCloseTo(100, 6);
+  });
+
+  // The rest of the run is carried round rigidly, so only the joint being set
+  // opens or closes — every leg past it keeps its own length and its own angle.
+  it('carries the rest of the run round with it', () => {
+    const before = path([[0, 0], [100, 0], [100, 50]]);
+    const turned = setLegAngle(before, 0, 90);
+    expect(legLength(turned.points[1], turned.points[2])).toBeCloseTo(50, 6);
+    expect(legAngle(turned.points[1], turned.points[2])).toBeCloseTo(180, 6);
+  });
+
+  it('leaves a closed room alone, having nowhere to put the slack', () => {
+    const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
+    expect(setLegAngle(room, 0, 45).points).toEqual(room.points);
+  });
+});
+
+describe('setLegLength', () => {
+  it('sets the leg and carries the rest along its line', () => {
+    const out = setLegLength(path([[0, 0], [100, 0], [100, 50]]), 0, 250);
+    expect(out.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 250, y: 0 },
+      { x: 250, y: 50 },
+    ]);
+  });
+
+  // Manhattan length called a diagonal longer than it is, so setting it moved
+  // the tail the wrong distance.
+  it('measures a rotated leg as a real distance', () => {
+    const diagonal = path([[0, 0], [30, 40]]); // 50 long
+    const out = setLegLength(diagonal, 0, 100);
+    expect(legLength(out.points[0], out.points[1])).toBeCloseTo(100, 6);
+    expect(legAngle(out.points[0], out.points[1])).toBeCloseTo(legAngle({ x: 0, y: 0 }, { x: 30, y: 40 }), 6);
   });
 });

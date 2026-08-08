@@ -268,3 +268,99 @@ export function segmentAt(
   }
   return best;
 }
+
+// ── Editing a run after it is drawn ─────────────────────────────────────────
+
+/** Nearest point on one leg to `at`, clamped to the leg's own length. */
+export function closestOnLeg(a: Point, b: Point, at: Point): Point {
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const len2 = vx * vx + vy * vy;
+  if (!len2) return { x: a.x, y: a.y };
+  const t = Math.max(0, Math.min(1, ((at.x - a.x) * vx + (at.y - a.y) * vy) / len2));
+  return { x: a.x + vx * t, y: a.y + vy * t };
+}
+
+/**
+ * Bearing of a leg in degrees, 0 pointing east and turning clockwise on screen.
+ *
+ * Clockwise because world y increases downward, so the direction that looks
+ * like a positive turn on the drawing is the negative one in the maths. Anyone
+ * typing 90 into a field means a quarter turn the way the drawing turns.
+ */
+export function legAngle(a: Point, b: Point): number {
+  const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+  return Math.round(((deg % 360) + 360) % 360 * 10) / 10;
+}
+
+/**
+ * Put a new junction on an existing leg.
+ *
+ * The leg becomes two, and nothing else about the run changes — the point lands
+ * on the line it was taken from, so the shape is identical until the new
+ * junction is dragged somewhere. Which is the whole purpose: a run gains a bend
+ * where there was none, without being redrawn.
+ */
+export function insertVertex(path: SketchPath, index: number, at: Point): SketchPath {
+  const legs = segments(path);
+  if (index < 0 || index >= legs.length) return path;
+  const points = [...path.points];
+  // The closing leg of a room ends at the first point, so the new junction goes
+  // on the end of the list rather than in the middle of it.
+  points.splice(index + 1, 0, { x: at.x, y: at.y });
+  return { ...path, points };
+}
+
+/** Rotation of a point about a centre, by degrees clockwise on screen. */
+function turnAbout(p: Point, centre: Point, deg: number): Point {
+  const r = (deg * Math.PI) / 180;
+  const cos = Math.cos(r);
+  const sin = Math.sin(r);
+  const dx = p.x - centre.x;
+  const dy = p.y - centre.y;
+  return { x: centre.x + dx * cos - dy * sin, y: centre.y + dx * sin + dy * cos };
+}
+
+/**
+ * Swing one leg to an exact bearing, in degrees.
+ *
+ * The rest of the run goes with it, rigidly, pivoting on the junction the leg
+ * starts from — so every leg beyond keeps its own length and its own angle to
+ * its neighbours, and only this joint opens or closes. Rotating the leg alone
+ * would tear the run in half at the far end.
+ *
+ * Open runs only. A closed room cannot pivot one of its legs and still close.
+ */
+export function setLegAngle(path: SketchPath, index: number, deg: number): SketchPath {
+  if (path.closed) return path;
+  const legs = segments(path);
+  if (index < 0 || index >= legs.length) return path;
+  const [a, b] = legs[index];
+  const delta = deg - legAngle(a, b);
+  if (!delta) return path;
+  const points = path.points.map((p, i) => (i > index ? turnAbout(p, a, delta) : p));
+  return { ...path, points };
+}
+
+/**
+ * Set one leg to an exact length, keeping its direction.
+ *
+ * Everything past it travels along the leg's own line, so the legs beyond keep
+ * their lengths and the joints keep their angles.
+ */
+export function setLegLength(path: SketchPath, index: number, cm: number): SketchPath {
+  if (path.closed) return path;
+  const legs = segments(path);
+  if (index < 0 || index >= legs.length || !(cm > 0)) return path;
+  const [a, b] = legs[index];
+  const len = legLength(a, b);
+  if (!len) return path;
+  const grow = cm - len;
+  if (!grow) return path;
+  const ux = (b.x - a.x) / len;
+  const uy = (b.y - a.y) / len;
+  const points = path.points.map((p, i) =>
+    i > index ? { x: p.x + ux * grow, y: p.y + uy * grow } : p,
+  );
+  return { ...path, points };
+}

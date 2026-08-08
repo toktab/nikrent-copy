@@ -5,7 +5,7 @@ import { categoryLabel } from '../data/categories';
 import { totalStock } from '../lib/inventory';
 import { PiecePreview } from './ShapeSvg';
 import { Icon } from './Icon';
-import { isHorizontal, legLength, pathLength, segments } from '../lib/sketch';
+import { legAngle, legLength, pathLength, segments } from '../lib/sketch';
 import { keepWheelOffNumber } from '../lib/numberField';
 import type { SketchPath } from '../types';
 
@@ -286,8 +286,10 @@ function RotationField({ rot }: { rot: number }) {
 function SketchDetails({ path }: { path: SketchPath }) {
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
+  const part = useEditorStore((s) => s.selectedSketchPart);
   const legs = segments(path);
   const closed = !!path.closed && path.points.length > 2;
+  const picked = part?.pathId === path.id && part.kind === 'leg' ? part.index : null;
 
   return (
     <div className="details">
@@ -299,6 +301,15 @@ function SketchDetails({ path }: { path: SketchPath }) {
         <span className="k">სულ სიგრძე</span>
         <b>{Math.round(pathLength(path))} სმ</b>
       </div>
+      {part?.pathId === path.id && part.kind === 'vertex' && (
+        <div className="kv">
+          <span className="k">კვანძი</span>
+          <b>
+            #{part.index + 1} · {Math.round(path.points[part.index]?.x ?? 0)},{' '}
+            {Math.round(path.points[part.index]?.y ?? 0)}
+          </b>
+        </div>
+      )}
       <div className="kv">
         <span className="k">მონაკვეთი</span>
         <span>
@@ -308,11 +319,14 @@ function SketchDetails({ path }: { path: SketchPath }) {
 
       <div className="leg-list">
         {legs.map(([a, b], i) => (
-          <div className="kv" key={i}>
-            <span className="k">
-              {i + 1}. {isHorizontal(a, b) ? 'ჰორიზონტალური' : 'ვერტიკალური'}
+          <div className={`kv${picked === i ? ' picked' : ''}`} key={i}>
+            <span className="k">{i + 1}.</span>
+            <span className="leg-fields">
+              <LegField pathId={path.id} index={i} cm={legLength(a, b)} locked={closed} />
+              {/* The bearing, typed. Dragging can put a wall at roughly forty
+                  degrees; only a field can put it at forty. */}
+              <AngleField pathId={path.id} index={i} deg={legAngle(a, b)} locked={closed} />
             </span>
-            <LegField pathId={path.id} index={i} cm={legLength(a, b)} locked={closed} />
           </div>
         ))}
       </div>
@@ -377,6 +391,48 @@ function LegField({
         }}
       />
       <span className="deg">სმ</span>
+    </span>
+  );
+}
+
+/** One leg's bearing in degrees, typed. Committed on blur and Enter. */
+function AngleField({
+  pathId,
+  index,
+  deg,
+  locked,
+}: {
+  pathId: string;
+  index: number;
+  deg: number;
+  locked: boolean;
+}) {
+  const setLegAngle = useEditorStore((s) => s.setLegAngle);
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? String(deg);
+
+  const commit = (raw: string) => {
+    const n = Number(raw.replace(',', '.'));
+    if (Number.isFinite(n)) setLegAngle(pathId, index, n);
+    setDraft(null);
+  };
+
+  return (
+    <span className="rot-field">
+      <input
+        type="number"
+        step="any"
+        value={value}
+        disabled={locked}
+        title="მიმართულება — 0° აღმოსავლეთით, საათის ისრის მიმართულებით"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onWheel={keepWheelOffNumber}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+        }}
+      />
+      <span className="deg">°</span>
     </span>
   );
 }

@@ -39,7 +39,7 @@ import {
   VIEW_HINT,
   type ViewAxis,
 } from '../lib/projection';
-import { orthogonal, segmentAt, type SegmentHit } from '../lib/sketch';
+import { closestOnLeg, orthogonal, segmentAt, segments, type SegmentHit } from '../lib/sketch';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
@@ -61,6 +61,8 @@ type Interaction =
       sy: number;
       hit: SegmentHit;
       baseline: SketchPath;
+      /** every selected run as it was, when the whole layout is being slid */
+      baselines: SketchPath[] | null;
       moved: boolean;
     }
   | null;
@@ -124,6 +126,14 @@ export function StageCanvas() {
   const [marquee, setMarquee] = useState<MarqueeBox | null>(null);
   /** Where the pen's next vertex would land, for the rubber-band preview. */
   const [penHover, setPenHover] = useState<{ x: number; y: number } | null>(null);
+  /**
+   * The part of the layout under the pointer, and where a new junction would go.
+   *
+   * Held here rather than in the store: it changes on every mouse move, and a
+   * layout is not edited by the pointer passing over it.
+   */
+  const [sketchHover, setSketchHover] = useState<SegmentHit | null>(null);
+  const [addAt, setAddAt] = useState<{ x: number; y: number } | null>(null);
   const [ghost, setGhost] = useState<{
     material: Material;
     x: number;
@@ -378,7 +388,8 @@ export function StageCanvas() {
           s.beginDrag();
           it.moved = true;
         }
-        s.dragSketch(it.hit, dx / s.zoom, dy / s.zoom, it.baseline);
+        if (it.baselines) s.dragSketchAll(dx / s.zoom, dy / s.zoom, it.baselines);
+        else s.dragSketch(it.hit, dx / s.zoom, dy / s.zoom, it.baseline);
         return;
       }
 
@@ -426,6 +437,25 @@ export function StageCanvas() {
               return b.x < wx + ww && b.x + b.w > wx && b.y < wy + wh && b.y + b.h > wy;
             });
             s.setSelection(hits.map((p) => p.id));
+
+            /**
+             * The rubber band catches drawn lines too.
+             *
+             * It is the only way to take hold of a whole layout at once — and
+             * moving the layout, rather than one wall of it, is the thing
+             * anybody does after setting a drawing out in the wrong place.
+             * Plan only: in an elevation the lines are not what is on screen.
+             */
+            if (s.showSketch && !isElevation(s.surfaceView)) {
+              const caught = s.sketch
+                .filter((k) =>
+                  k.points.some(
+                    (pt) => pt.x >= wx && pt.x <= wx + ww && pt.y >= wy && pt.y <= wy + wh,
+                  ),
+                )
+                .map((k) => k.id);
+              s.selectSketchMany(caught);
+            }
           }
         }
         setMarquee(null);
@@ -694,6 +724,24 @@ export function StageCanvas() {
     // ── the pen owns the surface while it is active ──
     if (s.tool === 'pen' && e.button === 0 && !spaceRef.current) {
       e.preventDefault();
+
+      // Nothing drawn yet and the pointer is on a line: put a junction there.
+      // Mid-run the click has to mean "next vertex", or a run could not be
+      // drawn across one already on the drawing.
+      if (!s.penPoints.length) {
+        const world = worldAt(e.clientX, e.clientY);
+        const over = world && s.showSketch ? segmentAt(s.sketch, world, 7 / s.zoom) : null;
+        if (world && over && over.vertex === undefined) {
+          const path = s.sketch.find((k) => k.id === over.pathId);
+          const leg = path && segments(path)[over.index];
+          if (leg) {
+            s.insertSketchVertex(over.pathId, over.index, closestOnLeg(leg[0], leg[1], world));
+            setAddAt(null);
+            return;
+          }
+        }
+      }
+
       const at = penTarget(e.clientX, e.clientY, e.altKey);
       if (!at) return;
       // Landing back on the first vertex closes the loop, which is how a room
@@ -726,7 +774,28 @@ export function StageCanvas() {
       const grab = segmentAt(s.sketch, world, 7 / s.zoom);
       const path = grab && s.sketch.find((k) => k.id === grab.pathId);
       if (grab && path) {
-        s.selectSketch(path.id, e.shiftKey);
+        /**
+         * Whether this drag moves the whole layout or one part of it.
+         *
+         * Grabbing a run that is already part of a bigger selection moves all
+         * of them — that is what selecting several was for. Alt does the same
+         * for a single run, so a wall can be slid without first selecting it in
+         * some other way.
+         */
+        const many = s.selectedSketchIds.length > 1 && s.selectedSketchIds.includes(path.id);
+        const whole = many || e.altKey;
+        if (!many) {
+          s.selectSketch(path.id, e.shiftKey);
+          s.selectSketchPart(
+            whole
+              ? null
+              : {
+                  pathId: path.id,
+                  kind: grab.vertex !== undefined ? 'vertex' : 'leg',
+                  index: grab.vertex ?? grab.index,
+                },
+          );
+        }
         // Selecting and grabbing are the same press: a layout is adjusted by
         // pushing a wall, and asking for a click first would only be ceremony.
         interaction.current = {
@@ -735,6 +804,11 @@ export function StageCanvas() {
           sy: e.clientY,
           hit: grab,
           baseline: path,
+          baselines: many
+            ? s.sketch.filter((k) => s.selectedSketchIds.includes(k.id))
+            : whole
+              ? [path]
+              : null,
           moved: false,
         };
         return;
@@ -862,10 +936,32 @@ export function StageCanvas() {
       style={{ cursor }}
       onPointerDown={onStagePointerDown}
       onPointerMove={(e) => {
+        if (interaction.current) return;
+        const s = useEditorStore.getState();
+        const live = s.showSketch && !isElevation(s.surfaceView);
+        const world = live ? worldAt(e.clientX, e.clientY) : null;
+        const over = world ? segmentAt(s.sketch, world, 7 / s.zoom) : null;
+        setSketchHover(over);
+
+        // On a leg with the pen out, show the junction that a click would add,
+        // sitting on the line rather than under the cursor — it is going ON the
+        // wall, and it should look like it before it is committed.
+        if (tool === 'pen' && world && over && over.vertex === undefined) {
+          const path = s.sketch.find((k) => k.id === over.pathId);
+          const leg = path && segments(path)[over.index];
+          setAddAt(leg ? closestOnLeg(leg[0], leg[1], world) : null);
+        } else {
+          setAddAt(null);
+        }
+
         if (tool !== 'pen') return;
         setPenHover(penTarget(e.clientX, e.clientY, e.altKey));
       }}
-      onPointerLeave={() => setPenHover(null)}
+      onPointerLeave={() => {
+        setPenHover(null);
+        setSketchHover(null);
+        setAddAt(null);
+      }}
       onDoubleClick={(e) => {
         // Finishing an open run, the way every polyline tool ends one.
         if (tool !== 'pen') return;
@@ -915,6 +1011,8 @@ export function StageCanvas() {
             worldH={WORLD_H}
             top={0}
             preview={tool === 'pen' ? penHover : null}
+          hover={sketchHover}
+          addAt={addAt}
           />
         )}
 

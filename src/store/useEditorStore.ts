@@ -31,11 +31,15 @@ import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory
 import { planColumn } from '../lib/columnWizard';
 import { planWall } from '../lib/wallWizard';
 import {
+  insertVertex,
   moveSegment,
   moveVertex,
   segments,
+  setLegAngle,
+  setLegLength as setLegLengthOn,
   sketchSnapTargets,
   translatePath,
+  type Point,
   type SegmentHit,
 } from '../lib/sketch';
 import { legDir, planSketchFill, type SketchFillSpec } from '../lib/sketchFill';
@@ -214,6 +218,15 @@ export interface EditorState {
   /** selected reference lines — kept apart from `selectedIds`, which is pieces */
   selectedSketchIds: string[];
   /**
+   * The one part of a run being worked on: a leg, or a junction.
+   *
+   * Separate from `selectedSketchIds`, which is whole runs. Both are real
+   * selections and they answer different questions — "which walls am I moving"
+   * against "which wall am I dimensioning" — so collapsing them into one would
+   * mean picking a leg could not also mean picking up the run it belongs to.
+   */
+  selectedSketchPart: { pathId: string; kind: 'leg' | 'vertex'; index: number } | null;
+  /**
    * What a press on the surface does. The pen draws the layout; select does
    * everything else. Deliberately not persisted: reopening the app in a mode
    * that swallows clicks would be baffling.
@@ -371,6 +384,12 @@ export interface EditorState {
   dragSketchAll: (dx: number, dy: number, baselines: SketchPath[]) => void;
   /** Replace the sketch selection outright — used by the rubber band. */
   selectSketchMany: (ids: string[], additive?: boolean) => void;
+  /** Pick out one leg or one junction of a run. */
+  selectSketchPart: (part: EditorState['selectedSketchPart']) => void;
+  /** Put a new junction on an existing leg, at a point already on it. */
+  insertSketchVertex: (pathId: string, index: number, at: Point) => void;
+  /** Swing one leg of an open run to an exact bearing, in degrees. */
+  setLegAngle: (pathId: string, index: number, deg: number) => void;
   /**
    * Set one leg to an exact length, in cm.
    *
@@ -484,6 +503,7 @@ export const useEditorStore = create<EditorState>()(
         pieces: [],
         sketch: [],
         selectedSketchIds: [],
+        selectedSketchPart: null,
         tool: 'select',
         penPoints: [],
         removedBuiltins: [],
@@ -568,6 +588,7 @@ export const useEditorStore = create<EditorState>()(
               dataLoaded: true,
               selectedIds: [],
               selectedSketchIds: [],
+              selectedSketchPart: null,
               penPoints: [],
               past: [],
               future: [],
@@ -1084,6 +1105,7 @@ export const useEditorStore = create<EditorState>()(
               sketch: target.sketch,
               selectedIds: [],
               selectedSketchIds: [],
+              selectedSketchPart: null,
               penPoints: [],
               past: [],
               future: [],
@@ -1113,6 +1135,7 @@ export const useEditorStore = create<EditorState>()(
               sketch: copy.sketch,
               selectedIds: [],
               selectedSketchIds: [],
+              selectedSketchPart: null,
               penPoints: [],
               past: [],
               future: [],
@@ -1133,6 +1156,7 @@ export const useEditorStore = create<EditorState>()(
               sketch: active.sketch,
               selectedIds: [],
               selectedSketchIds: [],
+              selectedSketchPart: null,
               penPoints: [],
               past: [],
               future: [],
@@ -1382,23 +1406,9 @@ export const useEditorStore = create<EditorState>()(
           }),
 
         setLegLength: (pathId, index, cm) =>
-          commit((s) => {
-            const path = s.sketch.find((k) => k.id === pathId);
-            if (!path || path.closed || !(cm > 0)) return {};
-            const legs = segments(path);
-            const leg = legs[index];
-            if (!leg) return {};
-            const [a, b] = leg;
-            const dir = legDir(a, b);
-            const delta = cm - (Math.abs(b.x - a.x) + Math.abs(b.y - a.y));
-            if (!delta) return {};
-            // Everything past this leg moves with it, so the legs beyond keep
-            // their own lengths and the corners stay square.
-            const points = path.points.map((p, i) =>
-              i > index ? { x: p.x + dir.x * delta, y: p.y + dir.y * delta } : p,
-            );
-            return { sketch: s.sketch.map((k) => (k.id === pathId ? { ...k, points } : k)) };
-          }),
+          commit((s) => ({
+            sketch: s.sketch.map((k) => (k.id === pathId ? setLegLengthOn(k, index, cm) : k)),
+          })),
 
         fillSketch: (pathId, spec) => {
           const state = get();
@@ -1437,6 +1447,39 @@ export const useEditorStore = create<EditorState>()(
             selectedSketchIds: additive
               ? [...new Set([...s.selectedSketchIds, ...ids])]
               : ids,
+            selectedSketchPart: null,
+          })),
+
+        selectSketchPart: (part) =>
+          set((s) => ({
+            selectedSketchPart: part,
+            // Picking a part picks the run it belongs to as well, so the
+            // inspector has something to show and the run can be moved whole
+            // without letting go of the leg first.
+            selectedSketchIds: part
+              ? s.selectedSketchIds.includes(part.pathId)
+                ? s.selectedSketchIds
+                : [part.pathId]
+              : s.selectedSketchIds,
+            selectedIds: part ? [] : s.selectedIds,
+          })),
+
+        insertSketchVertex: (pathId, index, at) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path) return {};
+            const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+            const on = { x: snapValue(at.x, step, true), y: snapValue(at.y, step, true) };
+            return {
+              sketch: s.sketch.map((k) => (k.id === pathId ? insertVertex(k, index, on) : k)),
+              // The new junction is what you just made, so it is what is selected.
+              selectedSketchPart: { pathId, kind: 'vertex' as const, index: index + 1 },
+            };
+          }),
+
+        setLegAngle: (pathId, index, deg) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) => (k.id === pathId ? setLegAngle(k, index, deg) : k)),
           })),
 
         selectSketch: (id, additive = false) =>

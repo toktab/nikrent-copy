@@ -1,5 +1,5 @@
 import { useEditorStore } from '../store/useEditorStore';
-import { isHorizontal, legLength, pathLength, segments } from '../lib/sketch';
+import { isHorizontal, legLength, pathLength, segments, type SegmentHit } from '../lib/sketch';
 import type { SketchPath } from '../types';
 
 /**
@@ -19,11 +19,16 @@ interface Props {
   top: number;
   /** where the pen's next vertex would land, for the rubber band */
   preview?: { x: number; y: number } | null;
+  /** the leg or junction under the pointer */
+  hover?: SegmentHit | null;
+  /** where a click would put a new junction, already on the line */
+  addAt?: { x: number; y: number } | null;
 }
 
-export function SketchLayer({ worldW, worldH, top, preview }: Props) {
+export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Props) {
   const sketch = useEditorStore((s) => s.sketch);
   const selected = useEditorStore((s) => s.selectedSketchIds);
+  const part = useEditorStore((s) => s.selectedSketchPart);
   const penPoints = useEditorStore((s) => s.penPoints);
   const tool = useEditorStore((s) => s.tool);
   const zoom = useEditorStore((s) => s.zoom);
@@ -42,8 +47,20 @@ export function SketchLayer({ worldW, worldH, top, preview }: Props) {
       pointerEvents="none"
     >
       {sketch.map((path) => (
-        <PathShape key={path.id} path={path} chosen={chosen.has(path.id)} hair={hair} />
+        <PathShape
+          key={path.id}
+          path={path}
+          chosen={chosen.has(path.id)}
+          hair={hair}
+          hover={hover?.pathId === path.id ? hover : null}
+          part={part?.pathId === path.id ? part : null}
+        />
       ))}
+
+      {/* The junction a click would add, sitting on the line it would go on. */}
+      {addAt && (
+        <circle className="sketch-add" cx={addAt.x} cy={addAt.y} r={hair * 3.4} strokeWidth={hair} />
+      )}
 
       {/* The path in progress: same geometry, drawn as provisional. */}
       {tool === 'pen' && penPoints.length > 0 && (
@@ -132,12 +149,23 @@ function PathShape({
   path,
   chosen,
   hair,
+  hover,
+  part,
 }: {
   path: SketchPath;
   chosen: boolean;
   hair: number;
+  hover: SegmentHit | null;
+  part: { kind: 'leg' | 'vertex'; index: number } | null;
 }) {
   const legs = segments(path);
+  // What the pointer is over, and what is being worked on, said separately: one
+  // is a promise about the next click and the other is a statement about the
+  // last one, and a layout being edited needs both at once.
+  const hotLeg = hover && hover.vertex === undefined ? hover.index : null;
+  const hotVertex = hover?.vertex ?? null;
+  const pickedLeg = part?.kind === 'leg' ? part.index : null;
+  const pickedVertex = part?.kind === 'vertex' ? part.index : null;
   const total = Math.round(pathLength(path));
   const first = path.points[0];
 
@@ -158,7 +186,15 @@ function PathShape({
         />
       ))}
       {legs.map(([a, b], i) => (
-        <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={hair * 1.8} />
+        <line
+          key={i}
+          className={pickedLeg === i ? 'picked' : hotLeg === i ? 'hot' : undefined}
+          x1={a.x}
+          y1={a.y}
+          x2={b.x}
+          y2={b.y}
+          strokeWidth={hair * (pickedLeg === i ? 3 : hotLeg === i ? 2.6 : 1.8)}
+        />
       ))}
       {/* Every leg measured, but only on the path being worked on. All of them
           at once on a busy layout is not a drawing, it is a wall of numbers. */}
@@ -168,7 +204,15 @@ function PathShape({
         ))}
       {/* Vertices, so a corner reads as a decision rather than a kink. */}
       {path.points.map((p, i) => (
-        <circle key={i} className="sketch-vertex" cx={p.x} cy={p.y} r={hair * 2.4} />
+        <circle
+          key={i}
+          className={`sketch-vertex${
+            pickedVertex === i ? ' picked' : hotVertex === i ? ' hot' : ''
+          }`}
+          cx={p.x}
+          cy={p.y}
+          r={hair * (pickedVertex === i ? 4.2 : hotVertex === i ? 3.6 : 2.4)}
+        />
       ))}
       {/* How much wall this is, which is the first thing anyone wants from a
           layout and would otherwise mean adding up the legs by hand. */}

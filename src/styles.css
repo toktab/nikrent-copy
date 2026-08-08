@@ -1435,6 +1435,37 @@ input.stock-input.bad {
   fill: var(--text);
 }
 /* On a finished path the numbers are a reading, not a decision. */
+/**
+ * The part under the pointer, and the part being worked on.
+ *
+ * Two different statements and they get two different colours: warm for "this
+ * is what a click would take hold of", accent for "this is what you have".
+ * Without them a layout is a set of identical lines and there is no way to know
+ * which wall is about to move.
+ */
+.sketch-path line.hot {
+  stroke: var(--accent2);
+}
+.sketch-path line.picked {
+  stroke: var(--accent);
+}
+.sketch-path .sketch-vertex.hot {
+  fill: var(--accent2);
+  stroke: var(--ink);
+  stroke-width: 0.5;
+}
+.sketch-path .sketch-vertex.picked {
+  fill: var(--accent);
+  stroke: var(--ink);
+  stroke-width: 0.5;
+}
+/* The junction a click would add: an outline, because it is not there yet. */
+.sketch-add {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 2 2;
+}
+
 .sketch-path.chosen .sketch-measure {
   fill: var(--accent);
 }
@@ -1823,7 +1854,22 @@ input.stock-input.bad {
   padding: 3px 0;
 }
 .leg-list .rot-field input[type='number'] {
-  width: 66px;
+  width: 58px;
+}
+/* Length and bearing side by side, so a leg reads as one row. */
+.leg-fields {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+/* The leg currently picked on the drawing, marked in the list as well. */
+.leg-list .kv.picked {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: var(--r-sm);
+}
+.leg-list .kv.picked .k {
+  color: var(--accent);
+  font-weight: 600;
 }
 .field-hint {
   font-size: 10.5px;
