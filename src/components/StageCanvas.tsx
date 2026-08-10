@@ -78,6 +78,24 @@ type Interaction =
 const DRAG_THRESHOLD_PX = 3;
 
 /**
+ * Hold a drag to one axis while Shift is down.
+ *
+ * Whichever way it has travelled further wins, and the other component is
+ * dropped — so a panel slid along a wall stays on the wall, instead of creeping
+ * a centimetre off it on the way. Decided from the running total rather than
+ * from the last mouse event, so the axis does not flip about while the hand
+ * wobbles; committing to across or down and staying there is the whole point.
+ *
+ * Read live on every move, so Shift can be taken hold of part-way through a
+ * drag and let go of again — which is how it is used: free to get near, then
+ * straight to finish.
+ */
+export function straighten(dx: number, dy: number, on: boolean): { dx: number; dy: number } {
+  if (!on) return { dx, dy };
+  return Math.abs(dx) >= Math.abs(dy) ? { dx, dy: 0 } : { dx: 0, dy };
+}
+
+/**
  * Every piece under the cursor, nearest first.
  *
  * Read from the document rather than from geometry so it agrees with what the
@@ -373,28 +391,28 @@ export function StageCanvas() {
         return;
       }
       if (it.type === 'move') {
-        const dx = e.clientX - it.sx;
-        const dy = e.clientY - it.sy;
+        const raw = { dx: e.clientX - it.sx, dy: e.clientY - it.sy };
         if (!it.moved) {
-          if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+          if (Math.hypot(raw.dx, raw.dy) < DRAG_THRESHOLD_PX) return;
           // Opened on the first real movement rather than on the press, so
           // clicking around to inspect pieces does not fill the undo history
           // with steps that changed nothing.
           s.beginDrag();
           it.moved = true;
         }
+        const { dx, dy } = straighten(raw.dx, raw.dy, e.shiftKey);
         // Screen delta → surface delta is just a division by the zoom.
         s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline);
         return;
       }
       if (it.type === 'sketch') {
-        const dx = e.clientX - it.sx;
-        const dy = e.clientY - it.sy;
+        const raw = { dx: e.clientX - it.sx, dy: e.clientY - it.sy };
         if (!it.moved) {
-          if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+          if (Math.hypot(raw.dx, raw.dy) < DRAG_THRESHOLD_PX) return;
           s.beginDrag();
           it.moved = true;
         }
+        const { dx, dy } = straighten(raw.dx, raw.dy, e.shiftKey);
         if (it.baselines) s.dragSketchAll(dx / s.zoom, dy / s.zoom, it.baselines);
         else s.dragSketch(it.hit, dx / s.zoom, dy / s.zoom, it.baseline);
         return;
