@@ -35,6 +35,7 @@ import {
   moveSegment,
   moveVertex,
   segments,
+  removeVertex,
   setLegAngle,
   setLegLength as setLegLengthOn,
   sketchSnapTargets,
@@ -390,6 +391,8 @@ export interface EditorState {
   insertSketchVertex: (pathId: string, index: number, at: Point) => void;
   /** Swing one leg of an open run to an exact bearing, in degrees. */
   setLegAngle: (pathId: string, index: number, deg: number) => void;
+  /** Take out the selected junction, joining the two legs it divided. */
+  removeSketchVertex: (pathId: string, index: number) => void;
   /**
    * Set one leg to an exact length, in cm.
    *
@@ -1474,6 +1477,25 @@ export const useEditorStore = create<EditorState>()(
               sketch: s.sketch.map((k) => (k.id === pathId ? insertVertex(k, index, on) : k)),
               // The new junction is what you just made, so it is what is selected.
               selectedSketchPart: { pathId, kind: 'vertex' as const, index: index + 1 },
+              // ...and the pen carries on from it. Putting a junction somewhere
+              // is almost always the first half of "and a wall goes off here";
+              // making that a second, separate gesture would be ceremony.
+              penPoints: [on],
+            };
+          }),
+
+        removeSketchVertex: (pathId, index) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path) return {};
+            const next = removeVertex(path, index);
+            return {
+              // Nothing left worth keeping means the run goes with the junction.
+              sketch: next
+                ? s.sketch.map((k) => (k.id === pathId ? next : k))
+                : s.sketch.filter((k) => k.id !== pathId),
+              selectedSketchPart: null,
+              selectedSketchIds: next ? s.selectedSketchIds : [],
             };
           }),
 

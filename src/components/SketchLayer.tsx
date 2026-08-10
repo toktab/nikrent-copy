@@ -1,5 +1,6 @@
 import { useEditorStore } from '../store/useEditorStore';
 import { isHorizontal, legLength, pathLength, segments, type SegmentHit } from '../lib/sketch';
+import type { Point } from '../lib/sketch';
 import type { SketchPath } from '../types';
 
 /**
@@ -37,6 +38,10 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
   const chosen = new Set(selected);
   const hair = 1.5 / zoom;
 
+  // The leg the new junction would land on, for measuring against its ends.
+  const hoveredPath = hover ? sketch.find((k) => k.id === hover.pathId) : undefined;
+  const hoveredLeg = hoveredPath ? (segments(hoveredPath)[hover!.index] ?? null) : null;
+
   return (
     <svg
       className="sketch-layer"
@@ -57,10 +62,11 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
         />
       ))}
 
-      {/* The junction a click would add, sitting on the line it would go on. */}
-      {addAt && (
-        <circle className="sketch-add" cx={addAt.x} cy={addAt.y} r={hair * 3.4} strokeWidth={hair} />
-      )}
+      {/* The junction a click would add, sitting on the line it would go on,
+          and how far it is from the junctions either side of it. Placing one is
+          a measurement — "a wall goes off 120 from that corner" — so the two
+          numbers have to be there before the click, not after it. */}
+      {addAt && <AddMark at={addAt} leg={hoveredLeg} hair={hair} />}
 
       {/* The path in progress: same geometry, drawn as provisional. */}
       {tool === 'pen' && penPoints.length > 0 && (
@@ -219,6 +225,53 @@ function PathShape({
       {first && (
         <text className="sketch-len" x={first.x} y={first.y - hair * 5} fontSize={hair * 9}>
           {total} სმ
+        </text>
+      )}
+    </g>
+  );
+}
+
+/**
+ * A junction about to be placed, with the two distances that decide where.
+ *
+ * Both ends of the leg get a figure, because "120 from this corner" and "180
+ * from that one" are the same placement described from either side and people
+ * work from whichever end they measured from on site.
+ */
+function AddMark({
+  at,
+  leg,
+  hair,
+}: {
+  at: Point;
+  leg: [Point, Point] | null;
+  hair: number;
+}) {
+  const back = leg ? Math.round(legLength(leg[0], at)) : 0;
+  const on = leg ? Math.round(legLength(at, leg[1])) : 0;
+  return (
+    <g>
+      <circle className="sketch-add" cx={at.x} cy={at.y} r={hair * 3.4} strokeWidth={hair} />
+      {leg && back > 0 && (
+        <text
+          className="sketch-measure live"
+          x={(leg[0].x + at.x) / 2}
+          y={(leg[0].y + at.y) / 2 - hair * 3}
+          fontSize={hair * 8}
+          textAnchor="middle"
+        >
+          {back} სმ
+        </text>
+      )}
+      {leg && on > 0 && (
+        <text
+          className="sketch-measure live"
+          x={(at.x + leg[1].x) / 2}
+          y={(at.y + leg[1].y) / 2 - hair * 3}
+          fontSize={hair * 8}
+          textAnchor="middle"
+        >
+          {on} სმ
         </text>
       )}
     </g>

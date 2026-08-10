@@ -364,3 +364,64 @@ export function setLegLength(path: SketchPath, index: number, cm: number): Sketc
   );
   return { ...path, points };
 }
+
+/**
+ * Pull a point onto the layout already drawn.
+ *
+ * A junction first, then any point along a leg. Without this a run drawn to
+ * meet another one only looks joined: the two ends sit a few millimetres apart,
+ * the fill treats them as separate walls, and nothing says why. Snapping to
+ * what is there is what makes a layout one connected thing rather than a
+ * picture of one.
+ *
+ * Beats the grid and beats the right-angle lock, both deliberately. Meeting the
+ * wall you are drawing to is the point of the gesture; landing on a round
+ * number is not.
+ */
+export function snapToSketch(
+  paths: SketchPath[],
+  at: Point,
+  tolerance: number,
+): { point: Point; onVertex: boolean } | null {
+  let best: { point: Point; onVertex: boolean } | null = null;
+  let bestD = tolerance;
+
+  for (const path of paths) {
+    for (const p of path.points) {
+      const d = Math.hypot(at.x - p.x, at.y - p.y);
+      if (d <= bestD) {
+        bestD = d;
+        best = { point: { x: p.x, y: p.y }, onVertex: true };
+      }
+    }
+  }
+  if (best) return best;
+
+  for (const path of paths) {
+    for (const [a, b] of segments(path)) {
+      const on = closestOnLeg(a, b, at);
+      const d = Math.hypot(at.x - on.x, at.y - on.y);
+      if (d <= bestD) {
+        bestD = d;
+        best = { point: on, onVertex: false };
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Take a junction out, joining the two legs it separated into one.
+ *
+ * The inverse of `insertVertex`, and needed for the same reason: a bend put in
+ * the wrong place has to be removable without redrawing the run. Refuses to
+ * leave less than a line behind — two points for an open run, three for a room.
+ */
+export function removeVertex(path: SketchPath, index: number): SketchPath | null {
+  const n = path.points.length;
+  if (index < 0 || index >= n) return path;
+  const floor = path.closed ? 4 : 3;
+  // Below the floor there is no run left to keep, so the caller drops it.
+  if (n < floor) return null;
+  return { ...path, points: path.points.filter((_, i) => i !== index) };
+}

@@ -8,6 +8,8 @@ import {
   moveVertex,
   setLegAngle,
   setLegLength,
+  removeVertex,
+  snapToSketch,
   moveSegment,
   orthogonal,
   pathAt,
@@ -323,5 +325,50 @@ describe('setLegLength', () => {
     const out = setLegLength(diagonal, 0, 100);
     expect(legLength(out.points[0], out.points[1])).toBeCloseTo(100, 6);
     expect(legAngle(out.points[0], out.points[1])).toBeCloseTo(legAngle({ x: 0, y: 0 }, { x: 30, y: 40 }), 6);
+  });
+});
+
+describe('snapping to the layout already drawn', () => {
+  const L = () => path([[0, 0], [300, 0], [300, 200]]);
+
+  it('takes a junction ahead of anything else', () => {
+    const got = snapToSketch([L()], { x: 296, y: 4 }, 10);
+    expect(got).toEqual({ point: { x: 300, y: 0 }, onVertex: true });
+  });
+
+  it('falls back to the nearest point along a leg', () => {
+    const got = snapToSketch([L()], { x: 120, y: 5 }, 10);
+    expect(got).toEqual({ point: { x: 120, y: 0 }, onVertex: false });
+  });
+
+  // A junction beats a leg even when the leg is nearer, because a run drawn to
+  // meet another one is aiming at the corner, not at the wall beside it.
+  it('prefers the junction to the leg running through it', () => {
+    expect(snapToSketch([L()], { x: 299, y: 3 }, 10)?.onVertex).toBe(true);
+  });
+
+  it('finds nothing out in the open', () => {
+    expect(snapToSketch([L()], { x: 150, y: 90 }, 10)).toBeNull();
+  });
+});
+
+describe('removeVertex', () => {
+  it('joins the two legs the junction divided', () => {
+    const bent = path([[0, 0], [120, 0], [300, 0], [300, 200]]);
+    const out = removeVertex(bent, 1);
+    expect(out?.points).toEqual([
+      { x: 0, y: 0 },
+      { x: 300, y: 0 },
+      { x: 300, y: 200 },
+    ]);
+  });
+
+  it('refuses to leave less than a line behind', () => {
+    // two points is a line; taking one away leaves nothing to keep
+    expect(removeVertex(path([[0, 0], [300, 0]]), 0)).toBeNull();
+    // a room needs three, so a four-cornered one may lose exactly one
+    const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
+    expect(removeVertex(room, 0)?.points).toHaveLength(3);
+    expect(removeVertex(path([[0, 0], [400, 0], [400, 300]], true), 0)).toBeNull();
   });
 });

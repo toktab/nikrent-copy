@@ -39,7 +39,14 @@ import {
   VIEW_HINT,
   type ViewAxis,
 } from '../lib/projection';
-import { closestOnLeg, orthogonal, segmentAt, segments, type SegmentHit } from '../lib/sketch';
+import {
+  closestOnLeg,
+  orthogonal,
+  segmentAt,
+  segments,
+  snapToSketch,
+  type SegmentHit,
+} from '../lib/sketch';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
@@ -579,7 +586,14 @@ export function StageCanvas() {
       // e.code so the shortcut still works on a Georgian keyboard layout
       if (e.code === 'KeyR' || e.key.toLowerCase() === 'r') s.rotateSelected();
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        s.deleteSelected();
+        // A junction is picked out of a run, so deleting means taking it out —
+        // not throwing away the wall it was a corner of.
+        const part = s.selectedSketchPart;
+        if (part?.kind === 'vertex' && !s.selectedIds.length) {
+          s.removeSketchVertex(part.pathId, part.index);
+        } else {
+          s.deleteSelected();
+        }
         e.preventDefault();
       }
       if (e.key === 'Escape') {
@@ -690,6 +704,19 @@ export function StageCanvas() {
       const step = s.snap ? Math.max(s.snapStep, 1) : 1;
       const round = (v: number) => Math.round(v / step) * step;
 
+      /**
+       * Meeting the layout beats everything else.
+       *
+       * Ahead of the grid and ahead of the right-angle lock, both on purpose: a
+       * run drawn to join another one is trying to JOIN it, and a wall that
+       * lands two centimetres off is not a wall that meets. Landing on a round
+       * number matters less than landing on the thing you aimed at.
+       */
+      if (s.showSketch) {
+        const onto = snapToSketch(s.sketch, at, 10 / s.zoom);
+        if (onto) return onto.point;
+      }
+
       const last = s.penPoints[s.penPoints.length - 1];
       if (!last) return { x: round(at.x), y: round(at.y) };
 
@@ -737,6 +764,9 @@ export function StageCanvas() {
       if (!s.penPoints.length) {
         const world = worldAt(e.clientX, e.clientY);
         const over = world && s.showSketch ? segmentAt(s.sketch, world, 7 / s.zoom) : null;
+        // On a junction, the run simply starts there — `penTarget` has already
+        // snapped the point onto it exactly, so the two are joined and not
+        // merely touching.
         if (world && over && over.vertex === undefined) {
           const path = s.sketch.find((k) => k.id === over.pathId);
           const leg = path && segments(path)[over.index];
