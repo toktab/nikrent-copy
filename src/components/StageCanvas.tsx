@@ -60,7 +60,15 @@ import { SketchLayer } from './SketchLayer';
 /** What the pointer is currently doing on the stage. */
 type Interaction =
   | { type: 'pan'; sx: number; sy: number; px: number; py: number }
-  | { type: 'move'; sx: number; sy: number; baseline: Piece[]; moved: boolean }
+  | {
+      type: 'move';
+      sx: number;
+      sy: number;
+      baseline: Piece[];
+      /** drawn runs selected alongside the pieces, carried on the same delta */
+      sketchBaseline: SketchPath[];
+      moved: boolean;
+    }
   | { type: 'marquee'; sx: number; sy: number }
   | {
       type: 'sketch';
@@ -70,6 +78,8 @@ type Interaction =
       baseline: SketchPath;
       /** every selected run as it was, when the whole layout is being slid */
       baselines: SketchPath[] | null;
+      /** pieces selected alongside, so grabbing a line moves them too */
+      pieceBaseline: Piece[] | null;
       moved: boolean;
     }
   | null;
@@ -402,7 +412,7 @@ export function StageCanvas() {
         }
         const { dx, dy } = straighten(raw.dx, raw.dy, e.shiftKey);
         // Screen delta → surface delta is just a division by the zoom.
-        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline);
+        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline, it.sketchBaseline);
         return;
       }
       if (it.type === 'sketch') {
@@ -413,8 +423,18 @@ export function StageCanvas() {
           it.moved = true;
         }
         const { dx, dy } = straighten(raw.dx, raw.dy, e.shiftKey);
-        if (it.baselines) s.dragSketchAll(dx / s.zoom, dy / s.zoom, it.baselines);
-        else s.dragSketch(it.hit, dx / s.zoom, dy / s.zoom, it.baseline);
+        if (it.baselines) {
+          // Grabbing a line when pieces are selected too moves the lot, on the
+          // one delta — the same path a piece drag takes, so the two can never
+          // be computed differently.
+          if (it.pieceBaseline) {
+            s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.pieceBaseline, it.baselines);
+          } else {
+            s.dragSketchAll(dx / s.zoom, dy / s.zoom, it.baselines);
+          }
+        } else {
+          s.dragSketch(it.hit, dx / s.zoom, dy / s.zoom, it.baseline);
+        }
         return;
       }
 
@@ -678,11 +698,14 @@ export function StageCanvas() {
     // Clicking an already-selected piece keeps the group so it can be dragged.
     if (!s.selectedIds.includes(target)) s.select(target);
 
+    const after = useEditorStore.getState();
     interaction.current = {
       type: 'move',
       sx: e.clientX,
       sy: e.clientY,
-      baseline: useEditorStore.getState().pieces,
+      baseline: after.pieces,
+      // Anything drawn that is also selected travels with them.
+      sketchBaseline: after.sketch.filter((k) => after.selectedSketchIds.includes(k.id)),
       moved: false,
     };
   }, []);
@@ -836,7 +859,9 @@ export function StageCanvas() {
          * for a single run, so a wall can be slid without first selecting it in
          * some other way.
          */
-        const many = s.selectedSketchIds.length > 1 && s.selectedSketchIds.includes(path.id);
+        const alsoPieces = s.selectedIds.length > 0 && s.selectedSketchIds.includes(path.id);
+        const many =
+          (s.selectedSketchIds.length > 1 || alsoPieces) && s.selectedSketchIds.includes(path.id);
         const whole = many || e.altKey;
         if (!many) {
           s.selectSketch(path.id, e.shiftKey);
@@ -863,6 +888,7 @@ export function StageCanvas() {
             : whole
               ? [path]
               : null,
+          pieceBaseline: alsoPieces ? s.pieces : null,
           moved: false,
         };
         return;

@@ -273,7 +273,20 @@ export interface EditorState {
    * Live drag on the 2D surface, in surface centimetres. Which world axes
    * those are is `surfaceView`'s business, not the caller's.
    */
-  moveSelectionBy: (duCm: number, dvCm: number, baseline: Piece[]) => void;
+  /**
+   * Move the selection, whatever is in it.
+   *
+   * Pieces and drawn runs travel on ONE delta, computed once and applied to
+   * both. Moving them separately — even by the same drag — is how they drift
+   * apart: the pieces snap to a neighbour's edge and the layout rounds to the
+   * grid, and the wall ends up a centimetre off the line it was set out to.
+   */
+  moveSelectionBy: (
+    duCm: number,
+    dvCm: number,
+    baseline: Piece[],
+    sketchBaseline?: SketchPath[],
+  ) => void;
   /** Arrow-key nudge, also in surface centimetres. */
   nudgeSelection: (duCm: number, dvCm: number) => void;
   /** Live drag from the 3D view, which can also move a piece up and down. */
@@ -661,7 +674,14 @@ export const useEditorStore = create<EditorState>()(
               : [...s.selectedIds, id],
           })),
         setSelection: (ids) => set({ selectedIds: ids }),
-        selectAll: () => set((s) => ({ selectedIds: s.pieces.map((p) => p.id) })),
+        // Everything means everything: the layout is part of the drawing, and
+        // "select all, move it over" is the commonest reason to want either.
+        selectAll: () =>
+          set((s) => ({
+            selectedIds: s.pieces.map((p) => p.id),
+            selectedSketchIds: s.sketch.map((k) => k.id),
+            selectedSketchPart: null,
+          })),
 
         // ── pieces ────────────────────────────────────────────────────────
         /**
@@ -705,7 +725,7 @@ export const useEditorStore = create<EditorState>()(
          * makes panels butt together, works in an elevation too: courses land
          * on each other instead of near each other.
          */
-        moveSelectionBy: (duCm, dvCm, baseline) =>
+        moveSelectionBy: (duCm, dvCm, baseline, sketchBaseline) =>
           apply((s) => {
             const selected = new Set(s.selectedIds);
             const origin = new Map(baseline.map((p) => [p.id, p]));
@@ -816,7 +836,29 @@ export const useEditorStore = create<EditorState>()(
             }
 
             const move = unprojectDelta(snapDu ?? gridDu, snapDv ?? gridDv, view);
+
+            /**
+             * The drawn layout comes along, on the same delta the pieces got.
+             *
+             * Plan only: in an elevation the lines are not what is on screen,
+             * and a delta that means "sideways and up" there would move them
+             * somewhere that has nothing to do with the drag.
+             */
+            const carried =
+              sketchBaseline?.length && !isElevation(view)
+                ? (() => {
+                    const was = new Map(sketchBaseline.map((k) => [k.id, k]));
+                    return {
+                      sketch: s.sketch.map((k) => {
+                        const base = was.get(k.id);
+                        return base ? translatePath(base, move.dx, move.dy) : k;
+                      }),
+                    };
+                  })()
+                : null;
+
             return {
+              ...carried,
               guideX,
               guideY,
               pieces: s.pieces.map((p) => {
