@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ArrayOptions,
   ColumnSpec,
-  WallSpec,
+  WallRunSpec,
   DialogState,
   DocSnapshot,
   DrawingDoc,
@@ -29,7 +29,6 @@ import {
 import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
-import { planWall } from '../lib/wallWizard';
 import {
   insertVertex,
   moveSegment,
@@ -297,7 +296,15 @@ export interface EditorState {
   pasteClipboard: () => void;
   arraySelection: (options: ArrayOptions) => void;
   generateColumn: (spec: ColumnSpec) => { added: number; warnings: string[] };
-  generateWall: (spec: WallSpec) => { added: number; warnings: string[] };
+  /**
+   * A straight wall, drawn and filled in one step.
+   *
+   * The line goes onto the layout as well as the panels, so a wall typed in as
+   * a length still leaves the setting-out behind it — and it is built by the
+   * same generator as everything else, rather than by a second one that would
+   * quietly disagree with it.
+   */
+  generateWallRun: (spec: WallRunSpec) => { added: number; warnings: string[] };
   /** Drop a saved assembly's pieces onto the surface, already positioned. */
   insertPieces: (pieces: Piece[]) => void;
   clearPieces: () => void;
@@ -1027,14 +1034,36 @@ export const useEditorStore = create<EditorState>()(
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
 
-        generateWall: (spec) => {
-          const plan = planWall(spec, get().materials);
-          if (plan.pieces.length) {
-            commit((s) => ({
-              pieces: [...s.pieces, ...plan.pieces],
-              selectedIds: plan.pieces.map((p) => p.id),
-            }));
-          }
+        generateWallRun: (spec) => {
+          const state = get();
+          const half = spec.thickness / 2;
+          // The run is the wall's centreline, so it sits half a thickness down
+          // from the top of the space the assembly was placed in.
+          const y = spec.originY + half;
+          const path: SketchPath = {
+            id: uid('sk'),
+            points: [
+              { x: spec.originX, y },
+              { x: spec.originX + spec.length, y },
+            ],
+          };
+          const plan = planSketchFill(
+            path,
+            {
+              thickness: spec.thickness,
+              height: spec.height,
+              includeCorners: true,
+              includeStopEnds: spec.includeStopEnds,
+            },
+            state.materials,
+          );
+          if (!plan.pieces.length) return { added: 0, warnings: plan.warnings };
+          commit((s) => ({
+            sketch: [...s.sketch, path],
+            pieces: [...s.pieces, ...plan.pieces],
+            selectedIds: plan.pieces.map((p) => p.id),
+            selectedSketchIds: [],
+          }));
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
 

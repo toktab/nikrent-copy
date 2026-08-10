@@ -163,27 +163,25 @@ export interface ColumnSpec {
   includeCorners: boolean;
 }
 
-/** Input for the wall formwork assembly generator. */
-export interface WallSpec {
-  /** wall run in cm, along the X axis */
+/**
+ * Input for the straight-wall shortcut.
+ *
+ * Not a second way of building a wall — it draws a two-point run and fills it,
+ * so the one generator does the work. What is left here is only what a straight
+ * run needs that a drawn one already knows: how long it is, and where to put
+ * it. No corner option, because a straight run has none.
+ */
+export interface WallRunSpec {
+  /** wall run in cm */
   length: number;
-  /** concrete thickness in cm */
+  /** concrete thickness in cm, centred on the run */
   thickness: number;
   /** pour height in cm */
   height: number;
-  /** vertical spacing between waler runs, cm */
-  walerSpacing: number;
-  /** spacing between tie rods along the wall, cm */
-  tieSpacing: number;
-  /** where to drop the assembly, world cm */
+  /** where the run starts, world cm */
   originX: number;
   originY: number;
-  includeWalers: boolean;
-  includeTies: boolean;
-  /**
-   * Close both ends. Off when the run continues into another pour or an
-   * existing structure, where an end panel would be wrong.
-   */
+  /** close both ends — off where the pour continues */
   includeStopEnds: boolean;
 }
 
