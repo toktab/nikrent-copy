@@ -51,19 +51,19 @@ describe('combo', () => {
     expect(combo(['del'], 'mac')).toBe('⌫');
   });
 
-  it('spells the keys out and joins with + everywhere else', () => {
-    expect(combo(['mod', 'Z'], 'windows')).toBe('Ctrl+Z');
-    expect(combo(['mod', 'shift', 'Z'], 'windows')).toBe('Ctrl+Shift+Z');
+  it('spells the keys out and joins with a spaced + everywhere else', () => {
+    expect(combo(['mod', 'Z'], 'windows')).toBe('Ctrl + Z');
+    expect(combo(['mod', 'shift', 'Z'], 'windows')).toBe('Ctrl + Shift + Z');
     expect(combo(['del'], 'windows')).toBe('Del');
   });
 
   it('treats Linux like Windows', () => {
-    expect(combo(['mod', 'D'], 'other')).toBe('Ctrl+D');
+    expect(combo(['mod', 'D'], 'other')).toBe('Ctrl + D');
   });
 
   it('passes unknown parts through, so prose can be mixed in', () => {
     expect(combo(['mod', 'სქროლი'], 'mac')).toBe('⌘სქროლი');
-    expect(combo(['mod', 'სქროლი'], 'windows')).toBe('Ctrl+სქროლი');
+    expect(combo(['mod', 'სქროლი'], 'windows')).toBe('Ctrl + სქროლი');
   });
 
   it('never leaves a Mac-only glyph on a PC label', () => {

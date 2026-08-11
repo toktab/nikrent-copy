@@ -234,7 +234,7 @@ export function planSketchFill(
    * something that cannot be delivered.
    */
   if (!isOrthogonal(path)) {
-    return fail('დახრილი ხაზის შევსება შეუძლებელია — კატალოგში მხოლოდ 90° კუთხეებია.');
+    return fail('დახრილი ხაზის შევსება შეუძლებელია - კატალოგში მხოლოდ 90° კუთხეებია.');
   }
   if (!(spec.thickness > 0)) return fail('კედლის სისქე ნულზე მეტი უნდა იყოს.');
   if (!(spec.height > 0)) return fail('სიმაღლე ნულზე მეტი უნდა იყოს.');
@@ -247,12 +247,12 @@ export function planSketchFill(
   const courses = stack.picks.map((i) => heights[i]);
   if (!courses.length) {
     warnings.push(
-      `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია — უმცირესი პანელია ${Math.min(...heights)} სმ.`,
+      `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია - უმცირესი პანელია ${Math.min(...heights)} სმ.`,
     );
   }
   if (stack.remainder > 0.01) {
     warnings.push(
-      `სიმაღლეში დარჩა ${stack.remainder} სმ — საჭიროა ჩაკერება ან სპეციალური ელემენტი.`,
+      `სიმაღლეში დარჩა ${stack.remainder} სმ - საჭიროა ჩაკერება ან სპეციალური ელემენტი.`,
     );
   }
 
@@ -297,7 +297,7 @@ export function planSketchFill(
 
     if (c === 0 && spec.includeCorners && turnCount > 0 && (!outer || !inner)) {
       warnings.push(
-        `${courseH} სმ სიმაღლის ${!outer ? 'გარე' : 'შიდა'} კუთხის პროფილი კატალოგში არ არის — კუთხე პანელებით იხურება.`,
+        `${courseH} სმ სიმაღლის ${!outer ? 'გარე' : 'შიდა'} კუთხის პროფილი კატალოგში არ არის - კუთხე პანელებით იხურება.`,
       );
     }
 
@@ -368,7 +368,7 @@ export function planSketchFill(
 
         if (runLength <= 0.01) {
           warnings.push(
-            `${Math.round(lengths[j])} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა — პანელი აღარ ეტევა.`,
+            `${Math.round(lengths[j])} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა - პანელი აღარ ეტევა.`,
           );
           continue;
         }
@@ -376,13 +376,13 @@ export function planSketchFill(
         const { used, remainder } = coverFace(runLength, panelOptions, fillerOptions);
         if (!used.length) {
           warnings.push(
-            `${Math.round(runLength)} სმ სიგრძის მხარე ვერ დაიფარა — ყველაზე ვიწრო პანელია ${
-              panelOptions.length ? Math.min(...panelOptions.map((o) => o.w)) : '—'
+            `${Math.round(runLength)} სმ სიგრძის მხარე ვერ დაიფარა - ყველაზე ვიწრო პანელია ${
+              panelOptions.length ? Math.min(...panelOptions.map((o) => o.w)) : '-'
             } სმ.`,
           );
         } else if (remainder > 0.01) {
           warnings.push(
-            `${Math.round(runLength)} სმ მხარეზე დარჩა ${remainder} სმ — ამ ზომის ელემენტი კატალოგში არ არის.`,
+            `${Math.round(runLength)} სმ მხარეზე დარჩა ${remainder} სმ - ამ ზომის ელემენტი კატალოგში არ არის.`,
           );
         }
 
@@ -492,7 +492,7 @@ export function planSketchFill(
         const { used } = coverFace(spec.thickness, panelOptions, fillerOptions, true);
         if (!used.length) {
           warnings.push(
-            `${spec.thickness} სმ სისქის ბოლო ვერ დაიხურა — ამ ზომის ელემენტი კატალოგში არ არის.`,
+            `${spec.thickness} სმ სისქის ბოლო ვერ დაიხურა - ამ ზომის ელემენტი კატალოგში არ არის.`,
           );
           continue;
         }

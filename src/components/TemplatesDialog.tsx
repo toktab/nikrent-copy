@@ -85,7 +85,7 @@ export function TemplatesDialog() {
       // Inserting anyway would drop those pieces silently and quietly
       // under-count the order.
       setError(
-        `შაბლონი იყენებს ${missing.length} მასალას, რომელიც კატალოგში აღარ არის — ჩასმა შეუძლებელია.`,
+        `შაბლონი იყენებს ${missing.length} მასალას, რომელიც კატალოგში აღარ არის - ჩასმა შეუძლებელია.`,
       );
       return;
     }
@@ -183,7 +183,7 @@ export function TemplatesDialog() {
       <h4 className="section-title">მონიშნულის შენახვა</h4>
       {selection.length === 0 ? (
         <p className="field-hint">
-          ჯერ მონიშნე ელემენტები ზედაპირზე — შაბლონად შეინახება მხოლოდ მონიშნული.
+          ჯერ მონიშნე ელემენტები ზედაპირზე - შაბლონად შეინახება მხოლოდ მონიშნული.
         </p>
       ) : (
         <div className="user-add">

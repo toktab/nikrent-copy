@@ -19,7 +19,7 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 const ROLE_HINT: Record<Role, string> = {
-  admin: 'ყველაფერი — კატალოგი, მარაგი, მომხმარებლები, ნახაზები',
+  admin: 'ყველაფერი - კატალოგი, მარაგი, მომხმარებლები, ნახაზები',
   editor: 'ნახაზები: შექმნა და რედაქტირება. კატალოგსა და მარაგს ვერ ცვლის',
   viewer: 'ხედავს ყველაფერს, ვერაფერს ცვლის',
 };
@@ -144,7 +144,7 @@ export function UsersDialog() {
         }
       >
         <p className="field-hint">
-          გადაეცი ეს პაროლი <b>{issued.email}</b>-ს. ის მეორედ აღარ გამოჩნდება — თუ დაიკარგება,
+          გადაეცი ეს პაროლი <b>{issued.email}</b>-ს. ის მეორედ აღარ გამოჩნდება - თუ დაიკარგება,
           საჭირო იქნება ახლის გენერაცია.
         </p>
         <div className="temp-password">
@@ -208,7 +208,7 @@ export function UsersDialog() {
                     {row.email}
                     {isMe && <span className="you-tag">შენ</span>}
                   </td>
-                  <td>{row.full_name || '—'}</td>
+                  <td>{row.full_name || '-'}</td>
                   <td>
                     <select
                       value={row.role}
@@ -228,7 +228,7 @@ export function UsersDialog() {
                       className="btn small"
                       disabled={busy}
                       onClick={() => void onReset(row)}
-                      title="ახალი პაროლის გენერაცია — ძველი გაუქმდება"
+                      title="ახალი პაროლის გენერაცია - ძველი გაუქმდება"
                     >
                       პაროლი
                     </button>
@@ -288,7 +288,7 @@ export function UsersDialog() {
         </button>
       </div>
       <p className="field-hint">
-        პაროლი ავტომატურად დაგენერირდება და ერთხელ გამოჩნდება — ელფოსტა არ იგზავნება.
+        პაროლი ავტომატურად დაგენერირდება და ერთხელ გამოჩნდება - ელფოსტა არ იგზავნება.
       </p>
     </Modal>
   );

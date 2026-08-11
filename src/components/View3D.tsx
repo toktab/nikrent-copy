@@ -62,9 +62,9 @@ function tint(base: Rgb, amount: number): Rgb {
 }
 
 const HIDDEN_LINE_LABEL: Record<HiddenLineMode, string> = {
-  hide: 'ფარული ხაზები — დამალული',
-  dashed: 'ფარული ხაზები — წყვეტილი',
-  show: 'ფარული ხაზები — გამჭვირვალე',
+  hide: 'ფარული ხაზები - დამალული',
+  dashed: 'ფარული ხაზები - წყვეტილი',
+  show: 'ფარული ხაზები - გამჭვირვალე',
 };
 
 /** Which way a drag moves the selection. */
@@ -192,10 +192,10 @@ export function View3D() {
   // asked for. Say so up front rather than at the moment of a dead drag.
   const axisUnavailable = useMemo(() => {
     if (axis === 'ground' && !canDragOnGround(cam)) {
-      return 'გეგმაზე გადასაწევად ხედი დახარე — თითქმის გვერდიდან ვერ გაირჩევა.';
+      return 'გეგმაზე გადასაწევად ხედი დახარე - თითქმის გვერდიდან ვერ გაირჩევა.';
     }
     if (axis === 'height' && !canDragOnHeight(cam)) {
-      return 'სიმაღლეზე გადასაწევად ხედი დახარე — ზუსტად ზემოდან სიმაღლე არ ჩანს.';
+      return 'სიმაღლეზე გადასაწევად ხედი დახარე - ზუსტად ზემოდან სიმაღლე არ ჩანს.';
     }
     return null;
   }, [axis, cam]);
@@ -348,8 +348,8 @@ export function View3D() {
         if (!delta) {
           setBlocked(
             g.axis === 'height'
-              ? 'ამ კუთხიდან სიმაღლე არ ჩანს — ხედი დახარე.'
-              : 'ამ კუთხიდან გეგმა არ ჩანს — ხედი დახარე.',
+              ? 'ამ კუთხიდან სიმაღლე არ ჩანს - ხედი დახარე.'
+              : 'ამ კუთხიდან გეგმა არ ჩანს - ხედი დახარე.',
           );
           return;
         }
@@ -571,13 +571,13 @@ export function View3D() {
         <button
           className="btn small"
           onClick={() => setCam(DEFAULT_CAMERA)}
-          title="საწყისი კუთხე — ხედი ზემოდან"
+          title="საწყისი კუთხე - ხედი ზემოდან"
         ><Icon name="reset" /> კუთხე
         </button>
         <button
           className="btn small"
           onClick={() => setCam({ azimuth: 0, elevation: Math.PI / 2 })}
-          title="ზუსტად ზემოდან — ემთხვევა 2D გეგმას"
+          title="ზუსტად ზემოდან - ემთხვევა 2D გეგმას"
         ><Icon name="grid" /> გეგმა
         </button>
 
@@ -593,8 +593,8 @@ export function View3D() {
                 }}
                 title={
                   a === 'ground'
-                    ? 'თრევა გადაწევს გეგმაზე (Alt — სიმაღლეზე)'
-                    : 'თრევა გადაწევს ზემოთ/ქვემოთ (Alt — გეგმაზე)'
+                    ? 'თრევა გადაწევს გეგმაზე (Alt - სიმაღლეზე)'
+                    : 'თრევა გადაწევს ზემოთ/ქვემოთ (Alt - გეგმაზე)'
                 }
               >
                 <Icon name={a === 'ground' ? 'array' : 'height'} /> {AXIS_LABEL[a]}
@@ -618,8 +618,8 @@ export function View3D() {
         <span className={`view3d-hint${hint ? ' warn' : ''}`}>
           {hint ??
             (canEdit
-              ? 'დაწკაპუნება — მონიშვნა · თრევა — გადაწევა · ცარიელზე თრევა — ბრუნვა'
-              : 'თრევა — ბრუნვა · Space+თრევა — გადაწევა')}
+              ? 'დაწკაპუნება - მონიშვნა · თრევა - გადაწევა · ცარიელზე თრევა - ბრუნვა'
+              : 'თრევა - ბრუნვა · Space + თრევა - გადაწევა')}
         </span>
       </div>
     </main>

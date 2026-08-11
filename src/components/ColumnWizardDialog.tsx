@@ -70,7 +70,7 @@ export function ColumnWizardDialog() {
     if (errors.length) return;
     const result = generateColumn(spec);
     if (!result.added) {
-      setToast('კოლონა ვერ აიწყო — შეამოწმე კატალოგი და ზომები.');
+      setToast('კოლონა ვერ აიწყო - შეამოწმე კატალოგი და ზომები.');
     } else {
       setToast(
         result.warnings.length
@@ -97,7 +97,7 @@ export function ColumnWizardDialog() {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        ოთხივე მხარე განლაგდება <b>გაშლილად, გვერდიგვერდ</b> — როგორც ფორმვორკის სამუშაო
+        ოთხივე მხარე განლაგდება <b>გაშლილად, გვერდიგვერდ</b> - როგორც ფორმვორკის სამუშაო
         ნახაზზე. რაოდენობები პირდაპირ გადადის უწყისში.
       </p>
 

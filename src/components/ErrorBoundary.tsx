@@ -50,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="crash">
         <h2>რაღაც შეფერხდა</h2>
         <p>
-          რედაქტორმა მოულოდნელი შეცდომა დააფიქსირა. შენი ნახაზი და კატალოგი შენახულია —
+          რედაქტორმა მოულოდნელი შეცდომა დააფიქსირა. შენი ნახაზი და კატალოგი შენახულია -
           ჯერ სცადე გვერდის განახლება.
         </p>
         <pre>{this.state.error.message}</pre>

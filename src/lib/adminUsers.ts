@@ -48,7 +48,7 @@ async function callAdminFunction<T>(body: Record<string, unknown>): Promise<T> {
       if (response.status === 404) {
         throw new Error(
           'სერვერზე ფუნქცია "admin-users" არ არის განთავსებული. ' +
-            'იხილე supabase/README.md — განთავსების ინსტრუქცია.',
+            'იხილე supabase/README.md - განთავსების ინსტრუქცია.',
         );
       }
       try {

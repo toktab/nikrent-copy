@@ -57,7 +57,7 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
     const result = fillSketch(pathIds, spec);
     setToast(
       !result.added
-        ? 'ყალიბი ვერ აიწყო — შეამოწმე კატალოგი და ზომები.'
+        ? 'ყალიბი ვერ აიწყო - შეამოწმე კატალოგი და ზომები.'
         : result.warnings.length
           ? `დაემატა ${result.added} ელემენტი, ${result.warnings.length} გაფრთხილებით.`
           : `დაემატა ${result.added} ელემენტი.`,
@@ -81,7 +81,7 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        დახაზული ხაზი კედლის <b>ღერძია</b> — ბეტონი თანაბრად ნაწილდება ორივე მხარეს.
+        დახაზული ხაზი კედლის <b>ღერძია</b> - ბეტონი თანაბრად ნაწილდება ორივე მხარეს.
         {paths.length > 1 ? ` მონიშნულია ${paths.length} ხაზი. ` : ' '}
         სიგრძე ნახაზიდან იკითხება:{' '}
         <b>{Math.round(paths.reduce((sum, p) => sum + pathLength(p), 0))} სმ</b>
@@ -171,7 +171,7 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
           </div>
           <p className="hint-note">
             {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი. ვოლერები,
-            ჭანჭიკები და საყრდენები აქ არ ითვლება — ისინი ობიექტზე განისაზღვრება.
+            ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
           </p>
         </div>
       )}

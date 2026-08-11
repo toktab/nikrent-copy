@@ -160,7 +160,7 @@ export function DataGate({ children }: { children: ReactNode }) {
         </button>
 
         <p className="login-hint">
-          ლოკალური ასლი არ იშლება — ის ბრაუზერში რჩება სარეზერვოდ.
+          ლოკალური ასლი არ იშლება - ის ბრაუზერში რჩება სარეზერვოდ.
         </p>
       </div>
     </div>

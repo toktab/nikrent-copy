@@ -65,7 +65,7 @@ const PC_KEYS: KeyNames = {
   alt: 'Alt',
   del: 'Del',
   enter: 'Enter',
-  join: '+',
+  join: ' + ',
 };
 
 export function keyNames(platform: Platform = PLATFORM): KeyNames {
@@ -74,7 +74,7 @@ export function keyNames(platform: Platform = PLATFORM): KeyNames {
 
 /**
  * Renders a shortcut for the current platform: `combo(['mod', 'Z'])` gives
- * "⌘Z" on a Mac and "Ctrl+Z" everywhere else. Named parts (`mod`, `shift`,
+ * "⌘Z" on a Mac and "Ctrl + Z" everywhere else. Named parts (`mod`, `shift`,
  * `alt`, `del`, `enter`) are translated; anything else is passed through, so
  * `combo(['mod', 'სქროლი'])` works too.
  */

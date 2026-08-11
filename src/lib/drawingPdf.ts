@@ -369,7 +369,7 @@ function drawTitleBlock(
   ctx.strokeRect(x, y, w, h);
 
   const cells: Array<{ label: string; value: string; width: number }> = [
-    { label: 'ობიექტი', value: doc.projectName || '—', width: 0.34 },
+    { label: 'ობიექტი', value: doc.projectName || '-', width: 0.34 },
     { label: 'ნახაზი', value: doc.name, width: 0.26 },
     { label: 'მასშტაბი', value: `1:${scale}`, width: 0.1 },
     { label: 'ფურცელი', value: sheet, width: 0.1 },

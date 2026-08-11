@@ -60,7 +60,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const preview = useMemo(
     () => ({
       id: 'preview',
-      name: name || '—',
+      name: name || '-',
       category,
       w: Number.isFinite(wNum) && wNum > 0 ? wNum : 45,
       h: Number.isFinite(hNum) && hNum > 0 ? hNum : 300,
@@ -106,7 +106,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
 
   return (
     <Modal
-      title={existing ? `რედაქტირება — ${existing.name}` : 'ახალი კომპონენტი'}
+      title={existing ? `რედაქტირება - ${existing.name}` : 'ახალი კომპონენტი'}
       onClose={closeDialog}
       footer={
         <>
@@ -175,7 +175,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
             }}
           />
           <small className="field-hint">
-            ნახაზი გეგმაშია — ჩანს <b>სიგანე × სისქე</b>. სიმაღლე ვერტიკალურია და არ ჩანს.
+            ნახაზი გეგმაშია - ჩანს <b>სიგანე × სისქე</b>. სიმაღლე ვერტიკალურია და არ ჩანს.
             Du-ს პანელები ყოველთვის {PANEL_DEPTH_CM} სმ სისქისაა.
           </small>
         </label>
@@ -205,7 +205,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
 
         <label className="field">
           <span>
-            მარაგი (ცალი){warehouses.length > 1 ? ` — ${warehouses[0].name}` : ''}
+            მარაგი (ცალი){warehouses.length > 1 ? ` - ${warehouses[0].name}` : ''}
           </span>
           <input
             type="number"

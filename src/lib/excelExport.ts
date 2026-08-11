@@ -36,7 +36,7 @@ function bomRows(bom: Bom): Cell[][] {
       ]);
     }
     aoa.push([
-      `ჯამი — ${group.label}`,
+      `ჯამი - ${group.label}`,
       '',
       '',
       '',
@@ -63,7 +63,7 @@ function bomRows(bom: Bom): Cell[][] {
 
   if (bom.unweighedRows > 0) {
     aoa.push([]);
-    aoa.push([`⚠ ${bom.unweighedRows} პოზიციას წონა არ აქვს — წონის ჯამი არასრულია.`]);
+    aoa.push([`⚠ ${bom.unweighedRows} პოზიციას წონა არ აქვს - წონის ჯამი არასრულია.`]);
   }
   return aoa;
 }

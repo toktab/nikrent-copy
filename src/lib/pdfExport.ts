@@ -34,7 +34,7 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
 
   // A blank rather than "0" where the quantity does not apply: accessories have
   // no length, linear members have no face area.
-  const q = (value: number, unit: string) => (value > 0 ? `${fmtNum(value)} ${unit}` : '—');
+  const q = (value: number, unit: string) => (value > 0 ? `${fmtNum(value)} ${unit}` : '-');
 
   const groups = bom.groups
     .map(
@@ -50,12 +50,12 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
           <td class="num">${esc(sizeLabel(r.material))}</td>
           <td class="num">${r.used}</td>
           <td class="num">${q(r.lengthM, 'მ')}</td>
-          <td class="num">${r.weightMissing ? '—' : q(r.weightKg, 'კგ')}</td>
+          <td class="num">${r.weightMissing ? '-' : q(r.weightKg, 'კგ')}</td>
         </tr>`,
         )
         .join('')}
       <tr class="sub">
-        <td>ჯამი — ${esc(g.label)}</td>
+        <td>ჯამი - ${esc(g.label)}</td>
         <td class="num">${q(g.areaM2, 'მ²')}</td>
         <td class="num">${g.pieces}</td>
         <td class="num">${q(g.lengthM, 'მ')}</td>
@@ -68,13 +68,13 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
   // rather than look like a real figure.
   const weightNote =
     bom.unweighedRows > 0
-      ? `<p class="note">* წონის ჯამი არასრულია — ${bom.unweighedRows} პოზიციას წონა არ აქვს მითითებული.</p>`
+      ? `<p class="note">* წონის ჯამი არასრულია - ${bom.unweighedRows} პოზიციას წონა არ აქვს მითითებული.</p>`
       : '';
 
   return `
   <div class="doc">
     <header>
-      <h1>${esc(title ?? 'კუბი — მასალების უწყისი')}</h1>
+      <h1>${esc(title ?? 'კუბი - მასალების უწყისი')}</h1>
       <div class="meta">თარიღი: ${esc(date)}</div>
     </header>
 

@@ -19,7 +19,7 @@ export function SheetImportDialog() {
 
   const parse = (rows: Record<string, unknown>[], label: string) => {
     if (!rows.length) {
-      setError('მონაცემები ვერ წავიკითხე — ფაილი ან ტექსტი ცარიელია.');
+      setError('მონაცემები ვერ წავიკითხე - ფაილი ან ტექსტი ცარიელია.');
       setSummary(null);
       return;
     }
@@ -94,7 +94,7 @@ export function SheetImportDialog() {
       }
     >
       <p className="hint-note">
-        სვეტები: <code>{SHEET_TEMPLATE_HEADERS.join(', ')}</code> — <code>shape</code>,{' '}
+        სვეტები: <code>{SHEET_TEMPLATE_HEADERS.join(', ')}</code> - <code>shape</code>,{' '}
         <code>color</code> და <code>stock</code> არასავალდებულოა.
       </p>
 
@@ -153,14 +153,14 @@ export function SheetImportDialog() {
                 {summary.rows.map((r) => (
                   <tr key={r.row} className={r.draft ? '' : 'bad-row'}>
                     <td className="muted">{r.row}</td>
-                    <td>{r.draft?.name ?? String(r.raw.name ?? '—')}</td>
-                    <td>{r.draft ? categoryLabel(r.draft.category) : '—'}</td>
+                    <td>{r.draft?.name ?? String(r.raw.name ?? '-')}</td>
+                    <td>{r.draft ? categoryLabel(r.draft.category) : '-'}</td>
                     <td className="num">
-                      {r.draft ? `${r.draft.w} × ${r.draft.h}` : '—'}
+                      {r.draft ? `${r.draft.w} × ${r.draft.h}` : '-'}
                     </td>
-                    <td>{r.draft?.shape ?? '—'}</td>
+                    <td>{r.draft?.shape ?? '-'}</td>
                     <td className="num">
-                      {r.draft ? Object.values(r.draft.stock).reduce((a, b) => a + b, 0) : '—'}
+                      {r.draft ? Object.values(r.draft.stock).reduce((a, b) => a + b, 0) : '-'}
                     </td>
                     <td className="status-cell">
                       {r.errors.map((m) => (

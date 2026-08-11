@@ -132,7 +132,7 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
           setDraggingMaterial(m.id);
         }}
         onDragEnd={() => setDraggingMaterial(null)}
-        title={`${m.name} — ${m.w} × ${m.h} სმ`}
+        title={`${m.name} - ${m.w} × ${m.h} სმ`}
       >
         <Swatch material={m} />
         <div className="info">
@@ -144,7 +144,7 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
         </div>
       </div>
 
-      {/* How short, before the stock number — the size of the gap is the thing
+      {/* How short, before the stock number - the size of the gap is the thing
           worth acting on, not the count that happens to be in the yard. */}
       {shortage && (
         <span className="short-delta" title={`${used - stock} ცალი აკლია`}>
@@ -181,7 +181,7 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
         trigger={(open) => (
           <button
             className={`btn icon ghost small mat-menu${open ? ' active' : ''}`}
-            aria-label={`${m.name} — მოქმედებები`}
+            aria-label={`${m.name} - მოქმედებები`}
           >
             <Icon name="more" size={14} />
           </button>

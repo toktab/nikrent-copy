@@ -81,12 +81,12 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
   const courses = stack.picks.map((i) => heights[i]);
   if (!courses.length) {
     warnings.push(
-      `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია — უმცირესი პანელია ${Math.min(...heights)} სმ.`,
+      `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია - უმცირესი პანელია ${Math.min(...heights)} სმ.`,
     );
   }
   if (stack.remainder > 0.01) {
     warnings.push(
-      `სიმაღლეში დარჩა ${stack.remainder} სმ — საჭიროა ჩაკერება ან სპეციალური ელემენტი.`,
+      `სიმაღლეში დარჩა ${stack.remainder} სმ - საჭიროა ჩაკერება ან სპეციალური ელემენტი.`,
     );
   }
 
@@ -116,13 +116,13 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
 
     if (!used.length) {
       warnings.push(
-        `${faceLength} სმ სიგრძის მხარე ვერ დაიფარა — ყველაზე ვიწრო პანელია ${
-          panelOptions.length ? Math.min(...panelOptions.map((o) => o.w)) : '—'
+        `${faceLength} სმ სიგრძის მხარე ვერ დაიფარა - ყველაზე ვიწრო პანელია ${
+          panelOptions.length ? Math.min(...panelOptions.map((o) => o.w)) : '-'
         } სმ.`,
       );
     } else if (remainder > 0.01) {
       warnings.push(
-        `${faceLength} სმ მხარეზე დარჩა ${remainder} სმ — ამ ზომის ელემენტი კატალოგში არ არის.`,
+        `${faceLength} სმ მხარეზე დარჩა ${remainder} სმ - ამ ზომის ელემენტი კატალოგში არ არის.`,
       );
     }
 
@@ -212,7 +212,7 @@ export function planColumn(spec: ColumnSpec, materials: Material[]): ColumnPlan 
     }
     if (first && corner && (xFaceLength <= 0 || yFaceLength <= 0)) {
       warnings.push(
-        `კვეთა ${sectionX}×${sectionY} სმ ძალიან პატარაა ${planW(corner)} სმ კუთხეებისთვის — პანელი აღარ ეტევა.`,
+        `კვეთა ${sectionX}×${sectionY} სმ ძალიან პატარაა ${planW(corner)} სმ კუთხეებისთვის - პანელი აღარ ეტევა.`,
       );
     }
 

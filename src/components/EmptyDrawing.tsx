@@ -35,7 +35,7 @@ export function EmptyDrawing() {
           <>
             <div className="empty-title">კატალოგი ცარიელია</div>
             <div className="empty-sub">
-              ჯერ დაამატე კომპონენტები — პანელები, ვოლერები, სამაგრები — მერე ნახაზზე გადავალთ.
+              ჯერ დაამატე კომპონენტები - პანელები, ვოლერები, სამაგრები - მერე ნახაზზე გადავალთ.
             </div>
             <div className="empty-actions">
               <button
@@ -58,7 +58,7 @@ export function EmptyDrawing() {
           <>
             <div className="empty-title">ნახაზი ცარიელია</div>
             <div className="empty-sub">
-              დაიწყე ოსტატით — ის თვითონ ითვლის რამდენი პანელი და ვოლერი დასჭირდება.
+              დაიწყე ოსტატით - ის თვითონ ითვლის რამდენი პანელი და ვოლერი დასჭირდება.
             </div>
             <div className="empty-actions">
               <button
@@ -75,7 +75,7 @@ export function EmptyDrawing() {
               ან <button className="link-button" onClick={() => openDialog({ kind: 'templates' })}>
                 ჩასვი შაბლონი
               </button>{' '}
-              — ან გადმოათრიე მასალა მარცხენა პანელიდან.
+              - ან გადმოათრიე მასალა მარცხენა პანელიდან.
             </div>
           </>
         )}

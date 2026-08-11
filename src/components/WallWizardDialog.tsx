@@ -80,7 +80,7 @@ export function WallWizardDialog() {
     const result = generateWallRun(spec);
     setToast(
       !result.added
-        ? 'კედელი ვერ აიწყო — შეამოწმე კატალოგი და ზომები.'
+        ? 'კედელი ვერ აიწყო - შეამოწმე კატალოგი და ზომები.'
         : result.warnings.length
           ? `დაემატა ${result.added} ელემენტი, ${result.warnings.length} გაფრთხილებით.`
           : `დაემატა ${result.added} ელემენტი.`,
@@ -104,7 +104,7 @@ export function WallWizardDialog() {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        სწორი კედელი ხაზვის გარეშე. ნახაზზე დაემატება <b>ღერძის ხაზიც</b> — შემდეგ
+        სწორი კედელი ხაზვის გარეშე. ნახაზზე დაემატება <b>ღერძის ხაზიც</b> - შემდეგ
         შეგიძლია გადაათრიო, დაამატო კუთხე ან სიგრძე აკრიფო.
       </p>
 
@@ -177,7 +177,7 @@ export function WallWizardDialog() {
           </div>
           <p className="hint-note">
             {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი. ვოლერები,
-            ჭანჭიკები და საყრდენები აქ არ ითვლება — ისინი ობიექტზე განისაზღვრება.
+            ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
           </p>
         </div>
       )}

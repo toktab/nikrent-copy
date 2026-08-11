@@ -121,7 +121,7 @@ export function BomPanel() {
       )}
 
       {bom.groups.length === 0 ? (
-        <div className="empty">ზედაპირი ცარიელია — უწყისი ცარიელია.</div>
+        <div className="empty">ზედაპირი ცარიელია - უწყისი ცარიელია.</div>
       ) : (
         bom.groups.map((g) => (
           <div key={g.category} className="bom-group">

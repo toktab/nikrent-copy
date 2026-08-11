@@ -150,7 +150,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
     if (shapeRaw) {
       const mapped = SHAPE_ALIASES[shapeRaw];
       if (mapped) shape = mapped;
-      else warnings.push(`უცნობი ფორმა "${String(pick(raw, 'shape'))}" — გამოყენდება rect`);
+      else warnings.push(`უცნობი ფორმა "${String(pick(raw, 'shape'))}" - გამოყენდება rect`);
     }
 
     const colorRaw = String(pick(raw, 'color') ?? '').trim();
@@ -158,7 +158,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
     if (colorRaw) {
       const withHash = colorRaw.startsWith('#') ? colorRaw : `#${colorRaw}`;
       if (/^#[0-9a-fA-F]{6}$/.test(withHash)) color = withHash;
-      else warnings.push(`ფერი "${colorRaw}" არავალიდურია — გამოყენდება კატეგორიის ფერი`);
+      else warnings.push(`ფერი "${colorRaw}" არავალიდურია - გამოყენდება კატეგორიის ფერი`);
     }
 
     /** Optional non-negative number column; warns and falls back to 0. */
@@ -167,7 +167,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
       if (value === undefined || String(value).trim() === '') return 0;
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0) {
-        warnings.push(`${label} არავალიდურია — დაყენდება 0`);
+        warnings.push(`${label} არავალიდურია - დაყენდება 0`);
         return 0;
       }
       return field === 'stock' ? Math.round(n) : n;

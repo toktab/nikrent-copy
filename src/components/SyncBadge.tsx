@@ -56,7 +56,7 @@ export function SyncBadge() {
     return (
       <Tooltip
         label="მხოლოდ ნახვა"
-        reason="რედაქტირების უფლება არ გაქვს — მიმართე ადმინისტრატორს"
+        reason="რედაქტირების უფლება არ გაქვს - მიმართე ადმინისტრატორს"
         icon="lock"
       >
         <span className="badge readonly">

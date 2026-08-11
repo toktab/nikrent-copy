@@ -30,9 +30,9 @@ export const VIEW_LABEL: Record<ViewAxis, string> = {
 };
 
 export const VIEW_HINT: Record<ViewAxis, string> = {
-  plan: 'ხედი ზემოდან — თრევა გადააადგილებს გეგმაზე',
-  front: 'ხედი წინიდან — თრევა გადააადგილებს გვერდით და სიმაღლეზე',
-  side: 'ხედი გვერდიდან — თრევა გადააადგილებს სიღრმეში და სიმაღლეზე',
+  plan: 'ხედი ზემოდან - თრევა გადააადგილებს გეგმაზე',
+  front: 'ხედი წინიდან - თრევა გადააადგილებს გვერდით და სიმაღლეზე',
+  side: 'ხედი გვერდიდან - თრევა გადააადგილებს სიღრმეში და სიმაღლეზე',
 };
 
 /** What each surface axis means, for the rulers and the inspector. */

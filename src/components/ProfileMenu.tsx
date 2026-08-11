@@ -119,7 +119,7 @@ export function ProfileMenu() {
       <button
         className="avatar-button"
         onClick={() => setOpen((v) => !v)}
-        title={`${displayName} — ${ROLE_LABEL[profile.role]}`}
+        title={`${displayName} - ${ROLE_LABEL[profile.role]}`}
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -214,7 +214,7 @@ export function ProfileMenu() {
                     setOpen(false);
                     openDialog({ kind: 'errors' });
                   }}
-                  title="რა იშლება პროგრამაში — ავტომატურად აღრიცხული"
+                  title="რა იშლება პროგრამაში - ავტომატურად აღრიცხული"
                 ><Icon name="warning" /> შეცდომების ჟურნალი
                 </button>
               </>

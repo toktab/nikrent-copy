@@ -62,19 +62,19 @@ export function StatusBar() {
           <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
         </span>
         <span className="opt">
-          <kbd>{combo(['alt'])}</kbd>+კლიკი — ქვედა ელემენტი
+          <kbd>{combo(['alt'])}</kbd> + კლიკი - ქვედა ელემენტი
         </span>
         {/* The two modifiers that only exist mid-drag. Nobody discovers a key
             you have to already be holding something to use, and both had been
             found the hard way — by asking why the thing would not move. */}
         <span className="opt">
-          <kbd>{combo(['shift'])}</kbd>+თრევა — სწორ ხაზზე
+          <kbd>{combo(['shift'])}</kbd> + თრევა - სწორ ხაზზე
         </span>
         <span className="opt">
-          <kbd>{overrideLabel()}</kbd>+თრევა — მიბმის გარეშე
+          <kbd>{overrideLabel()}</kbd> + თრევა - მიბმის გარეშე
         </span>
         <span className="opt">
-          <kbd>Space</kbd>+თრევა — ხედის გადაწევა
+          <kbd>Space</kbd> + თრევა - ხედის გადაწევა
         </span>
       </span>
 

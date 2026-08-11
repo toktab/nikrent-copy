@@ -116,7 +116,7 @@ export function ErrorLogDialog() {
         <p className="field-hint">იტვირთება…</p>
       ) : !rows.length ? (
         <p className="field-hint">
-          ჩანაწერი არ არის — პროგრამას გაფრთხილების გარეშე არაფერი შეჰფერხებია.
+          ჩანაწერი არ არის - პროგრამას გაფრთხილების გარეშე არაფერი შეჰფერხებია.
         </p>
       ) : (
         <ul className="error-list">

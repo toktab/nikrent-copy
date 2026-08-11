@@ -30,10 +30,10 @@ export function OfflineBanner() {
         <span>
           {pending
             ? 'ცვლილებები ინახება ამ კომპიუტერზე და აიტვირთება კავშირის აღდგენისას.'
-            : 'ყველაფერი შენახულია. რედაქტირება შეგიძლია — აიტვირთება კავშირის აღდგენისას.'}
+            : 'ყველაფერი შენახულია. რედაქტირება შეგიძლია - აიტვირთება კავშირის აღდგენისას.'}
         </span>
       </div>
-      {lastSavedAt && <span className="offline-when">ბოლო შენახვა — {clock(lastSavedAt)}</span>}
+      {lastSavedAt && <span className="offline-when">ბოლო შენახვა - {clock(lastSavedAt)}</span>}
     </div>
   );
 }

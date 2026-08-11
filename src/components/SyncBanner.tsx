@@ -35,7 +35,7 @@ export function SyncBanner() {
         <div className="sync-banner-text">
           <b>ნახაზი „{conflictName}“ სხვამ შეცვალა</b>
           <span>
-            შენი და სერვერის ვერსია ერთმანეთს არ ემთხვევა. აირჩიე რომელი დარჩეს — მეორე
+            შენი და სერვერის ვერსია ერთმანეთს არ ემთხვევა. აირჩიე რომელი დარჩეს - მეორე
             დაიკარგება.
           </span>
         </div>
@@ -50,7 +50,7 @@ export function SyncBanner() {
           <button
             className="btn small"
             onClick={() => conflictDocId && void resolveConflictTakeServer(conflictDocId)}
-            title="სერვერის ვერსია ჩაანაცვლებს შენსას — შენი ცვლილებები დაიკარგება"
+            title="სერვერის ვერსია ჩაანაცვლებს შენსას - შენი ცვლილებები დაიკარგება"
           >
             აიღე სერვერის
           </button>

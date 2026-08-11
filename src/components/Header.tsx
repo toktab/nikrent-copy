@@ -47,8 +47,8 @@ const SNAP_LABEL: Record<SnapMode, string> = {
 };
 
 const SNAP_HINT: Record<SnapMode, string> = {
-  edge: 'პანელები ეკვრება მეზობლის კიდეს — ფორმვორკისთვის ეს სჭირდება',
-  grid: 'ბადეზეც და კიდეზეც — ღერძებზე გასატანად',
+  edge: 'პანელები ეკვრება მეზობლის კიდეს - ფორმვორკისთვის ეს სჭირდება',
+  grid: 'ბადეზეც და კიდეზეც - ღერძებზე გასატანად',
   off: 'თავისუფალი განთავსება',
 };
 
@@ -134,7 +134,7 @@ export function Header() {
       });
       if (!result) setToast('ნახაზი ცარიელია.');
       else if (result.rescaled) {
-        setToast(`ნახაზი არ ეტეოდა 1:${doc.scale}-ში — დაიბეჭდა 1:${result.scale} მასშტაბით.`);
+        setToast(`ნახაზი არ ეტეოდა 1:${doc.scale}-ში - დაიბეჭდა 1:${result.scale} მასშტაბით.`);
       }
     } catch (e) {
       setToast(`ბეჭდვა ვერ მოხერხდა: ${(e as Error).message}`);
@@ -183,7 +183,7 @@ export function Header() {
 
       if (!usable.length) {
         setToast(
-          'ნახაზი ვერ ჩაიტვირთა — ფაილის მასალები ამ კატალოგში არ არის. ჯერ კატალოგი დააიმპორტე.',
+          'ნახაზი ვერ ჩაიტვირთა - ფაილის მასალები ამ კატალოგში არ არის. ჯერ კატალოგი დააიმპორტე.',
         );
         return;
       }
@@ -193,7 +193,7 @@ export function Header() {
         useEditorStore.getState().fitToContent();
         setToast(
           dropped > 0
-            ? `ნახაზი ჩაიტვირთა (${usable.length}). ${dropped} ელემენტი გამოტოვდა — მასალა კატალოგში არ არის.`
+            ? `ნახაზი ჩაიტვირთა (${usable.length}). ${dropped} ელემენტი გამოტოვდა - მასალა კატალოგში არ არის.`
             : `ნახაზი ჩაიტვირთა (${usable.length} ელემენტი).`,
         );
       };
@@ -312,7 +312,7 @@ export function Header() {
             className={viewMode === '3d' ? 'on' : undefined}
             aria-pressed={viewMode === '3d'}
             onClick={() => setViewMode('3d')}
-            title="სივრცითი ხედი — რედაქტირებადი"
+            title="სივრცითი ხედი - რედაქტირებადი"
           >
             3D
           </button>
@@ -523,7 +523,7 @@ export function Header() {
             <MenuItem
               on={showSketch}
               onClick={() => setShowSketch(!showSketch)}
-              title="დახაზული გეგმის ჩვენება — გამორთვისას არც ჩანს, არც ებმება"
+              title="დახაზული გეგმის ჩვენება - გამორთვისას არც ჩანს, არც ებმება"
             >
               მონახაზი
             </MenuItem>
@@ -542,7 +542,7 @@ export function Header() {
             <MenuItem
               on={showGaps}
               onClick={() => setShowGaps(!showGaps)}
-              title="ყველა ღია ნაპრალი ნახაზზე — შეკვეთამდე შესამოწმებლად"
+              title="ყველა ღია ნაპრალი ნახაზზე - შეკვეთამდე შესამოწმებლად"
             >
               ყველა ნაპრალი
             </MenuItem>
@@ -555,11 +555,11 @@ export function Header() {
             wizards because it is the same kind of thing: a way of getting a
             whole wall onto the drawing rather than a panel at a time. */}
         <Tooltip
-          label="ხაზვა — გეგმის მონახაზი"
+          label="ხაზვა - გეგმის მონახაზი"
           reason={
             surfaceView === 'plan'
-              ? `G — ხაზვა, V — არჩევა · სწორი კუთხეები; ${overrideLabel()} — თავისუფალი კუთხე. Enter — დასრულება`
-              : 'მხოლოდ გეგმაზე — მონახაზი გეგმის ხაზებია'
+              ? `G - ხაზვა, V - არჩევა · სწორი კუთხეები; ${overrideLabel()} - თავისუფალი კუთხე. Enter - დასრულება`
+              : 'მხოლოდ გეგმაზე - მონახაზი გეგმის ხაზებია'
           }
         >
           <button
@@ -589,7 +589,7 @@ export function Header() {
         <button
           className="btn"
           onClick={() => openDialog({ kind: 'templates' })}
-          title="შენახული შაბლონები — მონიშნულის შენახვა და ჩასმა"
+          title="შენახული შაბლონები - მონიშნულის შენახვა და ჩასმა"
         >
           <Icon name="copy" /> <span className="btn-label">შაბლონი</span>
         </button>
