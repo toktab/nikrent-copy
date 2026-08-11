@@ -290,6 +290,7 @@ function SketchDetails({ path }: { path: SketchPath }) {
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const part = useEditorStore((s) => s.selectedSketchPart);
+  const closeSketchPath = useEditorStore((s) => s.closeSketchPath);
   const legs = segments(path);
   const closed = !!path.closed && path.points.length > 2;
   const picked = part?.pathId === path.id && part.kind === 'leg' ? part.index : null;
@@ -341,6 +342,23 @@ function SketchDetails({ path }: { path: SketchPath }) {
         >
           <Icon name="wall" /> შევსება ყალიბით
         </button>
+        {/* Joining the two ends after the fact. Drawing back onto the first
+            point closes a run as it is drawn, but a run that was finished open
+            had no way back to a loop short of redrawing it. */}
+        {path.points.length > 2 && (
+          <button
+            className="btn small"
+            onClick={() => closeSketchPath(path.id, !closed)}
+            title={
+              closed
+                ? 'ბოლო წერტილი აღარ შეუერთდება პირველს'
+                : 'ბოლო წერტილი შეუერთდება პირველს და კონტური ჩაიკეტება'
+            }
+          >
+            <Icon name={closed ? 'close' : 'check'} />{' '}
+            {closed ? 'კონტურის გახსნა' : 'ბოლოების შეერთება'}
+          </button>
+        )}
         <button className="btn small danger" onClick={deleteSelected}>
           <Icon name="trash" /> წაშლა
         </button>

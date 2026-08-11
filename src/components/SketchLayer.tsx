@@ -107,6 +107,9 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
                   pathLength({ id: 'd', points: [...penPoints, preview] }),
                 )}`}
               />
+              {/* How far the run still is from closing, and whether it is
+                  lined up to. */}
+              {penPoints.length > 1 && <CloseGuide first={penPoints[0]} at={preview} hair={hair} />}
             </>
           )}
         </>
@@ -274,6 +277,68 @@ function AddMark({
           {on} სმ
         </text>
       )}
+    </g>
+  );
+}
+
+/**
+ * Where the run has to come back to, and how far off it is.
+ *
+ * Closing an outline means landing exactly on the point it started from, and by
+ * eye that is a guess: the two ends look joined at any zoom where the whole run
+ * fits on screen, and are two centimetres apart. So the distance back is always
+ * shown, and the moment the pen lines up with the start on either axis a guide
+ * is drawn all the way to it — which is the one thing that makes the last two
+ * legs land square instead of nearly.
+ *
+ * The pen also snaps to the start point itself, so being told you are lined up
+ * and then missing anyway is not possible.
+ */
+function CloseGuide({
+  first,
+  at,
+  hair,
+}: {
+  first: Point;
+  at: Point;
+  hair: number;
+}) {
+  const dx = Math.abs(at.x - first.x);
+  const dy = Math.abs(at.y - first.y);
+  const onAxis = dx < 0.01 || dy < 0.01;
+  const away = Math.round(Math.hypot(at.x - first.x, at.y - first.y));
+  if (!away) return null;
+
+  return (
+    <g>
+      {/* Lined up: the guide runs the whole way back, so the remaining leg is
+          visibly the only thing left to draw. */}
+      {onAxis && (
+        <line
+          className="sketch-close-guide"
+          x1={at.x}
+          y1={at.y}
+          x2={first.x}
+          y2={first.y}
+          strokeWidth={hair}
+        />
+      )}
+      <circle
+        className={`sketch-close-target${onAxis ? ' aligned' : ''}`}
+        cx={first.x}
+        cy={first.y}
+        r={hair * 4}
+        strokeWidth={hair}
+      />
+      <text
+        className={`sketch-measure live${onAxis ? ' aligned' : ''}`}
+        x={(at.x + first.x) / 2}
+        y={(at.y + first.y) / 2 - hair * 3}
+        fontSize={hair * 8}
+        textAnchor="middle"
+      >
+        {onAxis ? `დახურვამდე ${away} სმ` : `${away} სმ`}
+      </text>
     </g>
   );
 }

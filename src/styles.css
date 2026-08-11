@@ -1459,6 +1459,26 @@ input.stock-input.bad {
   stroke: var(--ink);
   stroke-width: 0.5;
 }
+/* The point a run has to come back to, and the line to it once it is lined up.
+   Dashed and quiet until aligned, then the accent — the change is the signal. */
+.sketch-close-guide {
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+  opacity: 0.75;
+}
+.sketch-close-target {
+  fill: none;
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+}
+.sketch-close-target.aligned {
+  stroke: var(--accent);
+  stroke-dasharray: none;
+}
+.sketch-measure.live.aligned {
+  fill: var(--accent);
+}
+
 /* The junction a click would add: an outline, because it is not there yet. */
 .sketch-add {
   fill: none;

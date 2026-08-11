@@ -418,6 +418,8 @@ export interface EditorState {
   setLegAngle: (pathId: string, index: number, deg: number) => void;
   /** Take out the selected junction, joining the two legs it divided. */
   removeSketchVertex: (pathId: string, index: number) => void;
+  /** Join a run's last point back to its first, making it a closed outline. */
+  closeSketchPath: (pathId: string, closed: boolean) => void;
   /**
    * Set one leg to an exact length, in cm.
    *
@@ -1581,6 +1583,14 @@ export const useEditorStore = create<EditorState>()(
               selectedSketchIds: next ? s.selectedSketchIds : [],
             };
           }),
+
+        closeSketchPath: (pathId, closed) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) =>
+              // Two points enclose nothing, so there is no loop to make of them.
+              k.id === pathId && k.points.length > 2 ? { ...k, closed } : k,
+            ),
+          })),
 
         setLegAngle: (pathId, index, deg) =>
           commit((s) => ({

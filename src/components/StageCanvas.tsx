@@ -754,7 +754,13 @@ export function StageCanvas() {
        * number matters less than landing on the thing you aimed at.
        */
       if (s.showSketch) {
-        const onto = snapToSketch(s.sketch, at, 10 / s.zoom);
+        // The run being drawn counts as much as the ones already finished —
+        // more, in fact: its own first point is what a loop has to come back
+        // to, and landing near it is not the same as landing on it.
+        const targets = s.penPoints.length
+          ? [...s.sketch, { id: 'draft', points: s.penPoints }]
+          : s.sketch;
+        const onto = snapToSketch(targets, at, 10 / s.zoom);
         if (onto) return onto.point;
       }
 
