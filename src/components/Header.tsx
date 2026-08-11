@@ -8,7 +8,7 @@ import {
   parseLayoutFile,
 } from '../lib/catalogFile';
 import { pickFile, readFileAsText } from '../lib/files';
-import { combo } from '../lib/platform';
+import { combo, overrideLabel } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
 import { BrandMark } from './BrandMark';
@@ -558,7 +558,7 @@ export function Header() {
           label="ხაზვა — გეგმის მონახაზი"
           reason={
             surfaceView === 'plan'
-              ? 'G — ხაზვა, V — არჩევა · სწორი კუთხეები; Alt — თავისუფალი კუთხე. Enter — დასრულება'
+              ? `G — ხაზვა, V — არჩევა · სწორი კუთხეები; ${overrideLabel()} — თავისუფალი კუთხე. Enter — დასრულება`
               : 'მხოლოდ გეგმაზე — მონახაზი გეგმის ხაზებია'
           }
         >

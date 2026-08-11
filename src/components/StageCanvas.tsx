@@ -47,6 +47,7 @@ import {
   snapToSketch,
   type SegmentHit,
 } from '../lib/sketch';
+import { overrideHeld } from '../lib/platform';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
@@ -414,7 +415,7 @@ export function StageCanvas() {
         // Screen delta → surface delta is just a division by the zoom.
         // Alt held mid-drag turns every snap off, for the placement that is
         // deliberately not flush with anything.
-        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline, it.sketchBaseline, e.altKey);
+        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline, it.sketchBaseline, overrideHeld(e));
         return;
       }
       if (it.type === 'sketch') {
@@ -827,7 +828,7 @@ export function StageCanvas() {
         }
       }
 
-      const at = penTarget(e.clientX, e.clientY, e.altKey);
+      const at = penTarget(e.clientX, e.clientY, overrideHeld(e));
       if (!at) return;
       // Landing back on the first vertex closes the loop, which is how a room
       // outline gets drawn without a separate command for it.
@@ -1043,7 +1044,7 @@ export function StageCanvas() {
         }
 
         if (tool !== 'pen') return;
-        setPenHover(penTarget(e.clientX, e.clientY, e.altKey));
+        setPenHover(penTarget(e.clientX, e.clientY, overrideHeld(e)));
       }}
       onPointerLeave={() => {
         setPenHover(null);

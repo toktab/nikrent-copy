@@ -89,3 +89,27 @@ export function combo(parts: string[], platform: Platform = PLATFORM): string {
   };
   return parts.map((p) => named[p] ?? p).join(k.join);
 }
+
+/**
+ * The "ignore what the tool wants to do" modifier, held during a drag.
+ *
+ * Either Alt or Control, on every platform, for the same reason the command
+ * shortcuts accept either ⌘ or Ctrl: the handler should not care which keyboard
+ * is under the hands. On a Mac Alt is ⌥, which the browser does report — but ⌥
+ * is a busy key there, claimed by the window manager and by the trackpad in
+ * ways that vary by machine, and a modifier that works on most Macs is not one
+ * anybody will trust. Control is free on all three platforms once a drag is
+ * already under way.
+ *
+ * Only ever read mid-drag. At the moment of the press Control already means
+ * "add to the selection", and giving one key two meanings a few milliseconds
+ * apart is how a modifier becomes a coin toss.
+ */
+export function overrideHeld(e: { altKey: boolean; ctrlKey: boolean }): boolean {
+  return e.altKey || e.ctrlKey;
+}
+
+/** How to write that modifier for the keyboard in front of the user. */
+export function overrideLabel(platform: Platform = PLATFORM): string {
+  return platform === 'mac' ? '⌥/⌃' : 'Alt/Ctrl';
+}

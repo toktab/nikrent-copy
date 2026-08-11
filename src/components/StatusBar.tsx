@@ -4,7 +4,7 @@ import { allGaps, faceBands, isFace } from '../lib/gap';
 import { hiddenSpan, projectPiece } from '../lib/projection';
 import { useSyncStore } from '../lib/syncEngine';
 import { useOnline } from '../lib/useOnline';
-import { combo } from '../lib/platform';
+import { combo, overrideLabel } from '../lib/platform';
 import { VIEW_LABEL } from '../lib/projection';
 import { Icon } from './Icon';
 
@@ -62,7 +62,16 @@ export function StatusBar() {
           <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
         </span>
         <span className="opt">
-          <kbd>Alt</kbd>+კლიკი — ქვედა ელემენტი
+          <kbd>{combo(['alt'])}</kbd>+კლიკი — ქვედა ელემენტი
+        </span>
+        {/* The two modifiers that only exist mid-drag. Nobody discovers a key
+            you have to already be holding something to use, and both had been
+            found the hard way — by asking why the thing would not move. */}
+        <span className="opt">
+          <kbd>{combo(['shift'])}</kbd>+თრევა — სწორ ხაზზე
+        </span>
+        <span className="opt">
+          <kbd>{overrideLabel()}</kbd>+თრევა — მიბმის გარეშე
         </span>
         <span className="opt">
           <kbd>Space</kbd>+თრევა — ხედის გადაწევა

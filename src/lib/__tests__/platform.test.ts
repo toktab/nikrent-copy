@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { combo, detectPlatform, keyNames } from '../platform';
+import { combo, detectPlatform, keyNames, overrideHeld, overrideLabel } from '../platform';
 
 const MAC_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
@@ -81,5 +81,21 @@ describe('keyNames', () => {
         expect(value.length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('the drag override modifier', () => {
+  it('answers to either Alt or Control, on every keyboard', () => {
+    expect(overrideHeld({ altKey: true, ctrlKey: false })).toBe(true);
+    expect(overrideHeld({ altKey: false, ctrlKey: true })).toBe(true);
+    expect(overrideHeld({ altKey: false, ctrlKey: false })).toBe(false);
+  });
+
+  // ⌥ is a busy key on a Mac and claimed differently from machine to machine,
+  // so a modifier that only answers to it is one nobody can rely on.
+  it('names both, in the script of the keyboard in front of the user', () => {
+    expect(overrideLabel('mac')).toBe('⌥/⌃');
+    expect(overrideLabel('windows')).toBe('Alt/Ctrl');
+    expect(overrideLabel('other')).toBe('Alt/Ctrl');
   });
 });
