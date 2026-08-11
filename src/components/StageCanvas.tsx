@@ -691,6 +691,18 @@ export function StageCanvas() {
         // Step from whatever is selected, so repeated presses walk the stack.
         const from = stack.indexOf(s.selectedIds.length === 1 ? s.selectedIds[0] : id);
         target = stack[(Math.max(0, from) + 1) % stack.length];
+        s.setToast(`${stack.indexOf(target) + 1} / ${stack.length} ამ წერტილში`);
+      } else {
+        /**
+         * Nothing underneath, said out loud.
+         *
+         * Doing nothing is exactly what a broken shortcut looks like, and there
+         * is no way to tell the two apart by looking: a piece with nothing
+         * beneath it and a modifier that never arrived both leave the drawing
+         * unchanged. One piece deep is the common and correct answer here -
+         * only stacked courses and crossing pieces have anything to step into.
+         */
+        s.setToast('ამ წერტილში სხვა ელემენტი არაა');
       }
     }
 
