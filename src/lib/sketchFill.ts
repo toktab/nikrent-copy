@@ -50,8 +50,6 @@ export interface SketchFillSpec {
   height: number;
   /** close the corners with profiles instead of butting the panels */
   includeCorners: boolean;
-  /** close the open ends of the run — off where the pour continues */
-  includeStopEnds: boolean;
 }
 
 export interface FillPlan {
@@ -61,7 +59,6 @@ export interface FillPlan {
     panels: number;
     fillers: number;
     corners: number;
-    stopEnds: number;
     courses: number;
     /** centreline run of the whole layout, cm */
     runLength: number;
@@ -74,7 +71,6 @@ const EMPTY: FillPlan['summary'] = {
   panels: 0,
   fillers: 0,
   corners: 0,
-  stopEnds: 0,
   courses: 0,
   runLength: 0,
   turns: 0,
@@ -285,7 +281,6 @@ export function planSketchFill(
   let panelCount = 0;
   let fillerCount = 0;
   let cornerPieces = 0;
-  let stopEndCount = 0;
   let elevation = 0;
 
   for (let c = 0; c < courseCount; c++) {
@@ -333,14 +328,16 @@ export function planSketchFill(
         const startProfile = startCorner >= 0 ? profileAt(side, startCorner) : null;
         const endProfile = endCorner >= 0 ? profileAt(side, endCorner) : null;
 
-        const startExtend =
-          startCorner >= 0
-            ? startProfile
-              ? -startProfile.reach
-              : 0
-            : spec.includeStopEnds
-              ? panelDepth
-              : 0;
+        /**
+         * An open end is where the face stops.
+         *
+         * It used to run a panel thickness past the pour so a stop-end could
+         * sit between the two faces. Nothing closes an end now - that is a
+         * decision for the person pouring it - and the 9 cm was also what put
+         * every face off the catalog's 5 cm grid, leaving a 4 cm strip at the
+         * end of runs that no part in the catalog could close.
+         */
+        const startExtend = startCorner >= 0 && startProfile ? -startProfile.reach : 0;
 
         const endExtend =
           endCorner >= 0
@@ -349,9 +346,7 @@ export function planSketchFill(
               : side * turns[endCorner] > 0
                 ? panelDepth
                 : -panelDepth
-            : spec.includeStopEnds
-              ? panelDepth
-              : 0;
+            : 0;
 
         /**
          * The run is measured between the OFFSET ends, never between the drawn
@@ -479,50 +474,6 @@ export function planSketchFill(
       }
     }
 
-    // ── Stop-ends, closing the open ends of the run ─────────────────────────
-    if (spec.includeStopEnds && !closed) {
-      const ends: Array<{ at: Point; dir: Point }> = [
-        { at: pts[0], dir: { x: -dirs[0].x, y: -dirs[0].y } },
-        { at: pts[n - 1], dir: dirs[legCount - 1] },
-      ];
-      for (const end of ends) {
-        // A stop-end runs across the wall, set a panel thickness back from the
-        // concrete, between the two long faces that have just lapped past it.
-        const across = end.dir.x !== 0;
-        const { used } = coverFace(spec.thickness, panelOptions, fillerOptions, true);
-        if (!used.length) {
-          warnings.push(
-            `${spec.thickness} სმ სისქის ბოლო ვერ დაიხურა - ამ ზომის ელემენტი კატალოგში არ არის.`,
-          );
-          continue;
-        }
-        const face = across
-          ? end.dir.x > 0
-            ? end.at.x
-            : end.at.x - panelDepth
-          : end.dir.y > 0
-            ? end.at.y
-            : end.at.y - panelDepth;
-        const lo = (across ? end.at.y : end.at.x) - half;
-        let offset = 0;
-        for (const option of used) {
-          const pw = planW(option.material);
-          const ph = planH(option.material);
-          const rot = across ? 90 : 0;
-          const { x, y } = placeAt(
-            across ? face : lo + offset,
-            across ? lo + offset : face,
-            pw,
-            ph,
-            rot,
-          );
-          pieces.push({ id: uid(), materialId: option.material.id, x, y, rot, z: elevation });
-          stopEndCount++;
-          offset += pw;
-        }
-      }
-    }
-
     elevation += courseH;
   }
 
@@ -536,7 +487,6 @@ export function planSketchFill(
       panels: panelCount,
       fillers: fillerCount,
       corners: cornerPieces,
-      stopEnds: stopEndCount,
       courses: courses.length,
       runLength: Math.round(pathLength(path)),
       turns: turnCount,
@@ -572,7 +522,6 @@ export function planSketchFillAll(
     summary.panels += plan.summary.panels;
     summary.fillers += plan.summary.fillers;
     summary.corners += plan.summary.corners;
-    summary.stopEnds += plan.summary.stopEnds;
     summary.runLength += plan.summary.runLength;
     summary.turns += plan.summary.turns;
     // Courses are how high the pour is, not something to add up: every run in

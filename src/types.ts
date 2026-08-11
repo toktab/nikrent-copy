@@ -181,8 +181,6 @@ export interface WallRunSpec {
   /** where the run starts, world cm */
   originX: number;
   originY: number;
-  /** close both ends — off where the pour continues */
-  includeStopEnds: boolean;
 }
 
 /** Shape of an exported catalog file (materials + stock, no drawing). */

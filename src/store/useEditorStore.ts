@@ -1135,7 +1135,6 @@ export const useEditorStore = create<EditorState>()(
               thickness: spec.thickness,
               height: spec.height,
               includeCorners: true,
-              includeStopEnds: spec.includeStopEnds,
             },
             state.materials,
           );

@@ -22,7 +22,6 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
   const [thickness, setThickness] = useState('20');
   const [height, setHeight] = useState('300');
   const [includeCorners, setIncludeCorners] = useState(true);
-  const [includeStopEnds, setIncludeStopEnds] = useState(true);
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
@@ -31,9 +30,8 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       thickness: n(thickness),
       height: n(height),
       includeCorners,
-      includeStopEnds,
     }),
-    [thickness, height, includeCorners, includeStopEnds],
+    [thickness, height, includeCorners],
   );
 
   const errors: string[] = [];
@@ -48,9 +46,6 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
   );
 
   if (!paths.length) return null;
-  // Only meaningful when every run selected is a closed room; a mixed selection
-  // still has ends to stop.
-  const closed = paths.every((p) => !!p.closed && p.points.length > 2);
 
   const submit = () => {
     if (errors.length) return;
@@ -113,34 +108,6 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       </div>
 
       <div className="wizard-toggles">
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={includeCorners}
-            onChange={(e) => setIncludeCorners(e.target.checked)}
-            disabled={!plan?.summary.turns}
-          />
-          <span title="მოხსნისას კუთხეს პანელები ხურავს ერთმანეთის გადაფარებით">
-            კუთხის პროფილები
-          </span>
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={includeStopEnds}
-            onChange={(e) => setIncludeStopEnds(e.target.checked)}
-            disabled={closed}
-          />
-          <span
-            title={
-              closed
-                ? 'ჩაკეტილ კონტურს ღია ბოლო არ აქვს'
-                : 'მოხსენი, თუ კედელი გრძელდება ან არსებულ კონსტრუქციას ებჯინება'
-            }
-          >
-            ბოლოების დახურვა
-          </span>
-        </label>
       </div>
 
       {plan && (
@@ -160,12 +127,6 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
               <div className="sc-item">
                 <span>კუთხე</span>
                 <b>{plan.summary.corners}</b>
-              </div>
-            )}
-            {plan.summary.stopEnds > 0 && (
-              <div className="sc-item">
-                <span>ბოლო</span>
-                <b>{plan.summary.stopEnds}</b>
               </div>
             )}
           </div>

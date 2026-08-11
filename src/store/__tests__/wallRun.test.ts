@@ -20,7 +20,6 @@ const spec = (over = {}) => ({
   height: 300,
   originX: 0,
   originY: 0,
-  includeStopEnds: true,
   ...over,
 });
 
@@ -49,7 +48,23 @@ describe('generateWallRun', () => {
     const cats = new Set(
       useEditorStore.getState().pieces.map((p) => byId.get(p.materialId)!.category),
     );
-    expect([...cats].sort()).toEqual(['filler', 'panel']);
+    expect([...cats].every((c) => ['panel', 'filler', 'corner'].includes(c))).toBe(true);
+  });
+
+  /**
+   * A 300 cm wall is 90 + 90 + 90 + 30 and nothing else.
+   *
+   * It used not to be. The faces ran 9 cm past the pour at each end to wrap a
+   * stop-end, which put every face 4 off the catalog's 5 cm grid and left a
+   * strip at the end of the run that no part could close. Taking the stop-end
+   * out took the leftover with it.
+   */
+  it('leaves nothing over on a wall that is a whole number of panels', () => {
+    useEditorStore.getState().generateWallRun(spec());
+    const fillers = useEditorStore
+      .getState()
+      .pieces.filter((p) => byId.get(p.materialId)!.category === 'filler');
+    expect(fillers).toHaveLength(0);
   });
 
   it('stands a face either side of the line', () => {

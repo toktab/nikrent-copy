@@ -27,7 +27,6 @@ const spec = (over: Partial<SketchFillSpec> = {}): SketchFillSpec => ({
   thickness: 20,
   height: 300,
   includeCorners: true,
-  includeStopEnds: true,
   ...over,
 });
 
@@ -378,32 +377,8 @@ describe('planSketchFill', () => {
       expect(ofCategory(plan.pieces, 'corner')).toHaveLength(8);
     });
 
-    it('has no ends to stop', () => {
-      expect(plan.summary.stopEnds).toBe(0);
-    });
-
     it('keeps clear of the concrete and of itself', () => {
       expect(intruding(plan.pieces, room, 20)).toHaveLength(0);
-      expect(clashes(plan.pieces)).toHaveLength(0);
-    });
-  });
-
-  describe('stop-ends', () => {
-    const line = path([[0, 0], [300, 0]]);
-
-    it('closes both ends when asked', () => {
-      expect(planSketchFill(line, spec(), materials).summary.stopEnds).toBeGreaterThan(0);
-    });
-
-    it('leaves them open when the pour continues', () => {
-      expect(
-        planSketchFill(line, spec({ includeStopEnds: false }), materials).summary.stopEnds,
-      ).toBe(0);
-    });
-
-    it('sets them back from the pour, not inside it', () => {
-      const plan = planSketchFill(line, spec(), materials);
-      expect(intruding(plan.pieces, line, 20)).toHaveLength(0);
       expect(clashes(plan.pieces)).toHaveLength(0);
     });
   });

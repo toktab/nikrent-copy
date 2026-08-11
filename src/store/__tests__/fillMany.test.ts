@@ -18,7 +18,7 @@ const runs = (): SketchPath[] => [
   { id: 'b', points: [{ x: 0, y: 400 }, { x: 600, y: 400 }] },
 ];
 
-const spec = { thickness: 20, height: 300, includeCorners: true, includeStopEnds: true };
+const spec = { thickness: 20, height: 300, includeCorners: true };
 const state = () => useEditorStore.getState();
 
 describe('filling several runs at once', () => {

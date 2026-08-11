@@ -28,7 +28,6 @@ export function WallWizardDialog() {
   const [length, setLength] = useState('300');
   const [thickness, setThickness] = useState('20');
   const [height, setHeight] = useState('300');
-  const [includeStopEnds, setIncludeStopEnds] = useState(true);
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
@@ -41,9 +40,8 @@ export function WallWizardDialog() {
       height: n(height),
       originX: at.x,
       originY: at.y,
-      includeStopEnds,
     };
-  }, [length, thickness, height, includeStopEnds, panX, panY, zoom, stageW, stageH]);
+  }, [length, thickness, height, panX, panY, zoom, stageW, stageH]);
 
   const errors: string[] = [];
   if (!Number.isFinite(spec.length) || spec.length <= 0) errors.push('კედლის სიგრძე სავალდებულოა.');
@@ -68,12 +66,11 @@ export function WallWizardDialog() {
         thickness: spec.thickness,
         height: spec.height,
         includeCorners: true,
-        includeStopEnds,
       },
       materials,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec, materials, includeStopEnds, errors.length]);
+  }, [spec, materials, errors.length]);
 
   const submit = () => {
     if (errors.length) return;
@@ -142,18 +139,6 @@ export function WallWizardDialog() {
         </label>
       </div>
 
-      <div className="wizard-toggles">
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={includeStopEnds}
-            onChange={(e) => setIncludeStopEnds(e.target.checked)}
-          />
-          <span title="მოხსენი, თუ კედელი გრძელდება ან არსებულ კონსტრუქციას ებჯინება">
-            ბოლოების დახურვა
-          </span>
-        </label>
-      </div>
 
       {plan && (
         <div className="wizard-preview">
@@ -166,12 +151,6 @@ export function WallWizardDialog() {
               <div className="sc-item">
                 <span>ჩაკერება</span>
                 <b>{plan.summary.fillers}</b>
-              </div>
-            )}
-            {plan.summary.stopEnds > 0 && (
-              <div className="sc-item">
-                <span>ბოლო</span>
-                <b>{plan.summary.stopEnds}</b>
               </div>
             )}
           </div>
