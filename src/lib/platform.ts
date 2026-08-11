@@ -109,7 +109,15 @@ export function overrideHeld(e: { altKey: boolean; ctrlKey: boolean }): boolean 
   return e.altKey || e.ctrlKey;
 }
 
-/** How to write that modifier for the keyboard in front of the user. */
+/**
+ * How to write that modifier for the keyboard in front of the user.
+ *
+ * One key, not both. Control is accepted as a fallback and deliberately not
+ * advertised: a hint naming two keys reads as "either of these might work",
+ * which is a worse thing to tell someone than just naming the one that does.
+ * ⌥ is also what the rest of the interface already says, and a modifier that
+ * means one thing everywhere is the point.
+ */
 export function overrideLabel(platform: Platform = PLATFORM): string {
-  return platform === 'mac' ? '⌥/⌃' : 'Alt/Ctrl';
+  return keyNames(platform).alt;
 }

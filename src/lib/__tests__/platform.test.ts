@@ -91,11 +91,12 @@ describe('the drag override modifier', () => {
     expect(overrideHeld({ altKey: false, ctrlKey: false })).toBe(false);
   });
 
-  // ⌥ is a busy key on a Mac and claimed differently from machine to machine,
-  // so a modifier that only answers to it is one nobody can rely on.
-  it('names both, in the script of the keyboard in front of the user', () => {
-    expect(overrideLabel('mac')).toBe('⌥/⌃');
-    expect(overrideLabel('windows')).toBe('Alt/Ctrl');
-    expect(overrideLabel('other')).toBe('Alt/Ctrl');
+  // Named as one key even though two work. "Either of these might" is a worse
+  // thing to tell someone than naming the one that does — and it agrees with
+  // every other hint in the interface, which is the point of a modifier.
+  it('names one key, in the script of the keyboard in front of the user', () => {
+    expect(overrideLabel('mac')).toBe('⌥');
+    expect(overrideLabel('windows')).toBe('Alt');
+    expect(overrideLabel('other')).toBe('Alt');
   });
 });
