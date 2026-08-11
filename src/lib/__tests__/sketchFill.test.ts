@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Material, Piece, SketchPath } from '../../types';
 import { createSeedMaterials } from '../../data/seedCatalog';
 import { pieceBounds, planW, planH, type Rect } from '../geometry';
+import { coverFace } from '../formwork';
 import { legThickness } from '../shapePath';
+import { allGaps, faceBands } from '../gap';
 import {
   legDir,
   leftNormal,
@@ -430,5 +432,49 @@ describe('planSketchFill', () => {
       const plan = planSketchFill(path([[0, 0], [300, 0]]), spec({ height: 7 }), materials);
       expect(plan.warnings.some((w) => w.includes('სიმაღლე'))).toBe(true);
     });
+  });
+});
+
+describe('a strip too narrow for any panel', () => {
+  const panels = [90, 75, 60, 45, 30].map((w) => ({ material: {} as Material, w }));
+  const fillers = [10, 5].map((w) => ({ material: {} as Material, w }));
+
+  // The rule "fillers only after the panels have covered something" reads as
+  // "do not build a wall out of ჩაკერება", which is right — and it was also
+  // refusing the one case ჩაკერება exists for.
+  it('is closed by fillers alone', () => {
+    expect(coverFace(10, panels, fillers).used.map((o) => o.w)).toEqual([10]);
+    expect(coverFace(25, panels, fillers).remainder).toBe(0);
+  });
+
+  it('still refuses to build a whole face out of strips', () => {
+    // 300 takes panels, so the fillers only ever see what is left of it.
+    const out = coverFace(300, panels, fillers);
+    expect(out.used.every((o) => o.w >= 30)).toBe(true);
+  });
+
+  it('reports what it cannot close rather than leaving it silently open', () => {
+    expect(coverFace(4, panels, fillers).remainder).toBe(4);
+  });
+});
+
+describe('a leg short enough that its two corners nearly meet', () => {
+  // The gap in the drawing: two corner profiles ten centimetres apart, with a
+  // 10 cm ჩაკერება sitting unused in the catalog.
+  const z = path([[0, 0], [265, 0], [265, 120], [530, 120]]);
+  const plan = planSketchFill(z, spec(), materials);
+
+  it('fills the strip between them, turned to suit the run', () => {
+    const turned = ofCategory(plan.pieces, 'filler').filter((p) => p.rot === 90);
+    expect(turned.length).toBeGreaterThan(0);
+    expect(turned.every((p) => materialOf(p).w === 10)).toBe(true);
+  });
+
+  it('leaves no ten-centimetre hole behind', () => {
+    const rects = plan.pieces.flatMap((p) => {
+      const m = materialOf(p);
+      return [{ ...pieceBounds(p, m), heightCm: m.h, bands: faceBands(pieceBounds(p, m), m, p.rot, false) }];
+    });
+    expect(allGaps(rects).some((g) => Math.abs(g.size - 10) < 0.5)).toBe(false);
   });
 });

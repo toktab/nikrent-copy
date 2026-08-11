@@ -18,6 +18,16 @@ export interface PanelOption {
 /** Half-centimetre steps: catalog sizes are whole cm, custom ones may be .5. */
 const RESOLUTION = 2;
 
+/**
+ * How many ჩაკერება may close a strip on their own.
+ *
+ * A closure is one or two pieces, occasionally three — the 10 cm beside a
+ * corner, the 20 cm across a stop-end. Past that it stops being a closure and
+ * becomes a face built out of the wrong part, and the right answer is to say
+ * the catalog cannot cover it.
+ */
+const CLOSURE_PIECES = 3;
+
 export interface CoverResult {
   /** indices into the `sizes` array, widest first */
   picks: number[];
@@ -100,11 +110,15 @@ export function optionsAt(
  * Cover one face: panels first, then close whatever strip is left with
  * ჩაკერება fillers.
  *
- * Fillers are searched separately rather than thrown into one big search, and
- * only once the panels have covered something. They exist to close a strip the
- * panel widths cannot reach — a 70 cm face is 60 + a 10 cm filler — not to
- * build a whole face out of 5 cm strips, which is exactly what a single
- * combined search does when no panel happens to fit.
+ * Fillers are searched separately rather than thrown into one big search. They
+ * exist to close a strip the panel widths cannot reach — a 70 cm face is 60 +
+ * a 10 cm filler — not to build a whole face out of 5 cm strips, which is
+ * exactly what a single combined search does when no panel happens to fit.
+ *
+ * Where no panel could contribute at all they may still close the strip on
+ * their own, but only if a handful of them close it exactly: see
+ * `CLOSURE_PIECES`. That is the difference between the 10 cm beside a corner
+ * and a 38 cm face nobody stocks a panel for.
  */
 export function coverFace(
   target: number,
@@ -134,6 +148,35 @@ export function coverFace(
     );
     used.push(...byFillers.picks.map((i) => fillers[i]));
     remainder = byFillers.remainder;
+  } else if (remainder > 0.01 && fillers.length) {
+    /**
+     * A strip no panel could have contributed to — closed, if a couple of
+     * ჩაკერება close it exactly.
+     *
+     * The rule above reads as "do not build a face out of strips", which is
+     * right, but it was also refusing the one thing ჩაკერება are for. Two
+     * corner profiles ten centimetres apart left the ten centimetres open with
+     * a 10 cm filler unused in the catalog.
+     *
+     * The line between the two is not how wide the strip is, it is how many
+     * pieces close it. One or two or three is a closure and how the gap beside
+     * a corner is really shut. Seven is somebody building a wall out of the
+     * wrong part, and the honest answer there is the warning the caller already
+     * raises — which is why an inexact cover is refused outright rather than
+     * left half-filled.
+     */
+    const byFillers = coverExact(
+      remainder,
+      fillers.map((o) => o.w),
+    );
+    const closes =
+      byFillers.remainder <= 0.01 &&
+      byFillers.picks.length > 0 &&
+      byFillers.picks.length <= CLOSURE_PIECES;
+    if (closes) {
+      used.push(...byFillers.picks.map((i) => fillers[i]));
+      remainder = 0;
+    }
   }
   return { used, remainder };
 }
