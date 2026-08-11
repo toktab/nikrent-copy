@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { planSketchFill, type SketchFillSpec } from '../lib/sketchFill';
+import { planSketchFillAll, type SketchFillSpec } from '../lib/sketchFill';
 import { pathLength } from '../lib/sketch';
 import { Modal } from './Modal';
 
@@ -12,9 +12,9 @@ import { Modal } from './Modal';
  * screen already. What is left is what the drawing cannot know — how thick the
  * pour is, how high it goes, and how it is tied.
  */
-export function SketchFillDialog({ pathId }: { pathId: string }) {
+export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
   const materials = useEditorStore((s) => s.materials);
-  const path = useEditorStore((s) => s.sketch.find((k) => k.id === pathId));
+  const paths = useEditorStore((s) => s.sketch.filter((k) => pathIds.includes(k.id)));
   const fillSketch = useEditorStore((s) => s.fillSketch);
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const setToast = useEditorStore((s) => s.setToast);
@@ -42,17 +42,19 @@ export function SketchFillDialog({ pathId }: { pathId: string }) {
 
   // Live preview of exactly what will be placed, warnings included.
   const plan = useMemo(
-    () => (path && !errors.length ? planSketchFill(path, spec, materials) : null),
+    () => (paths.length && !errors.length ? planSketchFillAll(paths, spec, materials) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [path, spec, materials, errors.length],
+    [paths, spec, materials, errors.length],
   );
 
-  if (!path) return null;
-  const closed = !!path.closed && path.points.length > 2;
+  if (!paths.length) return null;
+  // Only meaningful when every run selected is a closed room; a mixed selection
+  // still has ends to stop.
+  const closed = paths.every((p) => !!p.closed && p.points.length > 2);
 
   const submit = () => {
     if (errors.length) return;
-    const result = fillSketch(pathId, spec);
+    const result = fillSketch(pathIds, spec);
     setToast(
       !result.added
         ? 'ყალიბი ვერ აიწყო — შეამოწმე კატალოგი და ზომები.'
@@ -80,7 +82,9 @@ export function SketchFillDialog({ pathId }: { pathId: string }) {
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
         დახაზული ხაზი კედლის <b>ღერძია</b> — ბეტონი თანაბრად ნაწილდება ორივე მხარეს.
-        სიგრძე ნახაზიდან იკითხება: <b>{Math.round(pathLength(path))} სმ</b>
+        {paths.length > 1 ? ` მონიშნულია ${paths.length} ხაზი. ` : ' '}
+        სიგრძე ნახაზიდან იკითხება:{' '}
+        <b>{Math.round(paths.reduce((sum, p) => sum + pathLength(p), 0))} სმ</b>
         {plan && plan.summary.turns > 0 ? ` · ${plan.summary.turns} კუთხე` : ''}.
       </p>
 

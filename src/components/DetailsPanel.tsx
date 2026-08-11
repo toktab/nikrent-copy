@@ -25,16 +25,19 @@ export function DetailsPanel() {
     [pieces, selectedIds],
   );
 
-  const selectedSketch = useEditorStore((s) =>
-    s.selectedSketchIds.length === 1
-      ? (s.sketch.find((k) => k.id === s.selectedSketchIds[0]) ?? null)
-      : null,
+  const selectedSketches = useEditorStore((s) =>
+    s.sketch.filter((k) => s.selectedSketchIds.includes(k.id)),
   );
 
   // A drawn run is a selection too, and until it could be measured and filled
-  // from here, picking one put nothing at all in the inspector.
-  if (!selectedPieces.length && selectedSketch) {
-    return <SketchDetails path={selectedSketch} />;
+  // from here, picking one put nothing at all in the inspector. Several at once
+  // is the normal case for a building — a layout is a few runs that meet — and
+  // that used to fall through to the empty state with no way to fill any of it.
+  if (!selectedPieces.length && selectedSketches.length === 1) {
+    return <SketchDetails path={selectedSketches[0]} />;
+  }
+  if (!selectedPieces.length && selectedSketches.length > 1) {
+    return <SketchGroupDetails paths={selectedSketches} />;
   }
 
   if (!selectedPieces.length) {
@@ -334,7 +337,7 @@ function SketchDetails({ path }: { path: SketchPath }) {
       <div className="row-actions">
         <button
           className="btn small primary"
-          onClick={() => openDialog({ kind: 'sketch-fill', pathId: path.id })}
+          onClick={() => openDialog({ kind: 'sketch-fill', pathIds: [path.id] })}
         >
           <Icon name="wall" /> შევსება ყალიბით
         </button>
@@ -434,5 +437,61 @@ function AngleField({
       />
       <span className="deg">°</span>
     </span>
+  );
+}
+
+/**
+ * Several drawn runs at once — the shape of a real layout.
+ *
+ * A building is a few runs that happen to meet, so this is the selection people
+ * actually have when they want the formwork for it. Filling them one at a time
+ * meant retyping the same thickness and height for each and adding the
+ * summaries up by hand, and until now the inspector showed nothing here at all.
+ */
+function SketchGroupDetails({ paths }: { paths: SketchPath[] }) {
+  const openDialog = useEditorStore((s) => s.openDialog);
+  const deleteSelected = useEditorStore((s) => s.deleteSelected);
+  const total = paths.reduce((sum, p) => sum + pathLength(p), 0);
+  const legs = paths.reduce((sum, p) => sum + segments(p).length, 0);
+  const turns = paths.reduce(
+    (sum, p) => sum + Math.max(0, segments(p).length - (p.closed ? 0 : 1)),
+    0,
+  );
+
+  return (
+    <div className="details">
+      <div className="kv">
+        <span className="k">მონიშნულია</span>
+        <b>{paths.length} ხაზი</b>
+      </div>
+      <div className="kv">
+        <span className="k">სულ სიგრძე</span>
+        <b>{Math.round(total)} სმ</b>
+      </div>
+      <div className="kv">
+        <span className="k">მონაკვეთი</span>
+        <span>
+          {legs} · {turns} კუთხე
+        </span>
+      </div>
+
+      <div className="row-actions">
+        <button
+          className="btn small primary"
+          onClick={() => openDialog({ kind: 'sketch-fill', pathIds: paths.map((p) => p.id) })}
+        >
+          <Icon name="wall" /> შევსება ყალიბით
+        </button>
+        <button className="btn small danger" onClick={deleteSelected}>
+          <Icon name="trash" /> წაშლა
+        </button>
+      </div>
+
+      <p className="hint-note">
+        თითოეული ხაზი ცალკე იწყობა — კუთხე მხოლოდ იქ ჩნდება, სადაც ერთი ხაზი
+        უხვევს, და არა იქ, სადაც ორი ხაზი ერთმანეთს ხვდება. ცალკე მონაკვეთის
+        ზომებისთვის მონიშნე ერთი ხაზი.
+      </p>
+    </div>
   );
 }

@@ -42,7 +42,12 @@ import {
   type Point,
   type SegmentHit,
 } from '../lib/sketch';
-import { legDir, planSketchFill, type SketchFillSpec } from '../lib/sketchFill';
+import {
+  legDir,
+  planSketchFill,
+  planSketchFillAll,
+  type SketchFillSpec,
+} from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
 import {
   isElevation,
@@ -422,8 +427,15 @@ export interface EditorState {
    * end for the slack to go to, so it is left alone.
    */
   setLegLength: (pathId: string, index: number, cm: number) => void;
-  /** Build the formwork for a drawn run. */
-  fillSketch: (pathId: string, spec: SketchFillSpec) => { added: number; warnings: string[] };
+  /**
+   * Build the formwork for one drawn run, or for every run selected.
+   *
+   * Takes a list because a layout is rarely one unbroken line — a building is a
+   * few runs that happen to meet — and filling them one at a time meant
+   * retyping the same thickness and height for each, then adding the summaries
+   * up by hand to know what to order.
+   */
+  fillSketch: (pathIds: string[], spec: SketchFillSpec) => { added: number; warnings: string[] };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -1484,11 +1496,11 @@ export const useEditorStore = create<EditorState>()(
             sketch: s.sketch.map((k) => (k.id === pathId ? setLegLengthOn(k, index, cm) : k)),
           })),
 
-        fillSketch: (pathId, spec) => {
+        fillSketch: (pathIds, spec) => {
           const state = get();
-          const path = state.sketch.find((k) => k.id === pathId);
-          if (!path) return { added: 0, warnings: ['ნახაზი ვერ მოიძებნა.'] };
-          const plan = planSketchFill(path, spec, state.materials);
+          const paths = state.sketch.filter((k) => pathIds.includes(k.id));
+          if (!paths.length) return { added: 0, warnings: ['ნახაზი ვერ მოიძებნა.'] };
+          const plan = planSketchFillAll(paths, spec, state.materials);
           if (plan.pieces.length) {
             commit((s) => ({
               pieces: [...s.pieces, ...plan.pieces],

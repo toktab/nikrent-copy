@@ -543,3 +543,42 @@ export function planSketchFill(
     },
   };
 }
+
+/**
+ * Fill several runs at once, as one job.
+ *
+ * A layout is rarely one unbroken line — a building is a few runs that happen
+ * to meet — and filling them one at a time means opening the same dialog with
+ * the same thickness and height for each, then adding up the summaries by hand
+ * to know what to order.
+ *
+ * Each run is still planned on its own: they are separate walls, and a corner
+ * only exists where one run turns, not where two happen to touch. What is
+ * shared is the pour they belong to and the single count that comes out.
+ */
+export function planSketchFillAll(
+  paths: SketchPath[],
+  spec: SketchFillSpec,
+  materials: Material[],
+): FillPlan {
+  const pieces: Piece[] = [];
+  const warnings: string[] = [];
+  const summary = { ...EMPTY };
+
+  for (const path of paths) {
+    const plan = planSketchFill(path, spec, materials);
+    pieces.push(...plan.pieces);
+    warnings.push(...plan.warnings);
+    summary.panels += plan.summary.panels;
+    summary.fillers += plan.summary.fillers;
+    summary.corners += plan.summary.corners;
+    summary.stopEnds += plan.summary.stopEnds;
+    summary.runLength += plan.summary.runLength;
+    summary.turns += plan.summary.turns;
+    // Courses are how high the pour is, not something to add up: every run in
+    // one job stands the same number.
+    summary.courses = Math.max(summary.courses, plan.summary.courses);
+  }
+
+  return { pieces, warnings: [...new Set(warnings)], summary };
+}

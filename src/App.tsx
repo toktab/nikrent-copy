@@ -83,7 +83,7 @@ export default function App() {
       {dialog?.kind === 'documents' && <DocumentsDialog />}
       {dialog?.kind === 'column-wizard' && <ColumnWizardDialog />}
       {dialog?.kind === 'wall-wizard' && <WallWizardDialog />}
-      {dialog?.kind === 'sketch-fill' && <SketchFillDialog pathId={dialog.pathId} />}
+      {dialog?.kind === 'sketch-fill' && <SketchFillDialog pathIds={dialog.pathIds} />}
       {dialog?.kind === 'templates' && <TemplatesDialog />}
       {dialog?.kind === 'warehouses' && <WarehousesDialog />}
       {dialog?.kind === 'title-block' && <TitleBlockDialog />}
