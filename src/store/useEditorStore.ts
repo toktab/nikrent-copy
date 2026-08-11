@@ -291,6 +291,15 @@ export interface EditorState {
     dvCm: number,
     baseline: Piece[],
     sketchBaseline?: SketchPath[],
+    /**
+     * Put the piece exactly where the pointer is, snapping to nothing.
+     *
+     * The way out of a snap that is being helpful at the wrong moment. Making
+     * an edge win its axis is right nearly always and wrong when the whole job
+     * is to sit one centimetre off one — turning a 4 cm leftover the catalog
+     * cannot close into a 5 cm one it can.
+     */
+    freehand?: boolean,
   ) => void;
   /** Arrow-key nudge, also in surface centimetres. */
   nudgeSelection: (duCm: number, dvCm: number) => void;
@@ -304,6 +313,16 @@ export interface EditorState {
   endDrag: () => void;
   /** Put the selection at an exact elevation, from the inspector field. */
   setElevation: (zCm: number) => void;
+  /**
+   * Put the one selected piece at an exact spot.
+   *
+   * Rotation and elevation could both be typed and position could not, which
+   * left the most ordinary precise instruction there is — "a centimetre that
+   * way, so the leftover beside it becomes a size the catalog stocks" — with no
+   * way to say it. Dragging cannot: a snap that is right nearly always is
+   * wrong exactly when the point is to sit just off something.
+   */
+  setPosition: (x: number, y: number) => void;
   /** Raise or lower the selection, from a keyboard nudge. */
   nudgeElevation: (dzCm: number) => void;
   rotateSelected: (step?: number) => void;
@@ -739,7 +758,7 @@ export const useEditorStore = create<EditorState>()(
          * makes panels butt together, works in an elevation too: courses land
          * on each other instead of near each other.
          */
-        moveSelectionBy: (duCm, dvCm, baseline, sketchBaseline) =>
+        moveSelectionBy: (duCm, dvCm, baseline, sketchBaseline, freehand) =>
           apply((s) => {
             const selected = new Set(s.selectedIds);
             const origin = new Map(baseline.map((p) => [p.id, p]));
@@ -749,8 +768,8 @@ export const useEditorStore = create<EditorState>()(
             // 1. grid snap, applied to the drag delta so repeated snapping
             //    cannot creep away from the original positions. Only used where
             //    nothing better is in reach — see below.
-            const gridDu = snapValue(duCm, s.snapStep, s.snap);
-            const gridDv = snapValue(dvCm, s.snapStep, s.snap);
+            const gridDu = snapValue(duCm, s.snapStep, s.snap && !freehand);
+            const gridDv = snapValue(dvCm, s.snapStep, s.snap && !freehand);
 
             /**
              * 2. edge snap: line the selection up with a piece already placed.
@@ -777,7 +796,7 @@ export const useEditorStore = create<EditorState>()(
             let snapDu: number | null = null;
             let snapDv: number | null = null;
 
-            if (s.edgeSnap) {
+            if (s.edgeSnap && !freehand) {
               const shift = unprojectDelta(duCm, dvCm, view);
               /**
                * The faces a piece presents, as lines to align on.
@@ -925,6 +944,13 @@ export const useEditorStore = create<EditorState>()(
           }),
 
         endDrag: () => set({ guideX: null, guideY: null }),
+
+        setPosition: (x, y) =>
+          commit((s) => {
+            if (s.selectedIds.length !== 1) return {};
+            const id = s.selectedIds[0];
+            return { pieces: s.pieces.map((p) => (p.id === id ? { ...p, x, y } : p)) };
+          }),
 
         setElevation: (zCm) =>
           commit((s) => {

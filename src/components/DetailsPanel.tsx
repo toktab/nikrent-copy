@@ -138,9 +138,7 @@ export function DetailsPanel() {
       </div>
       <div className="kv">
         <span className="k">კოორდინატი</span>
-        <span>
-          {Math.round(piece.x)}, {Math.round(piece.y)}
-        </span>
+        <PositionField x={piece.x} y={piece.y} />
       </div>
       <div className="kv">
         <span className="k">მოტრიალება</span>
@@ -511,5 +509,54 @@ function SketchGroupDetails({ paths }: { paths: SketchPath[] }) {
         ზომებისთვის მონიშნე ერთი ხაზი.
       </p>
     </div>
+  );
+}
+
+/**
+ * Exactly where a piece sits, typed.
+ *
+ * Rotation and elevation could both be typed and this could not, which left the
+ * most ordinary precise instruction there is — move it a centimetre, so the
+ * leftover beside it becomes a size the catalog stocks — with no way to say it.
+ * Dragging cannot: a snap that is right nearly always is wrong exactly when the
+ * point is to sit just off something.
+ */
+function PositionField({ x, y }: { x: number; y: number }) {
+  const setPosition = useEditorStore((s) => s.setPosition);
+  const [draft, setDraft] = useState<{ x: string; y: string } | null>(null);
+  const shown = draft ?? {
+    x: String(Math.round(x * 10) / 10),
+    y: String(Math.round(y * 10) / 10),
+  };
+
+  const commit = (next: { x: string; y: string }) => {
+    const nx = Number(next.x.replace(',', '.'));
+    const ny = Number(next.y.replace(',', '.'));
+    if (Number.isFinite(nx) && Number.isFinite(ny)) setPosition(nx, ny);
+    setDraft(null);
+  };
+
+  const field = (axis: 'x' | 'y') => (
+    <input
+      type="number"
+      step="any"
+      value={shown[axis]}
+      onChange={(e) => setDraft({ ...shown, [axis]: e.target.value })}
+      onBlur={(e) => commit({ ...shown, [axis]: e.target.value })}
+      onWheel={keepWheelOffNumber}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit({ ...shown, [axis]: (e.target as HTMLInputElement).value });
+      }}
+    />
+  );
+
+  return (
+    <span className="leg-fields">
+      <span className="rot-field">{field('x')}</span>
+      <span className="rot-field">
+        {field('y')}
+        <span className="deg">სმ</span>
+      </span>
+    </span>
   );
 }

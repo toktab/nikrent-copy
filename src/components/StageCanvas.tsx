@@ -412,7 +412,9 @@ export function StageCanvas() {
         }
         const { dx, dy } = straighten(raw.dx, raw.dy, e.shiftKey);
         // Screen delta → surface delta is just a division by the zoom.
-        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline, it.sketchBaseline);
+        // Alt held mid-drag turns every snap off, for the placement that is
+        // deliberately not flush with anything.
+        s.moveSelectionBy(dx / s.zoom, dy / s.zoom, it.baseline, it.sketchBaseline, e.altKey);
         return;
       }
       if (it.type === 'sketch') {
