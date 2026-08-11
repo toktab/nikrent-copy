@@ -101,9 +101,10 @@ export function combo(parts: string[], platform: Platform = PLATFORM): string {
  * anybody will trust. Control is free on all three platforms once a drag is
  * already under way.
  *
- * Only ever read mid-drag. At the moment of the press Control already means
- * "add to the selection", and giving one key two meanings a few milliseconds
- * apart is how a modifier becomes a coin toss.
+ * Alt may be held from the start of a drag: nothing claims it at the moment of
+ * the press any more. Control may not, because there it already means "add to
+ * the selection" - one key meaning two things a few milliseconds apart is how a
+ * modifier becomes a coin toss.
  */
 export function overrideHeld(e: { altKey: boolean; ctrlKey: boolean }): boolean {
   return e.altKey || e.ctrlKey;

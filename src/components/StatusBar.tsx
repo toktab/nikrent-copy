@@ -61,9 +61,6 @@ export function StatusBar() {
         <span>
           <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
         </span>
-        <span className="opt">
-          <kbd>{combo(['alt'])}</kbd> + კლიკი - ქვედა ელემენტი
-        </span>
         {/* The two modifiers that only exist mid-drag. Nobody discovers a key
             you have to already be holding something to use, and both had been
             found the hard way — by asking why the thing would not move. */}

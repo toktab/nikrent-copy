@@ -106,24 +106,6 @@ export function straighten(dx: number, dy: number, on: boolean): { dx: number; d
   return Math.abs(dx) >= Math.abs(dy) ? { dx, dy: 0 } : { dx: 0, dy };
 }
 
-/**
- * Every piece under the cursor, nearest first.
- *
- * Read from the document rather than from geometry so it agrees with what the
- * user can see by construction: the browser has already resolved stacking, and
- * since the pieces hit-test on their painted shape, a piece only appears here
- * where it is actually drawn.
- */
-function stackUnder(clientX: number, clientY: number): string[] {
-  const ids: string[] = [];
-  for (const el of document.elementsFromPoint(clientX, clientY)) {
-    const piece = el instanceof Element ? el.closest<HTMLElement>('.piece') : null;
-    const id = piece?.dataset.pieceId;
-    if (id && !ids.includes(id)) ids.push(id);
-  }
-  return ids;
-}
-
 interface MarqueeBox {
   x: number;
   y: number;
@@ -675,43 +657,12 @@ export function StageCanvas() {
     e.stopPropagation();
     const s = useEditorStore.getState();
 
-    /**
-     * Alt reaches past whatever is in front.
-     *
-     * A plain click takes the piece on top, which is the one the user pointed
-     * at. But formwork stacks: in an elevation a whole back face hides behind
-     * the front one, and in plan a waler crosses the panels under it, so the
-     * pieces underneath need a way to be got at. Each Alt press steps one
-     * deeper into the stack and wraps around at the bottom.
-     */
-    let target = id;
-    if (e.altKey) {
-      const stack = stackUnder(e.clientX, e.clientY);
-      if (stack.length > 1) {
-        // Step from whatever is selected, so repeated presses walk the stack.
-        const from = stack.indexOf(s.selectedIds.length === 1 ? s.selectedIds[0] : id);
-        target = stack[(Math.max(0, from) + 1) % stack.length];
-        s.setToast(`${stack.indexOf(target) + 1} / ${stack.length} ამ წერტილში`);
-      } else {
-        /**
-         * Nothing underneath, said out loud.
-         *
-         * Doing nothing is exactly what a broken shortcut looks like, and there
-         * is no way to tell the two apart by looking: a piece with nothing
-         * beneath it and a modifier that never arrived both leave the drawing
-         * unchanged. One piece deep is the common and correct answer here -
-         * only stacked courses and crossing pieces have anything to step into.
-         */
-        s.setToast('ამ წერტილში სხვა ელემენტი არაა');
-      }
-    }
-
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      s.toggleSelect(target);
+      s.toggleSelect(id);
       return; // modifier-click adjusts the selection, it does not start a drag
     }
     // Clicking an already-selected piece keeps the group so it can be dragged.
-    if (!s.selectedIds.includes(target)) s.select(target);
+    if (!s.selectedIds.includes(id)) s.select(id);
 
     const after = useEditorStore.getState();
     interaction.current = {
