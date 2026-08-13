@@ -350,6 +350,31 @@ describe('snapping to the layout already drawn', () => {
   it('finds nothing out in the open', () => {
     expect(snapToSketch([L()], { x: 150, y: 90 }, 10)).toBeNull();
   });
+
+  /**
+   * Meeting the wall and landing on a grid corner only conflict at a junction.
+   * Anywhere along a leg they agree, so the point slides up the leg to the
+   * nearest square: still exactly on the line, and now on a corner too.
+   */
+  it('slides along a leg to the nearest square', () => {
+    expect(snapToSketch([L()], { x: 122, y: 4 }, 10, 5)?.point).toEqual({ x: 120, y: 0 });
+    expect(snapToSketch([L()], { x: 118, y: 4 }, 10, 5)?.point).toEqual({ x: 120, y: 0 });
+    expect(snapToSketch([L()], { x: 296, y: 63 }, 10, 5)?.point).toEqual({ x: 300, y: 65 });
+  });
+
+  it('never slides a point off the end of the leg it is on', () => {
+    // 298 rounds to 300 on the horizontal leg, which is where it ends anyway.
+    const got = snapToSketch([path([[0, 0], [298, 0]])], { x: 297, y: 2 }, 10, 5);
+    expect(got?.point.x).toBeLessThanOrEqual(298);
+  });
+
+  it('leaves a junction exactly where it is, square or not', () => {
+    const odd = path([[0, 0], [298, 0]]);
+    expect(snapToSketch([odd], { x: 297, y: 1 }, 10, 5)).toEqual({
+      point: { x: 298, y: 0 },
+      onVertex: true,
+    });
+  });
 });
 
 describe('removeVertex', () => {

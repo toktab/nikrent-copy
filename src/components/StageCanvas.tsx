@@ -708,12 +708,12 @@ export function StageCanvas() {
       if (!at) return null;
       const s = useEditorStore.getState();
       /**
-       * A layout lands on whole centimetres at worst.
+       * A vertex lands on a corner of the grid, and the grid is fives.
        *
-       * With the grid off nothing rounded at all, so the pointer's own position
-       * — a screen pixel divided by the zoom — became the wall length, and a leg
-       * drawn as 180 was stored as 180.2. Nobody dimensions a wall to a fifth of
-       * a millimetre.
+       * The floor holds with snapping off as well — see `drawStep`. Without it
+       * the pointer's own position, a screen pixel divided by the zoom, became
+       * the wall length, and a leg drawn as 180 was stored as 180.2. Nobody
+       * dimensions a wall to a fifth of a millimetre.
        */
       const step = drawStep(s.snap, s.snapStep);
       const round = (v: number) => Math.round(v / step) * step;
@@ -733,7 +733,7 @@ export function StageCanvas() {
         const targets = s.penPoints.length
           ? [...s.sketch, { id: 'draft', points: s.penPoints }]
           : s.sketch;
-        const onto = snapToSketch(targets, at, 10 / s.zoom);
+        const onto = snapToSketch(targets, at, 10 / s.zoom, step);
         if (onto) return onto.point;
       }
 

@@ -1444,6 +1444,18 @@ input.stock-input.bad {
   opacity: 0.8;
 }
 
+/* The grid corner the pen has hold of. Amber like everything else that has not
+   been committed, and drawn on the corner rather than under the hand. */
+.pen-target line {
+  stroke: var(--warn);
+  vector-effect: non-scaling-stroke;
+}
+.pen-target circle {
+  fill: none;
+  stroke: var(--warn);
+  vector-effect: non-scaling-stroke;
+}
+
 /* What the fill does NOT cover: the open corners, and anything the catalog
    cannot close. Reads as part of the count rather than as an error, because
    an outside corner left open is the intended answer. */

@@ -35,7 +35,10 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
   const tool = useEditorStore((s) => s.tool);
   const zoom = useEditorStore((s) => s.zoom);
 
-  if (!sketch.length && !penPoints.length) return null;
+  // The pen's target is drawn even on an empty surface: the first vertex is
+  // the one that most needs to land on a square, and with nothing else on the
+  // drawing there was nothing to render and so nothing to aim with.
+  if (!sketch.length && !penPoints.length && !(tool === 'pen' && preview)) return null;
   const chosen = new Set(selected);
   const hair = 1.5 / zoom;
 
@@ -62,6 +65,12 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
           part={part?.pathId === path.id ? part : null}
         />
       ))}
+
+      {/* Where the pen is, which is never quite where the pointer is.
+          The vertex lands on a corner of the grid, so the corner it has picked
+          is drawn on the corner rather than under the hand — otherwise the only
+          way to find out where a click would go is to click. */}
+      {tool === 'pen' && preview && <PenTarget at={preview} hair={hair} />}
 
       {/* The junction a click would add, sitting on the line it would go on,
           and how far it is from the junctions either side of it. Placing one is
@@ -261,6 +270,26 @@ function PathShape({
           {total} სმ
         </text>
       )}
+    </g>
+  );
+}
+
+/**
+ * The grid corner the pen has hold of.
+ *
+ * A crosshair rather than a dot, because the two arms say WHICH corner: they
+ * run along the two grid lines that cross there, so the mark reads as being on
+ * the intersection even when the pointer has drifted a couple of centimetres
+ * off it. The whole point of ruling the surface in fives is being able to set
+ * out to it, and that needs the pen to show where it has landed.
+ */
+function PenTarget({ at, hair }: { at: Point; hair: number }) {
+  const arm = hair * 10;
+  return (
+    <g className="pen-target">
+      <line x1={at.x - arm} y1={at.y} x2={at.x + arm} y2={at.y} strokeWidth={hair} />
+      <line x1={at.x} y1={at.y - arm} x2={at.x} y2={at.y + arm} strokeWidth={hair} />
+      <circle cx={at.x} cy={at.y} r={hair * 2.2} strokeWidth={hair} />
     </g>
   );
 }

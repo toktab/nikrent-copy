@@ -376,12 +376,17 @@ export function setLegLength(path: SketchPath, index: number, cm: number): Sketc
  *
  * Beats the grid and beats the right-angle lock, both deliberately. Meeting the
  * wall you are drawing to is the point of the gesture; landing on a round
- * number is not.
+ * number is not — but the two only conflict at a junction. Anywhere ALONG a leg
+ * they agree, because sliding the point up the leg to the nearest `step` keeps
+ * it exactly on the line and puts it on a grid corner as well, so `step` is
+ * taken and used where it costs nothing.
  */
 export function snapToSketch(
   paths: SketchPath[],
   at: Point,
   tolerance: number,
+  /** grid the point slides to along a leg; 0 leaves it wherever it landed */
+  step = 0,
 ): { point: Point; onVertex: boolean } | null {
   let best: { point: Point; onVertex: boolean } | null = null;
   let bestD = tolerance;
@@ -399,7 +404,7 @@ export function snapToSketch(
 
   for (const path of paths) {
     for (const [a, b] of segments(path)) {
-      const on = closestOnLeg(a, b, at);
+      const on = alongLeg(a, b, closestOnLeg(a, b, at), step);
       const d = Math.hypot(at.x - on.x, at.y - on.y);
       if (d <= bestD) {
         bestD = d;
@@ -408,6 +413,22 @@ export function snapToSketch(
     }
   }
   return best;
+}
+
+/**
+ * Slide a point already on a leg to the nearest multiple of `step` along it.
+ *
+ * Only the coordinate that varies moves, so the point stays on the line, and
+ * only on a leg that lies on an axis — a leg at an angle has no coordinate that
+ * can be rounded without coming off it. Never past either end.
+ */
+function alongLeg(a: Point, b: Point, on: Point, step: number): Point {
+  if (step <= 0) return on;
+  const round = (v: number, lo: number, hi: number) =>
+    Math.min(Math.max(Math.round(v / step) * step, Math.min(lo, hi)), Math.max(lo, hi));
+  if (Math.abs(a.y - b.y) < 0.01) return { x: round(on.x, a.x, b.x), y: on.y };
+  if (Math.abs(a.x - b.x) < 0.01) return { x: on.x, y: round(on.y, a.y, b.y) };
+  return on;
 }
 
 /**
