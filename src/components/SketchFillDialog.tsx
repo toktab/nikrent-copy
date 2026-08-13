@@ -19,23 +19,23 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const setToast = useEditorStore((s) => s.setToast);
 
-  const [thickness, setThickness] = useState('20');
   const [height, setHeight] = useState('300');
   const [includeCorners, setIncludeCorners] = useState(true);
+  /** Which side of the line the panels stand on. A line has no opinion. */
+  const [side, setSide] = useState<1 | -1>(1);
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
   const spec: SketchFillSpec = useMemo(
     () => ({
-      thickness: n(thickness),
       height: n(height),
+      side,
       includeCorners,
     }),
-    [thickness, height, includeCorners],
+    [height, side, includeCorners],
   );
 
   const errors: string[] = [];
-  if (!Number.isFinite(spec.thickness) || spec.thickness <= 0) errors.push('სისქე სავალდებულოა.');
   if (!Number.isFinite(spec.height) || spec.height <= 0) errors.push('სიმაღლე სავალდებულოა.');
 
   // Live preview of exactly what will be placed, warnings included.
@@ -76,7 +76,7 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        დახაზული ხაზი კედლის <b>ღერძია</b> - ბეტონი თანაბრად ნაწილდება ორივე მხარეს.
+        დახაზული ხაზი ბეტონის <b>კიდეა</b> - პანელები მის გარეთა მხარეს დგება.
         {paths.length > 1 ? ` მონიშნულია ${paths.length} ხაზი. ` : ' '}
         სიგრძე ნახაზიდან იკითხება:{' '}
         <b>{Math.round(paths.reduce((sum, p) => sum + pathLength(p), 0))} სმ</b>
@@ -84,17 +84,6 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       </p>
 
       <div className="form-grid">
-        <label className="field">
-          <span>სისქე (სმ)</span>
-          <input
-            autoFocus
-            type="number"
-            min={1}
-            step="any"
-            value={thickness}
-            onChange={(e) => setThickness(e.target.value)}
-          />
-        </label>
         <label className="field">
           <span>სიმაღლე (სმ)</span>
           <input
@@ -108,6 +97,25 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       </div>
 
       <div className="wizard-toggles">
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={side === -1}
+            onChange={(e) => setSide(e.target.checked ? -1 : 1)}
+          />
+          <span title="პანელები ხაზის მეორე მხარეს დადგება">მეორე მხარეს</span>
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={includeCorners}
+            onChange={(e) => setIncludeCorners(e.target.checked)}
+            disabled={!plan?.summary.turns}
+          />
+          <span title="მოხსნისას კუთხეს პანელები ხურავს ერთმანეთის გადაფარებით">
+            კუთხის პროფილები
+          </span>
+        </label>
       </div>
 
       {plan && (

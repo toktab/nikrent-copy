@@ -28,19 +28,30 @@ describe('generateWallRun', () => {
     useEditorStore.setState({ materials, pieces: [], sketch: [], past: [], future: [] });
   });
 
-  it('leaves the setting-out line as well as the formwork', () => {
+  it('leaves the setting-out lines as well as the formwork', () => {
     const out = useEditorStore.getState().generateWallRun(spec());
     expect(out.added).toBeGreaterThan(0);
     const sketch = useEditorStore.getState().sketch;
-    expect(sketch).toHaveLength(1);
-    expect(sketch[0].points).toHaveLength(2);
+    // A wall is two faces, so it is two lines.
+    expect(sketch).toHaveLength(2);
+    expect(sketch.every((k) => k.points.length === 2)).toBe(true);
     expect(useEditorStore.getState().pieces).toHaveLength(out.added);
   });
 
-  it('draws the line down the middle of the wall, not along a face', () => {
+  // The typed thickness is spent setting the two faces apart and nowhere else.
+  it('draws a line along each face, the thickness apart', () => {
     useEditorStore.getState().generateWallRun(spec({ originY: 100, thickness: 20 }));
-    // Half a thickness below the top of the space it was placed in.
-    expect(useEditorStore.getState().sketch[0].points[0].y).toBe(110);
+    const ys = useEditorStore.getState().sketch.map((k) => k.points[0].y).sort((a, b) => a - b);
+    expect(ys).toEqual([100, 120]);
+  });
+
+  it('stands each face outward, so nothing lands in the pour', () => {
+    useEditorStore.getState().generateWallRun(spec({ originY: 100, thickness: 20 }));
+    const tops = useEditorStore
+      .getState()
+      .pieces.map((p) => pieceBounds(p, byId.get(p.materialId)!).y);
+    // Panels above the near face at 100, and below the far face at 120.
+    expect(new Set(tops)).toEqual(new Set([91, 120]));
   });
 
   it('orders the face and nothing behind it', () => {
@@ -65,14 +76,6 @@ describe('generateWallRun', () => {
       .getState()
       .pieces.filter((p) => byId.get(p.materialId)!.category === 'filler');
     expect(fillers).toHaveLength(0);
-  });
-
-  it('stands a face either side of the line', () => {
-    useEditorStore.getState().generateWallRun(spec({ includeStopEnds: false }));
-    const s = useEditorStore.getState();
-    const tops = s.pieces.map((p) => pieceBounds(p, byId.get(p.materialId)!).y);
-    // 20 thick centred on y = 10, so the faces stand at −9 and +20.
-    expect(new Set(tops)).toEqual(new Set([-9, 20]));
   });
 
   it('is one undo step, line and panels together', () => {

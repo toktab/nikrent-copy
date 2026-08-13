@@ -20,15 +20,17 @@ import { isHorizontal, isOrthogonal, legLength, pathLength, type Point } from '.
  * point of drawing first: the geometry is on the screen, so nobody should have
  * to read it back off and retype it a leg at a time.
  *
- * The drawn line is the wall's CENTRELINE. It is the only reading that survives
- * a corner: set out to a face, and the moment the wall turns you have to say
- * which face, and the two answers disagree by the wall thickness.
+ * The drawn line IS a concrete face, and the panels stand on the outside of it:
  *
- *        ─────────────────────────   face
- *        ░░░░░░░ concrete ░░░░░░░░   thickness, half either side
- *        ·······drawn line········   ← what you drew
- *        ░░░░░░░░░░░░░░░░░░░░░░░░░
- *        ─────────────────────────   face
+ *        ▓▓▓▓▓▓▓ panels ▓▓▓▓▓▓▓▓▓▓   9 cm, outside
+ *        ───────drawn line────────   ← what you drew, the face itself
+ *        ░░░░░░░ concrete ░░░░░░░░
+ *
+ * Which is how the layout arrives: the person setting out chalks the edge of
+ * the pour, not a line up the middle of it that nothing can be measured from.
+ * A wall is two of those lines, one per face, and each is filled on its own —
+ * so the tool never has to guess a thickness, and a wall with one face already
+ * built is a normal thing to draw rather than a special case.
  *
  * As with the other generators, geometry the catalog cannot satisfy is reported
  * rather than quietly rounded: an under-count here is a short delivery on site.
@@ -44,10 +46,16 @@ import { isHorizontal, isOrthogonal, legLength, pathLength, type Point } from '.
  * worse than no tie count at all.
  */
 export interface SketchFillSpec {
-  /** concrete thickness in cm, centred on the drawn line */
-  thickness: number;
   /** pour height in cm */
   height: number;
+  /**
+   * Which side of the line the panels stand on: +1 is the left of travel.
+   *
+   * A line has two sides and no opinion about which is the concrete, so this
+   * cannot be worked out — it has to be said. Left of travel is the default
+   * only because it has to be something.
+   */
+  side: 1 | -1;
   /** close the corners with profiles instead of butting the panels */
   includeCorners: boolean;
 }
@@ -232,7 +240,6 @@ export function planSketchFill(
   if (!isOrthogonal(path)) {
     return fail('დახრილი ხაზის შევსება შეუძლებელია - კატალოგში მხოლოდ 90° კუთხეებია.');
   }
-  if (!(spec.thickness > 0)) return fail('კედლის სისქე ნულზე მეტი უნდა იყოს.');
   if (!(spec.height > 0)) return fail('სიმაღლე ნულზე მეტი უნდა იყოს.');
 
   const heights = panelHeights(materials);
@@ -255,7 +262,7 @@ export function planSketchFill(
   const courseCount = Math.max(1, courses.length);
   const courseHeight = courses[0] ?? Math.min(...heights);
   const panelDepth = panelDepthFor(optionsAt(materials, 'panel', courseHeight));
-  const half = spec.thickness / 2;
+  const side = spec.side;
 
   // ── The layout, read once ─────────────────────────────────────────────────
   const dirs: Point[] = [];
@@ -273,10 +280,9 @@ export function planSketchFill(
     turns.push(turnSign(dirs[j], dirs[(j + 1) % legCount]));
   }
 
-  const faceLine: Record<number, Point[]> = {
-    1: offsetPath(path, half),
-    [-1]: offsetPath(path, -half),
-  };
+  // The face is the line itself, so there is nothing to offset. The corner
+  // arithmetic below still moves each run's ENDS along its own leg.
+  const line: Point[] = pts.map((p) => ({ ...p }));
 
   let panelCount = 0;
   let fillerCount = 0;
@@ -301,9 +307,7 @@ export function planSketchFill(
       side * turns[j] > 0 ? outer : inner;
 
     // ── The two faces, leg by leg ───────────────────────────────────────────
-    for (const side of [1, -1] as const) {
-      const line = faceLine[side];
-
+    {
       for (let j = 0; j < legCount; j++) {
         const dir = dirs[j];
         const across = dir.x !== 0;
@@ -410,68 +414,47 @@ export function planSketchFill(
       }
     }
 
-    // ── Corner profiles, one pair per corner ────────────────────────────────
+    /**
+     * Corner profiles, one per corner.
+     *
+     * There is only one run of panels now, so a corner needs one part, not a
+     * matched pair: an outer profile where the panels are on the outside of the
+     * turn and wrap around it, an inner one where they close into each other.
+     * Which of the two it is falls straight out of the turn direction and the
+     * side the panels are standing on.
+     */
     for (let j = 0; j < turnCount; j++) {
       const vertex = (j + 1) % n;
-      const convexSide: 1 | -1 = turns[j] > 0 ? 1 : -1;
-      const dPrev = dirs[j];
-      const dNext = dirs[(j + 1) % legCount];
+      const convex = side * turns[j] > 0;
+      const profile = convex ? outer : inner;
+      if (!profile) continue;
 
       // The diagonal out of the corner into open air: the two outward normals
       // added together. They are perpendicular at a corner, so the sum is one
       // of the four diagonals.
-      const outwardDiag = (side: 1 | -1): Point => {
-        const a = leftNormal(dPrev);
-        const b = leftNormal(dNext);
-        return { x: side * (a.x + b.x), y: side * (a.y + b.y) };
-      };
+      const a = leftNormal(dirs[j]);
+      const b = leftNormal(dirs[(j + 1) % legCount]);
+      const diag: Point = { x: side * (a.x + b.x), y: side * (a.y + b.y) };
 
-      if (outer) {
-        const cw = planW(outer.material);
-        const ch = planH(outer.material);
-        const v = faceLine[convexSide][vertex];
-        const diag = outwardDiag(convexSide);
-        // The profile wraps the outside, so it hangs a panel thickness beyond
-        // the face line in both directions and reaches back from there.
-        const cornerX = v.x + panelDepth * diag.x;
-        const cornerY = v.y + panelDepth * diag.y;
-        const { x, y } = placeAt(
-          diag.x > 0 ? cornerX - cw : cornerX,
-          diag.y > 0 ? cornerY - ch : cornerY,
-          cw,
-          ch,
-          cornerRot(diag),
-        );
-        pieces.push({
-          id: uid(),
-          materialId: outer.material.id,
-          x,
-          y,
-          rot: cornerRot(diag),
-          z: elevation,
-        });
-        cornerPieces++;
-      }
+      const cw = planW(profile.material);
+      const ch = planH(profile.material);
+      const v = line[vertex];
 
-      if (inner) {
-        const concaveSide: 1 | -1 = convexSide === 1 ? -1 : 1;
-        const cw = planW(inner.material);
-        const ch = planH(inner.material);
-        const v = faceLine[concaveSide][vertex];
-        const diag = outwardDiag(concaveSide);
-        // An inner profile sits IN the void, so it starts at the face line and
-        // fills the corner rather than lapping past it.
-        const rot = (cornerRot(diag) + 180) % 360;
-        const { x, y } = placeAt(
-          diag.x > 0 ? v.x : v.x - cw,
-          diag.y > 0 ? v.y : v.y - ch,
-          cw,
-          ch,
-          rot,
-        );
-        pieces.push({ id: uid(), materialId: inner.material.id, x, y, rot, z: elevation });
-        cornerPieces++;
-      }
+      // An outer profile wraps the outside, so it hangs a panel thickness past
+      // the face and reaches back from there. An inner one sits in the corner
+      // the panels are closing into, starting at the face itself.
+      const rot = convex ? cornerRot(diag) : (cornerRot(diag) + 180) % 360;
+      const cornerX = convex ? v.x + panelDepth * diag.x : v.x;
+      const cornerY = convex ? v.y + panelDepth * diag.y : v.y;
+      const { x, y } = placeAt(
+        diag.x > 0 ? cornerX - cw : cornerX,
+        diag.y > 0 ? cornerY - ch : cornerY,
+        cw,
+        ch,
+        rot,
+      );
+      pieces.push({ id: uid(), materialId: profile.material.id, x, y, rot, z: elevation });
+      cornerPieces++;
     }
 
     elevation += courseH;

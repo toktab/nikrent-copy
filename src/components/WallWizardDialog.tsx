@@ -52,23 +52,34 @@ export function WallWizardDialog() {
   // that will place it, so the count on the button is the count you get.
   const plan = useMemo(() => {
     if (errors.length) return null;
+    // Two faces, the thickness apart, each filled outward - the same two the
+    // store will build, so the count on the button is the count you get.
     const half = spec.thickness / 2;
-    const y = spec.originY + half;
-    return planSketchFill(
-      {
-        id: 'preview',
-        points: [
-          { x: spec.originX, y },
-          { x: spec.originX + spec.length, y },
-        ],
+    const mid = spec.originY + half;
+    const run = (y: number, side: 1 | -1) =>
+      planSketchFill(
+        {
+          id: 'preview',
+          points: [
+            { x: spec.originX, y },
+            { x: spec.originX + spec.length, y },
+          ],
+        },
+        { height: spec.height, side, includeCorners: true },
+        materials,
+      );
+    const near = run(mid - half, 1);
+    const far = run(mid + half, -1);
+    return {
+      pieces: [...near.pieces, ...far.pieces],
+      warnings: [...new Set([...near.warnings, ...far.warnings])],
+      summary: {
+        ...near.summary,
+        panels: near.summary.panels + far.summary.panels,
+        fillers: near.summary.fillers + far.summary.fillers,
+        corners: near.summary.corners + far.summary.corners,
       },
-      {
-        thickness: spec.thickness,
-        height: spec.height,
-        includeCorners: true,
-      },
-      materials,
-    );
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec, materials, errors.length]);
 

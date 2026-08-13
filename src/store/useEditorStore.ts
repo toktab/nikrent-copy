@@ -1118,34 +1118,60 @@ export const useEditorStore = create<EditorState>()(
 
         generateWallRun: (spec) => {
           const state = get();
+          /**
+           * A wall is two faces, so it is two lines.
+           *
+           * The typed thickness is spent here and nowhere else: it sets how far
+           * apart the two lines go. Each is then filled by the same generator a
+           * hand-drawn line is, standing its panels on the side facing away
+           * from the pour - the near face's outward is the left of travel, the
+           * far face's is the right.
+           */
           const half = spec.thickness / 2;
-          // The run is the wall's centreline, so it sits half a thickness down
-          // from the top of the space the assembly was placed in.
-          const y = spec.originY + half;
-          const path: SketchPath = {
-            id: uid('sk'),
-            points: [
-              { x: spec.originX, y },
-              { x: spec.originX + spec.length, y },
-            ],
-          };
-          const plan = planSketchFill(
-            path,
+          const mid = spec.originY + half;
+          const faces: Array<{ path: SketchPath; side: 1 | -1 }> = [
             {
-              thickness: spec.thickness,
-              height: spec.height,
-              includeCorners: true,
+              path: {
+                id: uid('sk'),
+                points: [
+                  { x: spec.originX, y: mid - half },
+                  { x: spec.originX + spec.length, y: mid - half },
+                ],
+              },
+              side: 1,
             },
-            state.materials,
-          );
-          if (!plan.pieces.length) return { added: 0, warnings: plan.warnings };
+            {
+              path: {
+                id: uid('sk'),
+                points: [
+                  { x: spec.originX, y: mid + half },
+                  { x: spec.originX + spec.length, y: mid + half },
+                ],
+              },
+              side: -1,
+            },
+          ];
+
+          const pieces: Piece[] = [];
+          const warnings: string[] = [];
+          for (const face of faces) {
+            const plan = planSketchFill(
+              face.path,
+              { height: spec.height, side: face.side, includeCorners: true },
+              state.materials,
+            );
+            pieces.push(...plan.pieces);
+            warnings.push(...plan.warnings);
+          }
+          if (!pieces.length) return { added: 0, warnings: [...new Set(warnings)] };
+
           commit((s) => ({
-            sketch: [...s.sketch, path],
-            pieces: [...s.pieces, ...plan.pieces],
-            selectedIds: plan.pieces.map((p) => p.id),
+            sketch: [...s.sketch, ...faces.map((f) => f.path)],
+            pieces: [...s.pieces, ...pieces],
+            selectedIds: pieces.map((p) => p.id),
             selectedSketchIds: [],
           }));
-          return { added: plan.pieces.length, warnings: plan.warnings };
+          return { added: pieces.length, warnings: [...new Set(warnings)] };
         },
 
         insertPieces: (incoming) => {
