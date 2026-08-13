@@ -640,29 +640,22 @@ it('builds the same wall from a line drawn backwards', () => {
  * line up.
  */
 /**
- * UNRESOLVED, and skipped rather than weakened so it cannot be mistaken for a
- * passing claim.
+ * 6. A wall is panelled the same on both faces.
  *
- * Two of 179 layouts still fail it, both L-shaped wall pairs where the two
- * faces differ in length by the pour thickness at the corner:
- *
- *   outer (0,0)-(0,470)-(165,470)-(165,875)  ||  inner (60,0)-(60,410)-(225,410)-(225,875)
- *   outer (0,0)-(-300,0)-(-300,-595)-(-605,-595)  ||  inner (0,15)-(-315,15)-(-315,-580)-(-605,-580)
- *
- * The far face comes back with NO pieces attributed to the shared leg, which
- * is either the pair failing to form — `agreeEnds` needs one end trimmable and
- * an inside corner is not — or the harness looking for the far face's panels
- * in the wrong band. Both faces are individually built, on the correct sides,
- * with nothing in the concrete and nothing clashing; what is unproven is that
- * their joints line up on these two shapes.
+ * Tie rods pass through the pour, so a panel on one face needs a panel facing
+ * it on the other for the rod to reach: joints that do not line up are holes
+ * that do not line up. The two faces are compared span by span along each leg.
  */
-it.skip('panels both faces of a wall to match, opposite each other', () => {
+it('panels both faces of a wall to match, opposite each other', () => {
   const walls = CASES.filter((c) => c.wall);
   const failures: Array<{ c: FuzzCase; detail: string }> = [];
 
   for (const c of walls) {
     const plan = planOf(c);
     const [near, far] = c.paths;
+    // The side each face ended up on, as the fill resolved it across the pair
+    // — not each line's own winding, which on an open zigzag disagrees with it.
+    const [nearSide, farSide] = sidesFromNeighbours(c.paths, SPEC);
     const nearLegs = legsOf(cornersOnly(near));
     const farLegs = legsOf(cornersOnly(far));
     if (nearLegs.length !== farLegs.length) {
@@ -671,11 +664,11 @@ it.skip('panels both faces of a wall to match, opposite each other', () => {
     }
 
     /** Where the pieces standing on one face begin and end, along the wall. */
-    const spans = (leg: Leg, path: SketchPath): string[] => {
+    const spans = (leg: Leg, side: 1 | -1): string[] => {
       const d = legDir(leg[0], leg[1]);
       const across = d.x !== 0;
       const at = across ? leg[0].y : leg[0].x;
-      const out = outwardOf(leg, outwardSide(path));
+      const out = outwardOf(leg, side);
       const face = out > 0 ? at : at - PANEL_DEPTH;
       const lo = across ? Math.min(leg[0].x, leg[1].x) : Math.min(leg[0].y, leg[1].y);
       const hi = across ? Math.max(leg[0].x, leg[1].x) : Math.max(leg[0].y, leg[1].y);
@@ -694,8 +687,8 @@ it.skip('panels both faces of a wall to match, opposite each other', () => {
     for (let i = 0; i < nearLegs.length; i++) {
       // The two faces of one leg run the same way along the wall, so their
       // panels should start and end at the same coordinates along it.
-      const a = spans(nearLegs[i], near);
-      const b = spans(farLegs[i], far);
+      const a = spans(nearLegs[i], nearSide);
+      const b = spans(farLegs[i], farSide);
       if (a.join('|') !== b.join('|')) {
         failures.push({
           c,
