@@ -249,6 +249,21 @@ export function lengthCm(m: Material): number {
 export const GRID_MAJOR_CM = 100;
 
 /**
+ * The finest the layout is ever drawn to, in cm.
+ *
+ * Five is enough for any scheme: it is the module the catalog steps in, the
+ * square the surface is ruled in, and therefore the square the pen lands on.
+ * Anything finer was only ever a way to end up with a 180.2 leg and a joint
+ * that does not close, so there is no longer an option for it.
+ */
+export const DRAW_STEP_CM = 5;
+
+/** The step the pen and the layout's own handles move in - never finer. */
+export function drawStep(snap: boolean, snapStep: number): number {
+  return Math.max(snap ? snapStep : 0, DRAW_STEP_CM);
+}
+
+/**
  * The fine grid square, in cm, at the current zoom.
  *
  * Five where five will read, because five is what the drawing snaps to and a
@@ -260,7 +275,7 @@ export const GRID_MAJOR_CM = 100;
  * be closer together than they are wide and the surface would go grey.
  */
 export function gridStep(zoom: number): number {
-  const steps = [5, 10, 20, 50, GRID_MAJOR_CM, 200, 500];
+  const steps = [DRAW_STEP_CM, 10, 20, 50, GRID_MAJOR_CM, 200, 500];
   const target = 4.5 / zoom;
   return steps.find((s) => s >= target) ?? 500;
 }

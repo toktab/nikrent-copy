@@ -12,6 +12,7 @@ import type { Material, Piece, SketchPath } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
 import {
   computeEdgeSnap,
+  drawStep,
   findOverlaps,
   GRID_MAJOR_CM,
   gridStep,
@@ -714,7 +715,7 @@ export function StageCanvas() {
        * drawn as 180 was stored as 180.2. Nobody dimensions a wall to a fifth of
        * a millimetre.
        */
-      const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+      const step = drawStep(s.snap, s.snapStep);
       const round = (v: number) => Math.round(v / step) * step;
 
       /**

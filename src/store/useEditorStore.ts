@@ -20,6 +20,8 @@ import { sanitizeMaterial } from '../lib/catalogFile';
 import {
   clampZoom,
   computeEdgeSnap,
+  DRAW_STEP_CM,
+  drawStep,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
@@ -593,7 +595,7 @@ export const useEditorStore = create<EditorState>()(
         stageH: 700,
 
         snap: true,
-        snapStep: 5,
+        snapStep: DRAW_STEP_CM,
         edgeSnap: true,
         orthoLock: true,
         showDims: true,
@@ -1525,7 +1527,7 @@ export const useEditorStore = create<EditorState>()(
             // Whole centimetres even with the grid off, for the same reason the
             // pen rounds: dragging a wall to 180.2 is not a dimension anybody
             // asked for, and it is the neighbouring legs that inherit it.
-            const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+            const step = drawStep(s.snap, s.snapStep);
             const snapped = {
               ...moved,
               points: moved.points.map((p, i) =>
@@ -1561,7 +1563,7 @@ export const useEditorStore = create<EditorState>()(
 
         dragSketchAll: (dx, dy, baselines) =>
           apply((s) => {
-            const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+            const step = drawStep(s.snap, s.snapStep);
             const sdx = snapValue(dx, step, true);
             const sdy = snapValue(dy, step, true);
             if (!sdx && !sdy) return {};
@@ -1600,7 +1602,7 @@ export const useEditorStore = create<EditorState>()(
           commit((s) => {
             const path = s.sketch.find((k) => k.id === pathId);
             if (!path) return {};
-            const step = s.snap ? Math.max(s.snapStep, 1) : 1;
+            const step = drawStep(s.snap, s.snapStep);
             const on = { x: snapValue(at.x, step, true), y: snapValue(at.y, step, true) };
             return {
               sketch: s.sketch.map((k) => (k.id === pathId ? insertVertex(k, index, on) : k)),
@@ -1667,9 +1669,11 @@ export const useEditorStore = create<EditorState>()(
         // v3 offered 10 cm and 25 cm grid steps. The panels are 30/45/60/75/90,
         // whose common module is 15: a 25 cm grid lands one of those five on a
         // grid line and 10 lands three, so both spent most of their time
-        // pulling panels off the joints they were meant to butt against. Anyone
-        // still on one moves to the nearest step that the catalog divides into.
-        const remap: Record<number, number> = { 10: 15, 25: 30 };
+        // pulling panels off the joints they were meant to butt against. The
+        // 1 cm step went the same way later, for the opposite reason — it put
+        // nothing on a joint and produced legs like 180.2. Anyone still on one
+        // of them moves to the nearest step the catalog divides into.
+        const remap: Record<number, number> = { 1: DRAW_STEP_CM, 10: 15, 25: 30 };
         const step = state.snapStep;
         if (typeof step === 'number' && remap[step]) {
           return { ...state, snapStep: remap[step] };

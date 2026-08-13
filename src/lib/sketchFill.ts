@@ -61,16 +61,39 @@ export interface SketchFillSpec {
   includeCorners: boolean;
 }
 
+/**
+ * A stretch of face with nothing standing on it.
+ *
+ * Two things leave one: an outside corner, which is left to the builder on
+ * purpose, and a strip no part in the catalog closes. Both are things somebody
+ * has to deal with on site, and the difference between them matters less than
+ * knowing they are there and how long they are — a hole you have been told
+ * about is a decision, and one you have not is a leak.
+ */
+export interface Opening {
+  /** middle of the open stretch, world cm */
+  x: number;
+  y: number;
+  /** how much face is bare, cm */
+  cm: number;
+  /** 'corner' is left open on purpose; 'short' is nothing in the catalog fits */
+  kind: 'corner' | 'short';
+}
+
 export interface FillPlan {
   pieces: Piece[];
   warnings: string[];
+  /** every stretch of face the fill does not cover, in the order it was planned */
+  openings: Opening[];
   summary: {
     panels: number;
     fillers: number;
     /** inner corner profiles placed */
     corners: number;
-    /** outside corners left open, 20 cm of each face, for the builder to close */
+    /** outside corners left open, for the builder to close */
     openCorners: number;
+    /** total face left bare, cm - the open corners and anything unfillable */
+    openCm: number;
     courses: number;
     /** centreline run of the whole layout, cm */
     runLength: number;
@@ -84,6 +107,7 @@ const EMPTY: FillPlan['summary'] = {
   fillers: 0,
   corners: 0,
   openCorners: 0,
+  openCm: 0,
   courses: 0,
   runLength: 0,
   turns: 0,
@@ -337,6 +361,9 @@ interface FaceRun {
   /** an end that may be pulled back to line up with the other face */
   trimLo: boolean;
   trimHi: boolean;
+  /** face left bare beyond each end - the open corner, and anything given to it */
+  openLo: number;
+  openHi: number;
   elevation: number;
   depth: number;
   panels: PanelOption[];
@@ -425,6 +452,11 @@ function agreeEnds(a: FaceRun, b: FaceRun): boolean {
   const holdLo = Math.max(a.holdLo, b.holdLo);
   const holdHi = Math.max(a.holdHi, b.holdHi);
   for (const run of [a, b]) {
+    // Length given up to line the two faces up is not lost, it joins the hole
+    // at the corner - and the hole is reported, so it is a decision rather
+    // than a surprise on site.
+    run.openLo += lo - run.lo;
+    run.openHi += run.hi - hi;
     run.lo = lo;
     run.hi = hi;
     run.holdLo = holdLo;
@@ -434,10 +466,30 @@ function agreeEnds(a: FaceRun, b: FaceRun): boolean {
 }
 
 /** Stand the panels along one run, and say what could not be covered. */
-function layRun(run: FaceRun): { pieces: Piece[]; panels: number; fillers: number; warning?: string } {
+function layRun(run: FaceRun): {
+  pieces: Piece[];
+  panels: number;
+  fillers: number;
+  openings: Opening[];
+  warning?: string;
+} {
   const pieces: Piece[] = [];
+  const openings: Opening[] = [];
   let panels = 0;
   let fillers = 0;
+
+  /** An open stretch of face, placed by its middle so it can be pointed at. */
+  const opening = (from: number, cm: number, kind: Opening['kind']) => {
+    if (cm <= 0.01) return;
+    const along = from + cm / 2;
+    const at = run.at + (run.outward > 0 ? run.depth : -run.depth) / 2;
+    openings.push({
+      x: run.across ? along : at,
+      y: run.across ? at : along,
+      cm: Math.round(cm * 10) / 10,
+      kind,
+    });
+  };
 
   const length = run.hi - run.lo;
   if (length <= 0.01) {
@@ -445,6 +497,7 @@ function layRun(run: FaceRun): { pieces: Piece[]; panels: number; fillers: numbe
       pieces,
       panels,
       fillers,
+      openings,
       warning: `${Math.round(run.legCm)} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა - პანელი აღარ ეტევა.`,
     };
   }
@@ -484,7 +537,13 @@ function layRun(run: FaceRun): { pieces: Piece[]; panels: number; fillers: numbe
     offset += pw;
   }
 
-  return { pieces, panels, fillers, warning };
+  // The corner holes at either end, and whatever the catalog could not close -
+  // which lands at the loose end, since the run was laid from the held one.
+  opening(run.lo - run.openLo, run.openLo, 'corner');
+  opening(run.hi, run.openHi, 'corner');
+  if (remainder > 0.01) opening(fromLow ? run.lo + offset : run.lo, remainder, 'short');
+
+  return { pieces, panels, fillers, openings, warning };
 }
 
 // ── The plan ────────────────────────────────────────────────────────────────
@@ -715,6 +774,10 @@ function describeFace(
           // the other side of the pour.
           trimLo: holds(lowEnd) === 0,
           trimHi: holds(highEnd) === 0,
+          // An outside corner is a hole on purpose; an inside one is filled by
+          // the profile and an open end is simply where the pour stops.
+          openLo: holds(lowEnd) === 0 ? OUTER_CORNER_GAP : 0,
+          openHi: holds(highEnd) === 0 ? OUTER_CORNER_GAP : 0,
           elevation,
           depth: panelDepth,
           panels: panelOptions,
@@ -736,6 +799,7 @@ function describeFace(
       fillers: 0,
       corners: cornerPieces,
       openCorners: turns.filter((t) => side * t > 0).length,
+      openCm: 0,
       courses: courses.length,
       runLength: Math.round(pathLength(path)),
       turns: turnCount,
@@ -793,6 +857,7 @@ export function planSketchFillAll(
 ): FillPlan {
   const pieces: Piece[] = [];
   const warnings: string[] = [];
+  const openings: Opening[] = [];
   const summary = { ...EMPTY };
 
   const jobs = paths.map((path) => describeFace(path, spec, materials));
@@ -816,12 +881,14 @@ export function planSketchFillAll(
   for (const run of runs) {
     const laid = layRun(run);
     pieces.push(...laid.pieces);
+    openings.push(...laid.openings);
     summary.panels += laid.panels;
     summary.fillers += laid.fillers;
     if (laid.warning) warnings.push(laid.warning);
   }
+  summary.openCm = Math.round(openings.reduce((sum, o) => sum + o.cm, 0));
 
   // Each face of each course reports for itself, so identical legs produce the
   // same sentence repeatedly. Legs with different geometry differ and are kept.
-  return { pieces, warnings: [...new Set(warnings)], summary };
+  return { pieces, warnings: [...new Set(warnings)], openings, summary };
 }

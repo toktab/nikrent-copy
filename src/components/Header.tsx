@@ -27,7 +27,7 @@ import { Icon } from './Icon';
  * on a grid line, and 10 lands three. Both spent most of their time pulling
  * panels off the joints they were supposed to butt against.
  */
-const SNAP_STEPS = [1, 5, 15, 30];
+const SNAP_STEPS = [5, 15, 30];
 
 /**
  * Snapping, as one choice rather than two independent switches.

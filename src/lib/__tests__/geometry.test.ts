@@ -4,6 +4,7 @@ import {
   computeEdgeSnap,
   contentBounds,
   findOverlaps,
+  drawStep,
   gridStep,
   niceStep,
   normalizeRot,
@@ -243,6 +244,23 @@ describe('niceStep', () => {
 
   it('stays within the ladder', () => {
     expect([10, 20, 50, 100, 200, 500, 1000, 2000]).toContain(niceStep(0.5));
+  });
+});
+
+describe('drawStep', () => {
+  // Five is enough for any scheme, and anything finer was only ever a way to
+  // end up with a 180.2 leg. There is no option for it any more, so the floor
+  // holds even with snapping turned off.
+  it('never goes finer than five, however the grid is set', () => {
+    expect(drawStep(true, 5)).toBe(5);
+    expect(drawStep(true, 1)).toBe(5);
+    expect(drawStep(false, 1)).toBe(5);
+    expect(drawStep(false, 30)).toBe(5);
+  });
+
+  it('follows a coarser grid when one is chosen', () => {
+    expect(drawStep(true, 15)).toBe(15);
+    expect(drawStep(true, 30)).toBe(30);
   });
 });
 

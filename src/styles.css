@@ -1444,6 +1444,27 @@ input.stock-input.bad {
   opacity: 0.8;
 }
 
+/* What the fill does NOT cover: the open corners, and anything the catalog
+   cannot close. Reads as part of the count rather than as an error, because
+   an outside corner left open is the intended answer. */
+.open-list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+.open-list ul {
+  margin: 4px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+}
+.open-list .muted {
+  color: var(--text-tertiary);
+}
+
 /* Which face the pen is drawing. Beside the pen button and only while it is
    out, because it is the one thing about the next line that the coordinates
    will not record. */

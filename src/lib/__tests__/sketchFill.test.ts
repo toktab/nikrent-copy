@@ -514,6 +514,54 @@ describe('a wall, drawn as its two faces', () => {
   });
 });
 
+/**
+ * A hole you have been told about is a decision; one you have not is a leak.
+ * The fill leaves face bare on purpose at every outside corner, and it has to
+ * say how much and where rather than letting somebody find out on site.
+ */
+describe('what is left to fill', () => {
+  it('reports the hole at an outside corner, on each face', () => {
+    const corner = path([[0, 0], [300, 0], [300, 200]]);
+    const plan = planSketchFill(corner, spec(), materials);
+    // One corner, two faces meeting at it, 20 cm of each left standing open.
+    expect(plan.openings.map((o) => o.cm)).toEqual([20, 20]);
+    expect(plan.openings.every((o) => o.kind === 'corner')).toBe(true);
+    expect(plan.summary.openCm).toBe(40);
+  });
+
+  it('says nothing is open where nothing is', () => {
+    // A straight run with two free ends: no corner, and 300 covers exactly.
+    const plan = planSketchFill(path([[0, 0], [300, 0]]), spec(), materials);
+    expect(plan.openings).toHaveLength(0);
+    expect(plan.summary.openCm).toBe(0);
+  });
+
+  it('counts what the catalog cannot close as open too', () => {
+    // 4 cm is narrower than the narrowest ჩაკერება, so it stays a hole.
+    const plan = planSketchFill(path([[0, 0], [304, 0]]), spec(), materials);
+    const short = plan.openings.filter((o) => o.kind === 'short');
+    expect(short.map((o) => o.cm)).toEqual([4]);
+  });
+
+  it('counts the length a face gives up to line up with the other one', () => {
+    // 55 thick: the outer face gives 55 to the corner on top of its own 20.
+    const outer = path([[0, 0], [600, 0], [600, 400]]);
+    const inner = inward(path([[0, 55], [545, 55], [545, 400]]));
+    const plan = planSketchFillAll([outer, inner], spec(), materials);
+    expect(plan.openings.filter((o) => Math.abs(o.cm - 75) < 0.01)).toHaveLength(2);
+    // The inner face's two ends against the profile stay closed, so the only
+    // holes are the two the outer face has at its corner.
+    expect(plan.summary.openCorners).toBe(1);
+  });
+
+  it('puts the hole where it actually is, not at the vertex', () => {
+    const plan = planSketchFill(path([[0, 0], [300, 0], [300, 200]]), spec(), materials);
+    const along = plan.openings.find((o) => Math.abs(o.y + 4.5) < 0.01);
+    // The panels stop at x 280, so the hole is the 20 between there and 300.
+    expect(along?.x).toBeCloseTo(290, 6);
+  });
+});
+
 describe('which side is outside', () => {
   const L = path([[0, 0], [300, 0], [300, 300]]);
   const reversed = path([[300, 300], [300, 0], [0, 0]]);

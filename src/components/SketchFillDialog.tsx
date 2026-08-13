@@ -50,6 +50,24 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
     [paths, spec, materials, errors.length],
   );
 
+  /**
+   * Open stretches, gathered by length.
+   *
+   * Eight identical 20 cm corners is one line on a delivery note and eight on a
+   * list nobody reads. What matters is how long each hole is and how many there
+   * are of it, so that is what is shown.
+   */
+  const openings = useMemo(() => {
+    const by = new Map<string, { cm: number; kind: 'corner' | 'short'; count: number }>();
+    for (const o of plan?.openings ?? []) {
+      const key = `${o.kind}:${o.cm}`;
+      const seen = by.get(key);
+      if (seen) seen.count++;
+      else by.set(key, { cm: o.cm, kind: o.kind, count: 1 });
+    }
+    return [...by.values()].sort((a, b) => b.cm * b.count - a.cm * a.count);
+  }, [plan]);
+
   if (!paths.length) return null;
 
   const submit = () => {
@@ -140,12 +158,32 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
             )}
           </div>
           <p className="hint-note">
-            {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი.
-            {plan.summary.openCorners > 0 &&
-              ` გარე კუთხე ღიად რჩება (${plan.summary.openCorners} ცალი, თითო მხარეს
-                სულ მცირე 20 სმ) - მის დახურვას ოსტატი ადგილზე წყვეტს.`}{' '}
-            ვოლერები, ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
+            {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი. ვოლერები,
+            ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
           </p>
+
+          {/* What is NOT covered. An outside corner is left open on purpose and
+              a strip may be one the catalog cannot close, but either way it is
+              face the fill did not build, and its length is the thing somebody
+              has to arrive on site already knowing. */}
+          {openings.length > 0 && (
+            <div className="open-list">
+              <div className="kv">
+                <span className="k">შესავსები რჩება</span>
+                <b>{plan.summary.openCm} სმ</b>
+              </div>
+              <ul>
+                {openings.map((o) => (
+                  <li key={`${o.kind}-${o.cm}`}>
+                    {o.count} × <b>{o.cm} სმ</b>{' '}
+                    <span className="muted">
+                      {o.kind === 'corner' ? 'გარე კუთხე - ოსტატი ხურავს' : 'კატალოგში არაფერი ჯდება'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
