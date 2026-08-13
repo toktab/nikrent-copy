@@ -13,6 +13,8 @@ import { useEditorStore } from '../store/useEditorStore';
 import {
   computeEdgeSnap,
   findOverlaps,
+  GRID_MAJOR_CM,
+  gridStep,
   pieceBounds,
   planH,
   planW,
@@ -631,7 +633,11 @@ export function StageCanvas() {
        * tool always lands where it says, which is what makes it usable without
        * looking. `code` first so the physical key works on a Georgian layout.
        */
-      if (e.code === 'KeyG' || e.key.toLowerCase() === 'g') s.setTool('pen');
+      // Shift picks the pen up on the inside of the pour: same tool, other
+      // face, and the two are told apart by which one they draw.
+      if (e.code === 'KeyG' || e.key.toLowerCase() === 'g') {
+        s.setTool('pen', e.shiftKey ? 'inner' : 'outer');
+      }
       if (e.code === 'KeyV' || e.key.toLowerCase() === 'v') s.setTool('select');
     };
 
@@ -1045,11 +1051,19 @@ export function StageCanvas() {
             so the grid has to reach up there too. */}
         <div
           className="grid"
-          style={{
-            width: WORLD_W,
-            height: WORLD_H,
-            top: elevation ? -WORLD_H / 2 : 0,
-          }}
+          style={
+            {
+              width: WORLD_W,
+              height: WORLD_H,
+              top: elevation ? -WORLD_H / 2 : 0,
+              // Drawn in world centimetres inside a scaled layer, so the line
+              // WIDTH scales too: at 4x the old fixed 1px was a 4px band, which
+              // is what made a zoomed-in drawing look furred. Divide it back.
+              '--gw': `${1 / zoom}px`,
+              '--gf': `${gridStep(zoom)}px`,
+              '--gm': `${GRID_MAJOR_CM}px`,
+            } as CSSProperties
+          }
         />
 
         {/* Ground level. In an elevation this is the slab everything stands on,

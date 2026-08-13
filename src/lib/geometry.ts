@@ -245,6 +245,26 @@ export function lengthCm(m: Material): number {
   return Math.max(m.w, m.h);
 }
 
+/** The heavy grid line, in cm. A metre, so the squares can be counted. */
+export const GRID_MAJOR_CM = 100;
+
+/**
+ * The fine grid square, in cm, at the current zoom.
+ *
+ * Five where five will read, because five is what the drawing snaps to and a
+ * square you cannot land on is a square in the way: three out of every four
+ * snap positions had no line under them on the old fixed 20 cm grid, so setting
+ * a corner out meant counting in the head instead of counting squares.
+ *
+ * It steps up as the drawing is zoomed out, at the point where the lines would
+ * be closer together than they are wide and the surface would go grey.
+ */
+export function gridStep(zoom: number): number {
+  const steps = [5, 10, 20, 50, GRID_MAJOR_CM, 200, 500];
+  const target = 4.5 / zoom;
+  return steps.find((s) => s >= target) ?? 500;
+}
+
 /** Ruler step that keeps ticks ≈70 px apart at the current zoom. */
 export function niceStep(zoom: number): number {
   const target = 70 / zoom;

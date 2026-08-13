@@ -1086,11 +1086,17 @@ input.stock-input.bad {
   position: absolute;
   left: 0;
   top: 0;
+  /* --gw line width, --gf fine square, --gm heavy square, all world cm and all
+     set from the zoom by StageCanvas. */
   background:
-    linear-gradient(var(--gridMajor) 1px, transparent 1px) 0 0 / 100px 100px,
-    linear-gradient(90deg, var(--gridMajor) 1px, transparent 1px) 0 0 / 100px 100px,
-    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 20px 20px,
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 20px 20px;
+    linear-gradient(var(--gridMajor) var(--gw, 1px), transparent var(--gw, 1px)) 0 0 /
+      var(--gm, 100px) var(--gm, 100px),
+    linear-gradient(90deg, var(--gridMajor) var(--gw, 1px), transparent var(--gw, 1px)) 0 0 /
+      var(--gm, 100px) var(--gm, 100px),
+    linear-gradient(var(--grid) var(--gw, 1px), transparent var(--gw, 1px)) 0 0 /
+      var(--gf, 20px) var(--gf, 20px),
+    linear-gradient(90deg, var(--grid) var(--gw, 1px), transparent var(--gw, 1px)) 0 0 /
+      var(--gf, 20px) var(--gf, 20px);
   outline: 1px solid #4a5560;
 }
 /**
@@ -1388,6 +1394,27 @@ input.stock-input.bad {
   font-family: inherit;
   font-variant-numeric: tabular-nums;
 }
+/* Which side the panels will stand on: short ticks off each leg, like the
+   barbs on a section arrow. Quieter than the line itself — it answers a
+   question about the line rather than being part of it. */
+.sketch-path .sketch-side {
+  stroke: var(--text-tertiary);
+  stroke-linecap: butt;
+  opacity: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+/* An inner perimeter — a room, a shaft, the void inside a wall. Dashed,
+   because the concrete is on the far side of it from everything else drawn. */
+.sketch-path.inner line {
+  stroke: #9fb4cc;
+  stroke-dasharray: 14 7;
+}
+.sketch-path.inner .sketch-under {
+  stroke-dasharray: none;
+}
+.sketch-path.inner .sketch-side {
+  stroke-dasharray: none;
+}
 /* Selected, and about to be deleted if that is what you meant. */
 .sketch-path.chosen line {
   stroke: var(--accent);
@@ -1415,6 +1442,17 @@ input.stock-input.bad {
   stroke: var(--warn);
   stroke-dasharray: 6 5;
   opacity: 0.8;
+}
+
+/* Which face the pen is drawing. Beside the pen button and only while it is
+   out, because it is the one thing about the next line that the coordinates
+   will not record. */
+.pen-face {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.18));
 }
 
 /* Leg lengths. Amber while drawing, because a measurement in progress is a

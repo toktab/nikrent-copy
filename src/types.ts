@@ -107,8 +107,23 @@ export interface SketchPath {
   id: string;
   /** orthogonal polyline, plan world cm */
   points: Array<{ x: number; y: number }>;
-  /** the last point joins back to the first — a closed room outline */
+  /** the last point joins back to the first - a closed room outline */
   closed?: boolean;
+  /**
+   * Which face of the pour this line is, and therefore which way the formwork
+   * stands off it.
+   *
+   * A wall is two lines. The outer one has the concrete on the inside of it and
+   * the panels outside; the inner one - the void, the room, the lift shaft -
+   * has the concrete outside it and the panels standing in the hole. The
+   * geometry alone cannot tell the two apart: an L drawn for a wall's outer
+   * face and an L drawn for its inner face are the same six numbers.
+   *
+   * So the pen asks, once, which kind of line is being drawn, and the answer
+   * lives on the line for good. Absent means outer, which is what every line
+   * drawn before this existed was taken to be.
+   */
+  perimeter?: 'outer' | 'inner';
 }
 
 export interface DrawingDoc {

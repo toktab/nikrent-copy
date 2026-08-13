@@ -289,7 +289,9 @@ function SketchDetails({ path }: { path: SketchPath }) {
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const part = useEditorStore((s) => s.selectedSketchPart);
   const closeSketchPath = useEditorStore((s) => s.closeSketchPath);
+  const setSketchPerimeter = useEditorStore((s) => s.setSketchPerimeter);
   const legs = segments(path);
+  const perimeter = path.perimeter ?? 'outer';
   const closed = !!path.closed && path.points.length > 2;
   const picked = part?.pathId === path.id && part.kind === 'leg' ? part.index : null;
 
@@ -302,6 +304,30 @@ function SketchDetails({ path }: { path: SketchPath }) {
       <div className="kv">
         <span className="k">სულ სიგრძე</span>
         <b>{Math.round(pathLength(path))} სმ</b>
+      </div>
+      {/* Which face of the pour this line is, and so which side the panels
+          stand on. Nothing in the coordinates says it, and getting it wrong
+          builds the whole run inside the concrete. */}
+      <div className="kv">
+        <span className="k">პერიმეტრი</span>
+        <span className="pen-face">
+          {(
+            [
+              ['outer', 'გარე', 'ბეტონი ხაზის შიგნითაა - პანელები გარეთ დგება'],
+              ['inner', 'შიდა', 'ბეტონი ხაზის გარეთაა - პანელები შიგნით დგება'],
+            ] as const
+          ).map(([face, label, why]) => (
+            <button
+              key={face}
+              className={`btn small${perimeter === face ? ' engaged' : ''}`}
+              onClick={() => setSketchPerimeter([path.id], face)}
+              aria-pressed={perimeter === face}
+              title={why}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
       </div>
       {part?.pathId === path.id && part.kind === 'vertex' && (
         <div className="kv">

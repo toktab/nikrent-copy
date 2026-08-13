@@ -21,19 +21,24 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
 
   const [height, setHeight] = useState('300');
   const [includeCorners, setIncludeCorners] = useState(true);
-  /** The side is read off the run's shape; this is the override. */
-  const [flip, setFlip] = useState(false);
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
   const spec: SketchFillSpec = useMemo(
     () => ({
       height: n(height),
-      flip,
       includeCorners,
     }),
-    [height, flip, includeCorners],
+    [height, includeCorners],
   );
+
+  /**
+   * Which face of the pour the selection is. Said out loud, because it is what
+   * decides where the panels land and it is set somewhere else — at the pen, or
+   * on the line itself — so the fill is the last chance to notice it is wrong.
+   */
+  const kinds = new Set(paths.map((p) => p.perimeter ?? 'outer'));
+  const perimeters = [...kinds].map((k) => (k === 'inner' ? 'შიდა' : 'გარე')).join(' და ');
 
   const errors: string[] = [];
   if (!Number.isFinite(spec.height) || spec.height <= 0) errors.push('სიმაღლე სავალდებულოა.');
@@ -76,7 +81,8 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        დახაზული ხაზი ბეტონის <b>კიდეა</b> - პანელები ყოველთვის გარეთა მხარეს დგება.
+        დახაზული ხაზი ბეტონის <b>კიდეა</b> - პანელები ყოველთვის ბეტონის გარეთა მხარეს
+        დგება, მხარეს კი ხაზის პერიმეტრი განსაზღვრავს: <b>{perimeters}</b>.
         {paths.length > 1 ? ` მონიშნულია ${paths.length} ხაზი. ` : ' '}
         სიგრძე ნახაზიდან იკითხება:{' '}
         <b>{Math.round(paths.reduce((sum, p) => sum + pathLength(p), 0))} სმ</b>
@@ -100,20 +106,12 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
         <label className="check-row">
           <input
             type="checkbox"
-            checked={flip}
-            onChange={(e) => setFlip(e.target.checked)}
-          />
-          <span title="პანელები ხაზის მეორე მხარეს დადგება">მეორე მხარეს</span>
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
             checked={includeCorners}
             onChange={(e) => setIncludeCorners(e.target.checked)}
             disabled={!plan?.summary.turns}
           />
-          <span title="მოხსნისას კუთხეს პანელები ხურავს ერთმანეთის გადაფარებით">
-            კუთხის პროფილები
+          <span title="შიდა კუთხეში პროფილი დგება და პანელები მას ებჯინება; მოხსნისას კუთხეს პანელები ხურავს ერთმანეთის გადაფარებით">
+            შიდა კუთხის პროფილები
           </span>
         </label>
       </div>
@@ -139,8 +137,11 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
             )}
           </div>
           <p className="hint-note">
-            {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი. ვოლერები,
-            ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
+            {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი.
+            {plan.summary.openCorners > 0 &&
+              ` გარე კუთხე ღიად რჩება (${plan.summary.openCorners} ცალი, თითო მხარეს 20 სმ) -
+                მის დახურვას ოსტატი ადგილზე წყვეტს.`}{' '}
+            ვოლერები, ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
           </p>
         </div>
       )}

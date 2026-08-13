@@ -4,6 +4,7 @@ import {
   computeEdgeSnap,
   contentBounds,
   findOverlaps,
+  gridStep,
   niceStep,
   normalizeRot,
   pieceBounds,
@@ -242,5 +243,25 @@ describe('niceStep', () => {
 
   it('stays within the ladder', () => {
     expect([10, 20, 50, 100, 200, 500, 1000, 2000]).toContain(niceStep(0.5));
+  });
+});
+
+describe('gridStep', () => {
+  // Five is what the drawing snaps to, so five is what it should be ruled in
+  // wherever five will read: a snap position with no line under it is a corner
+  // you have to count to instead of land on.
+  it('rules the surface in fives at normal working zooms', () => {
+    expect(gridStep(1)).toBe(5);
+    expect(gridStep(4)).toBe(5);
+    expect(gridStep(8)).toBe(5);
+  });
+
+  it('opens the squares out rather than letting them go grey', () => {
+    expect(gridStep(0.4)).toBeGreaterThan(5);
+    expect(gridStep(0.08)).toBeGreaterThan(gridStep(0.4));
+    // Whatever the zoom, the lines stay further apart than they are wide.
+    for (const zoom of [0.08, 0.2, 0.5, 1, 2, 8]) {
+      expect(gridStep(zoom) * zoom).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { useEditorStore } from '../store/useEditorStore';
 import { isHorizontal, legLength, pathLength, segments, type SegmentHit } from '../lib/sketch';
 import type { Point } from '../lib/sketch';
+import { legDir, leftNormal, outwardSide } from '../lib/sketchFill';
 import type { SketchPath } from '../types';
 
 /**
@@ -178,8 +179,38 @@ function PathShape({
   const total = Math.round(pathLength(path));
   const first = path.points[0];
 
+  /**
+   * Which side of the line the formwork will stand on.
+   *
+   * Drawn as short ticks off each leg, the way a section arrow is: the one
+   * thing about a line that its coordinates do not record is which face of the
+   * pour it is, and finding out by filling it and looking is a poor way to
+   * ask. Same rule the generator uses, so what is ticked is what gets built.
+   */
+  const side = outwardSide(path);
+
   return (
-    <g className={`sketch-path${chosen ? ' chosen' : ''}`}>
+    <g className={`sketch-path${chosen ? ' chosen' : ''}${path.perimeter === 'inner' ? ' inner' : ''}`}>
+      {legs.map(([a, b], i) => {
+        const d = legDir(a, b);
+        const nrm = leftNormal(d);
+        const reach = hair * 5;
+        return [0.3, 0.7].map((t) => {
+          const x = a.x + (b.x - a.x) * t;
+          const y = a.y + (b.y - a.y) * t;
+          return (
+            <line
+              key={`s${i}-${t}`}
+              className="sketch-side"
+              x1={x}
+              y1={y}
+              x2={x + side * nrm.x * reach}
+              y2={y + side * nrm.y * reach}
+              strokeWidth={hair}
+            />
+          );
+        });
+      })}
       {/* Drawn twice: a dark rim, then the line on top of it. A single stroke
           disappeared wherever it ran along a grid line, and a layout set out
           on the module runs along one nearly the whole way. */}

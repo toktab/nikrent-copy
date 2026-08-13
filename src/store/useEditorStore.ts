@@ -237,6 +237,16 @@ export interface EditorState {
    * that swallows clicks would be baffling.
    */
   tool: 'select' | 'pen';
+  /**
+   * Which face of the pour the pen is drawing — see `SketchPath.perimeter`.
+   *
+   * Asked at the pen rather than at the fill because it is known at the pen and
+   * guessed at the fill: the person chalking a layout knows they are round the
+   * outside of the slab or inside a lift shaft, and the coordinates that come
+   * out are identical either way. Starts on the outside every time, which is
+   * the order a layout is actually drawn in.
+   */
+  penPerimeter: 'outer' | 'inner';
   /** vertices of the path being drawn, before it is committed */
   penPoints: Array<{ x: number; y: number }>;
   clipboard: Piece[];
@@ -399,7 +409,12 @@ export interface EditorState {
   setToast: (message: string | null) => void;
 
   // ── actions: the drawn layout ──
-  setTool: (tool: 'select' | 'pen') => void;
+  /** Pick up the pen. The second argument also sets which face it draws. */
+  setTool: (tool: 'select' | 'pen', perimeter?: 'outer' | 'inner') => void;
+  /** Switch the pen between the outside and the inside of the pour. */
+  setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
+  /** Change which face already-drawn runs are, and so which way they fill. */
+  setSketchPerimeter: (pathIds: string[], perimeter: 'outer' | 'inner') => void;
   /** Add a vertex to the path in progress, already snapped by the caller. */
   penAddPoint: (x: number, y: number) => void;
   /** Drop the last vertex — the pen's own undo, mid-path. */
@@ -561,6 +576,7 @@ export const useEditorStore = create<EditorState>()(
         selectedSketchIds: [],
         selectedSketchPart: null,
         tool: 'select',
+        penPerimeter: 'outer',
         penPoints: [],
         removedBuiltins: [],
         documents: [firstDoc],
@@ -1473,14 +1489,24 @@ export const useEditorStore = create<EditorState>()(
         setToast: (message) => set({ toast: message }),
 
         // ── the drawn layout ────────────────────────────────────────────────
-        setTool: (tool) =>
+        setTool: (tool, perimeter) =>
           set((s) => ({
             tool,
+            penPerimeter: perimeter ?? s.penPerimeter,
             // You cannot draw into a layer you cannot see.
             showSketch: tool === 'pen' ? true : s.showSketch,
             // Leaving the pen abandons whatever it was halfway through, rather
             // than keeping a dangling path that reappears next time.
             penPoints: tool === 'pen' ? s.penPoints : [],
+          })),
+
+        setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),
+
+        setSketchPerimeter: (pathIds, perimeter) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) =>
+              pathIds.includes(k.id) ? { ...k, perimeter } : k,
+            ),
           })),
 
         penAddPoint: (x, y) =>
@@ -1514,6 +1540,7 @@ export const useEditorStore = create<EditorState>()(
               id: uid('sk'),
               points: s.penPoints,
               ...(closed ? { closed: true } : {}),
+              perimeter: s.penPerimeter,
             };
             return { sketch: [...s.sketch, path], penPoints: [] };
           }),
@@ -1741,6 +1768,7 @@ export const useEditorStore = create<EditorState>()(
           selectedSketchIds: [],
           // Reopening in a mode that swallows clicks would be baffling.
           tool: 'select',
+          penPerimeter: 'outer',
           penPoints: [],
           clipboard: [],
           past: [],

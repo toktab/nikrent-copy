@@ -85,6 +85,8 @@ export function Header() {
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
   const setShowGaps = useEditorStore((s) => s.setShowGaps);
   const setTool = useEditorStore((s) => s.setTool);
+  const penPerimeter = useEditorStore((s) => s.penPerimeter);
+  const setPenPerimeter = useEditorStore((s) => s.setPenPerimeter);
   const setShowSketch = useEditorStore((s) => s.setShowSketch);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
@@ -558,7 +560,7 @@ export function Header() {
           label="ხაზვა - გეგმის მონახაზი"
           reason={
             surfaceView === 'plan'
-              ? `G - ხაზვა, V - არჩევა · სწორი კუთხეები; ${overrideLabel()} - თავისუფალი კუთხე. Enter - დასრულება`
+              ? `G - ხაზვა, Shift + G - შიდა პერიმეტრი, V - არჩევა · სწორი კუთხეები; ${overrideLabel()} - თავისუფალი კუთხე. Enter - დასრულება`
               : 'მხოლოდ გეგმაზე - მონახაზი გეგმის ხაზებია'
           }
         >
@@ -571,6 +573,31 @@ export function Header() {
             <Icon name="pen" /> <span className="btn-label">ხაზვა</span>
           </button>
         </Tooltip>
+
+        {/* Which face of the pour is being drawn. Only while the pen is out,
+            because with the pen away it is a setting for nothing — and while
+            the pen IS out it is the one thing about the next line that the
+            coordinates will not record. */}
+        {tool === 'pen' && (
+          <span className="pen-face" role="group" aria-label="პერიმეტრი">
+            {(
+              [
+                ['outer', 'გარე', 'ბეტონი ხაზის შიგნითაა - პანელები გარეთ დგება'],
+                ['inner', 'შიდა', 'ბეტონი ხაზის გარეთაა - პანელები შიგნით დგება'],
+              ] as const
+            ).map(([face, label, why]) => (
+              <button
+                key={face}
+                className={`btn small${penPerimeter === face ? ' engaged' : ''}`}
+                onClick={() => setPenPerimeter(face)}
+                aria-pressed={penPerimeter === face}
+                title={why}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
 
         <button
           className="btn raised"

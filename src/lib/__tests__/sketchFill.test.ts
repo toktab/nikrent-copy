@@ -23,6 +23,9 @@ const path = (points: Array<[number, number]>, closed = false): SketchPath => ({
   ...(closed ? { closed: true } : {}),
 });
 
+/** The same line, read as the far side of the pour instead of the near side. */
+const inward = (p: SketchPath): SketchPath => ({ ...p, perimeter: 'inner' });
+
 const spec = (over: Partial<SketchFillSpec> = {}): SketchFillSpec => ({
   height: 300,
   includeCorners: true,
@@ -68,9 +71,17 @@ function crossesLine(pieces: Piece[], p: SketchPath, side: 1 | -1): Piece[] {
       const d = legDir(a, c);
       // Same convention as the generator: left of travel is (y, -x).
       const nrm = { x: side * d.y, y: side * -d.x };
-      // Only the legs this piece actually lies alongside can judge it.
-      if (d.x && (b.x + b.w < Math.min(a.x, c.x) || b.x > Math.max(a.x, c.x))) return false;
-      if (d.y && (b.y + b.h < Math.min(a.y, c.y) || b.y > Math.max(a.y, c.y))) return false;
+      /**
+       * Only the legs this piece actually lies alongside can judge it, and
+       * "alongside" has to mean a real overlap rather than a touch. A panel on
+       * the leg into a corner ends exactly where the leg out of it begins, so
+       * a zero-width overlap had every corner panel judged by the wrong leg —
+       * which reads as the whole run standing in the concrete.
+       */
+      if (d.x && (b.x + b.w <= Math.min(a.x, c.x) + 0.01 || b.x >= Math.max(a.x, c.x) - 0.01))
+        return false;
+      if (d.y && (b.y + b.h <= Math.min(a.y, c.y) + 0.01 || b.y >= Math.max(a.y, c.y) - 0.01))
+        return false;
       if (d.x) return nrm.y > 0 ? b.y < a.y - 0.01 : b.y + b.h > a.y + 0.01;
       return nrm.x > 0 ? b.x < a.x - 0.01 : b.x + b.w > a.x + 0.01;
     });
@@ -230,31 +241,58 @@ describe('planSketchFill', () => {
       expect(planSketchFill(corner, spec(), materials).summary.turns).toBe(1);
     });
 
-    // One run of panels turning a corner needs one part, not a matched pair:
-    // whichever profile suits the way it turns.
-    it('closes it with a single profile', () => {
-      expect(ofCategory(planSketchFill(corner, spec(), materials).pieces, 'corner')).toHaveLength(1);
+    /**
+     * An outside corner is not closed by this tool, ever.
+     *
+     * There is more than one right answer on site and which one it is depends
+     * on the job, so the panels stop short and the corner is handed over as a
+     * measured hole rather than as a part somebody has to take off again.
+     */
+    it('leaves an outside corner open by 20 cm of each face', () => {
+      const plan = planSketchFill(corner, spec(), materials);
+      expect(ofCategory(plan.pieces, 'corner')).toHaveLength(0);
+      expect(plan.summary.openCorners).toBe(1);
+
+      const faces = ofCategory(plan.pieces, 'panel', 'filler').map((p) =>
+        pieceBounds(p, materialOf(p)),
+      );
+      // The vertex is (300, 0): nothing along the top comes past x 280, and
+      // nothing down the side starts above y 20.
+      const along = faces.filter((b) => b.h < b.w);
+      const down = faces.filter((b) => b.w < b.h);
+      expect(Math.max(...along.map((b) => b.x + b.w))).toBe(280);
+      expect(Math.min(...down.map((b) => b.y))).toBe(20);
     });
 
-    it('takes the outer profile one way round and the inner the other', () => {
-      const left = planSketchFill(corner, spec(), materials);
-      const right = planSketchFill(corner, spec({ flip: true }), materials);
-      const nameOf = (p: ReturnType<typeof planSketchFill>) =>
-        materialOf(ofCategory(p.pieces, 'corner')[0]).name;
-      expect(nameOf(left)).toContain('გარე');
-      expect(nameOf(right)).toContain('შიდა');
+    it('stands a profile in an inside corner, in the notch and not in the pour', () => {
+      const plan = planSketchFill(inward(corner), spec(), materials);
+      const profiles = ofCategory(plan.pieces, 'corner');
+      expect(profiles).toHaveLength(1);
+      expect(materialOf(profiles[0]).name).toContain('შიდა');
+      // The panels close into the down-left quadrant of the vertex, and so
+      // does the profile: 20 cm of each face, starting at the vertex itself.
+      const box = pieceBounds(profiles[0], materialOf(profiles[0]));
+      expect(box.x).toBeCloseTo(280, 6);
+      expect(box.y).toBeCloseTo(0, 6);
+      expect(box.w).toBeCloseTo(20, 6);
+      expect(box.h).toBeCloseTo(20, 6);
+    });
+
+    it('builds the profile before the panels that measure off it', () => {
+      const plan = planSketchFill(inward(corner), spec(), materials);
+      expect(materialOf(plan.pieces[0]).category).toBe('corner');
     });
 
     it('never orders two pieces for the same spot', () => {
-      for (const sd of [false, true] as const) {
-        expect(clashes(planSketchFill(corner, spec({ flip: sd }), materials).pieces)).toHaveLength(0);
+      for (const p of [corner, inward(corner)]) {
+        expect(clashes(planSketchFill(p, spec(), materials).pieces)).toHaveLength(0);
         expect(
-          clashes(planSketchFill(corner, spec({ flip: sd, includeCorners: false }), materials).pieces),
+          clashes(planSketchFill(p, spec({ includeCorners: false }), materials).pieces),
         ).toHaveLength(0);
       }
     });
 
-    it('closes the corner in all four turn directions', () => {
+    it('handles all four turn directions, both perimeters', () => {
       const turns: SketchPath[] = [
         path([[0, 0], [300, 0], [300, 200]]),
         path([[0, 0], [300, 0], [300, -200]]),
@@ -262,9 +300,15 @@ describe('planSketchFill', () => {
         path([[300, 0], [0, 0], [0, -200]]),
       ];
       for (const t of turns) {
-        const plan = planSketchFill(t, spec(), materials);
-        expect(ofCategory(plan.pieces, 'corner')).toHaveLength(1);
-        expect(clashes(plan.pieces)).toHaveLength(0);
+        const open = planSketchFill(t, spec(), materials);
+        expect(ofCategory(open.pieces, 'corner')).toHaveLength(0);
+        expect(clashes(open.pieces)).toHaveLength(0);
+        expect(crossesLine(open.pieces, t, outwardSide(t))).toHaveLength(0);
+
+        const shut = planSketchFill(inward(t), spec(), materials);
+        expect(ofCategory(shut.pieces, 'corner')).toHaveLength(1);
+        expect(clashes(shut.pieces)).toHaveLength(0);
+        expect(crossesLine(shut.pieces, t, outwardSide(inward(t)))).toHaveLength(0);
       }
     });
   });
@@ -273,13 +317,69 @@ describe('planSketchFill', () => {
     const room = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
     const plan = planSketchFill(room, spec(), materials);
 
-    it('turns four times and closes every one', () => {
+    it('leaves all four outside corners to the builder', () => {
       expect(plan.summary.turns).toBe(4);
-      expect(ofCategory(plan.pieces, 'corner')).toHaveLength(4);
+      expect(plan.summary.openCorners).toBe(4);
+      expect(ofCategory(plan.pieces, 'corner')).toHaveLength(0);
+    });
+
+    // The same outline read as a void — a room, a shaft — is four inside
+    // corners, and every one of them takes a profile.
+    it('closes all four of a void, with the panels inside it', () => {
+      const shaft = planSketchFill(inward(room), spec(), materials);
+      expect(shaft.summary.openCorners).toBe(0);
+      expect(ofCategory(shaft.pieces, 'corner')).toHaveLength(4);
+      for (const q of ofCategory(shaft.pieces, 'panel', 'filler', 'corner')) {
+        const b = pieceBounds(q, materialOf(q));
+        const outside = b.x < -0.01 || b.y < -0.01 || b.x + b.w > 400.01 || b.y + b.h > 300.01;
+        expect(outside).toBe(false);
+      }
     });
 
     it('keeps clear of itself', () => {
       expect(clashes(plan.pieces)).toHaveLength(0);
+      expect(clashes(planSketchFill(inward(room), spec(), materials).pieces)).toHaveLength(0);
+    });
+  });
+
+  /**
+   * A junction is a point somebody put on the drawing. It does not bend the
+   * wall, and reading it as a corner put a profile in the middle of a straight
+   * run and cut the run in two either side of it.
+   */
+  describe('a junction the run goes straight through', () => {
+    const straight = path([[0, 0], [560, 0]]);
+    const marked = path([[0, 0], [200, 0], [560, 0]]);
+
+    it('builds the same wall as if it were not there', () => {
+      const laid = (p: SketchPath) =>
+        planSketchFill(p, spec(), materials)
+          .pieces.map((q) => {
+            const b = pieceBounds(q, materialOf(q));
+            return `${materialOf(q).name}@${b.x},${b.y}`;
+          })
+          .sort();
+      expect(laid(marked)).toEqual(laid(straight));
+    });
+
+    it('puts no corner there and counts no turn', () => {
+      const plan = planSketchFill(marked, spec(), materials);
+      expect(ofCategory(plan.pieces, 'corner')).toHaveLength(0);
+      expect(plan.summary.turns).toBe(0);
+    });
+
+    it('still finds the corners that are real', () => {
+      const withMark = path([[0, 0], [150, 0], [300, 0], [300, 200]]);
+      expect(planSketchFill(inward(withMark), spec(), materials).summary.turns).toBe(1);
+      expect(
+        ofCategory(planSketchFill(inward(withMark), spec(), materials).pieces, 'corner'),
+      ).toHaveLength(1);
+    });
+
+    it('takes them out of a closed outline too', () => {
+      const room = path([[0, 0], [200, 0], [400, 0], [400, 300], [0, 300]], true);
+      const plan = planSketchFill(room, spec(), materials);
+      expect(plan.summary.turns).toBe(4);
     });
   });
 
@@ -325,9 +425,10 @@ describe('a strip too narrow for any panel', () => {
 });
 
 describe('a leg short enough that its two corners nearly meet', () => {
-  // The gap in the drawing: two corner profiles ten centimetres apart, with a
-  // 10 cm ჩაკერება sitting unused in the catalog.
-  const z = path([[0, 0], [265, 0], [265, 120], [530, 120]]);
+  // The gap in the drawing: two corner treatments ten centimetres apart, with a
+  // 10 cm ჩაკერება sitting unused in the catalog. The middle leg gives up 20 cm
+  // at each end, so 125 leaves 85 — a panel and that strip.
+  const z = path([[0, 0], [265, 0], [265, 125], [530, 125]]);
   const plan = planSketchFill(z, spec(), materials);
 
   it('fills the strip between them, turned to suit the run', () => {
@@ -384,6 +485,43 @@ describe('which side is outside', () => {
         expect(inside).toBe(false);
       }
     }
+  });
+
+  /**
+   * The case the shape alone cannot answer: one wall, drawn as its two faces.
+   *
+   * Both lines turn the same way and wind the same way, so the winding puts
+   * both lots of panels on the same side of the pair — and the inner face's
+   * panels land in the concrete, between the two lines. What tells them apart
+   * is what each line is FOR, which is why the pen asks.
+   */
+  it('keeps a wall\'s two faces out of the pour between them', () => {
+    const thickness = 20;
+    const outer = path([[0, 0], [300, 0], [300, 300]]);
+    const inner = inward(path([
+      [0, thickness],
+      [300 - thickness, thickness],
+      [300 - thickness, 300],
+    ]));
+
+    const between = (p: Piece) => {
+      const b = pieceBounds(p, materialOf(p));
+      // The pour is the L-shaped band between the two lines.
+      const inArm = b.y > 0.01 && b.y + b.h < thickness - 0.01 && b.x + b.w < 300.01;
+      const inLeg = b.x > 300 - thickness + 0.01 && b.x + b.w < 300.01 && b.y + b.h > 0.01;
+      return inArm || inLeg;
+    };
+
+    for (const face of [outer, inner]) {
+      const plan = planSketchFill(face, spec(), materials);
+      expect(ofCategory(plan.pieces, 'panel', 'filler', 'corner').filter(between)).toHaveLength(0);
+    }
+  });
+
+  it('reads the same shape either way round, given what it is for', () => {
+    const shape = path([[0, 0], [300, 0], [300, 300]]);
+    const sideOf = (p: SketchPath) => outwardSide(p);
+    expect(sideOf(shape)).toBe(-sideOf(inward(shape)));
   });
 
   it('still lets the side be overridden, for a line with no outside', () => {

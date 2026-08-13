@@ -66,7 +66,10 @@ export interface FillPlan {
   summary: {
     panels: number;
     fillers: number;
+    /** inner corner profiles placed */
     corners: number;
+    /** outside corners left open, 20 cm of each face, for the builder to close */
+    openCorners: number;
     courses: number;
     /** centreline run of the whole layout, cm */
     runLength: number;
@@ -79,6 +82,7 @@ const EMPTY: FillPlan['summary'] = {
   panels: 0,
   fillers: 0,
   corners: 0,
+  openCorners: 0,
   courses: 0,
   runLength: 0,
   turns: 0,
@@ -117,20 +121,71 @@ export function turnSign(dPrev: Point, dNext: Point): number {
 }
 
 /**
- * The side of a run that faces away from what it wraps around.
+ * The same run with the junctions that are not corners taken out.
  *
- * Formwork stands on the OUTSIDE of the pour, always, and which side that is
- * belongs to the shape rather than to the person drawing it. Taking it as a
- * setting meant the panels landed inside or outside depending on whether a run
- * happened to be drawn left-to-right, which is not a decision anybody made.
+ * A junction is a point somebody put on the drawing, and people put them on for
+ * all sorts of reasons: to measure from, to hang the next wall off, to pull one
+ * end of a leg without moving the other. None of that bends the wall. Reading
+ * every vertex as a corner put a corner profile in the middle of a straight run
+ * and cut the run in two either side of it, so a 560 wall came out as two short
+ * ones with an odd strip each.
  *
- * The shoelace sum answers it. Reversing a run flips the sum AND flips left
- * from right, so the two cancel and the same physical side comes out either
- * way. Positive is clockwise on screen — y counts downward here — and a
- * clockwise run holds its ground on the right, so its outside is the left.
+ * A corner is where the run actually changes direction, which is a question
+ * about the shape and is answered here, once, before anything is planned.
+ * Coincident points go the same way: a leg of zero length is not a turn either.
+ */
+export function cornersOnly(path: SketchPath): SketchPath {
+  const pts = path.points;
+  const n = pts.length;
+  if (n < 3) return path;
+  const closed = !!path.closed && n > 2;
+
+  const same = (a: Point, b: Point) => Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01;
+  const kept: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const here = pts[i];
+    const last = kept[kept.length - 1];
+    if (last && same(last, here)) continue;
+    // The ends of an open run are where it stops, not turns, and both stay.
+    if (!closed && (i === 0 || i === n - 1)) {
+      kept.push(here);
+      continue;
+    }
+    const before = pts[(i - 1 + n) % n];
+    const after = pts[(i + 1) % n];
+    if (same(before, here) || same(here, after)) continue;
+    const into = legDir(before, here);
+    const outOf = legDir(here, after);
+    if (into.x === outOf.x && into.y === outOf.y) continue;
+    kept.push(here);
+  }
+  // A closed run's first point can also be a straight-through, and it is the
+  // one the loop above cannot see both sides of until the end.
+  if (closed && kept.length > 2 && same(kept[0], kept[kept.length - 1])) kept.pop();
+  return kept.length >= 2 ? { ...path, points: kept } : path;
+}
+
+/**
+ * The side of a run the panels stand on.
  *
- * A straight line encloses nothing and has no outside; it falls back to the
- * left of travel, and `flip` is there for when that guesses wrong.
+ * Formwork stands on the OUTSIDE of the pour, always, so this is never a
+ * preference. Half of the answer is in the shape and half is in what the line
+ * is FOR, and the two have to be taken together.
+ *
+ * The shape gives which side of the line the run encloses. The shoelace sum
+ * answers that: reversing a run flips the sum AND flips left from right, so the
+ * two cancel and the same physical side comes out however it was drawn.
+ * Positive is clockwise on screen — y counts downward here — and a clockwise
+ * run holds its ground on the right, so its enclosed side is the right.
+ *
+ * What the line is for gives the rest. An outer perimeter has the concrete
+ * inside it, so the panels go on the far side; an inner one — a room, a shaft,
+ * the void a wall's second face bounds — has the concrete outside it, so the
+ * panels stand in the hole. Nothing in the coordinates distinguishes them,
+ * which is why `perimeter` is asked for at the pen and kept on the path.
+ *
+ * A straight line encloses nothing; it falls back to the left of travel, and
+ * `flip` is there for when that guesses wrong.
  */
 export function outwardSide(path: SketchPath): 1 | -1 {
   const pts = path.points;
@@ -140,7 +195,10 @@ export function outwardSide(path: SketchPath): 1 | -1 {
     const b = pts[(i + 1) % pts.length];
     twiceArea += a.x * b.y - b.x * a.y;
   }
-  return twiceArea < 0 ? -1 : 1;
+  const outsideTheLoop: 1 | -1 = twiceArea < 0 ? -1 : 1;
+  return path.perimeter === 'inner'
+    ? ((outsideTheLoop * -1) as 1 | -1)
+    : outsideTheLoop;
 }
 
 /** One vertex of the offset line: where the two offset legs cross. */
@@ -191,45 +249,54 @@ export function offsetPath(path: SketchPath, dist: number): Point[] {
 // ── Corner profiles ─────────────────────────────────────────────────────────
 
 /**
- * The corner profile for one role, at one course height.
+ * How much of each face is left standing empty at an outside corner, in cm.
  *
- * Outer and inner corners are different parts and neither is interchangeable
- * with the other: an outer profile wraps the OUTSIDE of the box, so its leg is
- * measured past the panel it laps, while an inner one sits in the void and its
- * leg is the face it covers. Nothing in the material record says which is
- * which, so the Georgian name decides — it is what the parts are called — and
- * where the name is silent the geometry does: an outer profile has to span the
- * panel as well as the face, so for the same cover it is the wider part.
+ * An outside corner is not closed by this tool. There is more than one right
+ * answer on site — lap one run past the other, run a profile, batten it — and
+ * which one it is depends on what the corner has to do and what came off the
+ * last job. So the panels stop short and the corner is handed over as a
+ * measured hole rather than as a part somebody has to take back off.
+ *
+ * Twenty, because that is the reach of the inner profile at the corner on the
+ * other face of the same wall: set both faces back by the same amount and the
+ * same panels serve either side of the pour.
  */
-function pickCorner(
+const OUTER_CORNER_GAP = 20;
+
+/**
+ * The inner corner profile at one course height, and how much face it covers.
+ *
+ * The only corner part this places. Nothing in the material record says inner
+ * from outer, so the Georgian name decides — it is what the parts are called —
+ * and where the name is silent the geometry does: an outer profile has to span
+ * the panel as well as the face, so for the same cover it is the wider part and
+ * the inner one is the narrower.
+ */
+function innerCorner(
   materials: Material[],
   height: number,
-  role: 'outer' | 'inner',
-  panelDepth: number,
 ): { material: Material; reach: number } | null {
   const candidates = materials
     .filter((m) => m.category === 'corner' && m.shape === 'L' && m.h === height)
     .sort((a, b) => planW(b) - planW(a));
   if (!candidates.length) return null;
 
-  const named = candidates.filter((m) => m.name.includes(role === 'outer' ? 'გარე' : 'შიდა'));
+  const named = candidates.filter((m) => m.name.includes('შიდა'));
   const pool = named.length ? named : candidates;
-  const material = role === 'outer' ? pool[0] : pool[pool.length - 1];
+  const material = pool[pool.length - 1];
 
-  // How much of the concrete face the profile itself covers. An outer leg is
-  // measured from outside the panel, so it reaches `leg − panel` along the
-  // face; using the bare leg would leave a panel-thickness hole beside every
-  // corner, which is the bug the column wizard's `inset` exists to avoid.
-  const reach = role === 'outer' ? planW(material) - panelDepth : planW(material);
+  // An inner profile sits in the void with its legs in the panel planes, so
+  // the face it covers is simply its leg.
+  const reach = planW(material);
   return reach > 0.01 ? { material, reach } : null;
 }
 
 /**
- * Which way to turn an L so its solid legs face the concrete.
+ * Which way to turn an L so its solid legs lie in the panel planes.
  *
- * `diag` points from the corner out into open air. An L is drawn with its legs
- * on the left and the bottom — notch facing up and right — so it is already
- * correct where the air is down and to the left.
+ * `diag` points from the corner out into open air — the side the panels are
+ * on. An L is drawn with its legs on the left and the bottom, notch facing up
+ * and right, so it is already correct where the air is down and to the left.
  */
 function cornerRot(diag: Point): number {
   if (diag.x < 0) return diag.y > 0 ? 0 : 90;
@@ -251,9 +318,12 @@ export function planSketchFill(
     summary: EMPTY,
   });
 
-  const pts = path.points;
+  // Corners come from the shape. A junction that the run goes straight through
+  // is a mark on the drawing, not a bend in the wall — see `cornersOnly`.
+  const run = cornersOnly(path);
+  const pts = run.points;
   const n = pts.length;
-  const closed = !!path.closed && n > 2;
+  const closed = !!run.closed && n > 2;
   const legCount = closed ? n : n - 1;
 
   if (legCount < 1) return fail('ხაზს ორი წერტილი მაინც სჭირდება.');
@@ -289,7 +359,7 @@ export function planSketchFill(
   const courseCount = Math.max(1, courses.length);
   const courseHeight = courses[0] ?? Math.min(...heights);
   const panelDepth = panelDepthFor(optionsAt(materials, 'panel', courseHeight));
-  const side: 1 | -1 = spec.flip ? ((outwardSide(path) * -1) as 1 | -1) : outwardSide(path);
+  const side: 1 | -1 = spec.flip ? ((outwardSide(run) * -1) as 1 | -1) : outwardSide(run);
 
   // ── The layout, read once ─────────────────────────────────────────────────
   const dirs: Point[] = [];
@@ -320,20 +390,66 @@ export function planSketchFill(
     const courseH = courses[c] ?? courseHeight;
     const panelOptions = optionsAt(materials, 'panel', courseH);
     const fillerOptions = optionsAt(materials, 'filler', courseH);
-    const outer = spec.includeCorners ? pickCorner(materials, courseH, 'outer', panelDepth) : null;
-    const inner = spec.includeCorners ? pickCorner(materials, courseH, 'inner', panelDepth) : null;
+    const inner = spec.includeCorners ? innerCorner(materials, courseH) : null;
 
-    if (c === 0 && spec.includeCorners && turnCount > 0 && (!outer || !inner)) {
+    /**
+     * Which way a corner shuts, from where the panels are standing.
+     *
+     * Outside means the run wraps around the turn and is left open; inside
+     * means the two runs close into each other and a profile sits in the
+     * notch between them. A vertex that turns through nothing is neither —
+     * `cornersOnly` has already taken those out, and this is what stops one
+     * that survives (a run doubling back on itself) becoming a phantom corner.
+     */
+    const straightThrough = (j: number) => turns[j] === 0;
+    const outsideCorner = (j: number) => side * turns[j] > 0;
+    const insideCorners = turns.some((_, j) => !straightThrough(j) && !outsideCorner(j));
+
+    if (c === 0 && spec.includeCorners && insideCorners && !inner) {
       warnings.push(
-        `${courseH} სმ სიმაღლის ${!outer ? 'გარე' : 'შიდა'} კუთხის პროფილი კატალოგში არ არის - კუთხე პანელებით იხურება.`,
+        `${courseH} სმ სიმაღლის შიდა კუთხის პროფილი კატალოგში არ არის - კუთხე პანელებით იხურება.`,
       );
     }
 
-    /** The profile closing corner `j` as seen from `side`, if there is one. */
-    const profileAt = (side: 1 | -1, j: number) =>
-      side * turns[j] > 0 ? outer : inner;
+    /**
+     * Inside corners first, panels after.
+     *
+     * Not just an order in a list: the profile is a fixed part in a fixed
+     * place, so it is the datum the run is measured from, and the runs below
+     * lay their panels away from it. Build it the other way round and the
+     * leftover strip lands against the profile — at the one corner where the
+     * two faces of the wall have to agree — instead of at the open corner
+     * where nothing has been decided yet.
+     */
+    for (let j = 0; j < turnCount; j++) {
+      if (straightThrough(j) || outsideCorner(j) || !inner) continue;
 
-    // ── The two faces, leg by leg ───────────────────────────────────────────
+      // The diagonal out of the corner into open air: the two outward normals
+      // added together. They are perpendicular at a corner, so the sum is one
+      // of the four diagonals.
+      const a = leftNormal(dirs[j]);
+      const b = leftNormal(dirs[(j + 1) % legCount]);
+      const diag: Point = { x: side * (a.x + b.x), y: side * (a.y + b.y) };
+
+      const cw = planW(inner.material);
+      const ch = planH(inner.material);
+      const v = line[(j + 1) % n];
+
+      // It stands in the notch, so it starts at the vertex and reaches out
+      // along the diagonal — never back across the line into the pour.
+      const rot = (cornerRot(diag) + 180) % 360;
+      const { x, y } = placeAt(
+        diag.x > 0 ? v.x : v.x - cw,
+        diag.y > 0 ? v.y : v.y - ch,
+        cw,
+        ch,
+        rot,
+      );
+      pieces.push({ id: uid(), materialId: inner.material.id, x, y, rot, z: elevation });
+      cornerPieces++;
+    }
+
+    // ── The face, leg by leg ────────────────────────────────────────────────
     {
       for (let j = 0; j < legCount; j++) {
         const dir = dirs[j];
@@ -341,43 +457,33 @@ export function planSketchFill(
         const from = line[j];
         const to = line[(j + 1) % n];
 
-        /**
-         * How far each end of this face run moves, along the leg, in cm.
-         * Positive lengthens.
-         *
-         * With a profile the run simply stops short of it, both ends alike.
-         * Without one the faces have to close the corner between them, and a
-         * face cannot be in two places at once: at every corner exactly one of
-         * the two runs moves by a panel thickness and the other stays put.
-         * Outside the turn the leaving run laps past; inside it, it stops short
-         * and the next run closes in front of it. Move both and they overlap by
-         * a panel — which is a panel over-ordered at every corner.
-         */
         const startCorner = closed ? (j - 1 + legCount) % legCount : j - 1;
         const endCorner = closed ? j : j < legCount - 1 ? j : -1;
 
-        const startProfile = startCorner >= 0 ? profileAt(side, startCorner) : null;
-        const endProfile = endCorner >= 0 ? profileAt(side, endCorner) : null;
-
         /**
-         * An open end is where the face stops.
+         * How far this run moves at corner `j`, along its own leg, in cm.
+         * Negative shortens. `leaving` is true for the run that ends there.
          *
-         * It used to run a panel thickness past the pour so a stop-end could
-         * sit between the two faces. Nothing closes an end now - that is a
-         * decision for the person pouring it - and the 9 cm was also what put
-         * every face off the catalog's 5 cm grid, leaving a 4 cm strip at the
-         * end of runs that no part in the catalog could close.
+         * Outside the turn it stops 20 cm short and the corner is left to the
+         * builder. Inside it, the profile is already standing and the run stops
+         * against it, both ends alike. Inside it with no profile the two faces
+         * have to close the corner between them, and a face cannot be in two
+         * places at once: exactly one of the two runs gives way by a panel
+         * thickness and the other holds the line. Move both and they overlap by
+         * a panel — which is a panel over-ordered at every corner.
+         *
+         * An open end is where the face simply stops. Nothing closes it: that
+         * is a decision for the person pouring, the same as an outside corner.
          */
-        const startExtend = startCorner >= 0 && startProfile ? -startProfile.reach : 0;
+        const cornerExtend = (j: number, leaving: boolean): number => {
+          if (straightThrough(j)) return 0;
+          if (outsideCorner(j)) return -OUTER_CORNER_GAP;
+          if (inner) return -inner.reach;
+          return leaving ? -panelDepth : 0;
+        };
 
-        const endExtend =
-          endCorner >= 0
-            ? endProfile
-              ? -endProfile.reach
-              : side * turns[endCorner] > 0
-                ? panelDepth
-                : -panelDepth
-            : 0;
+        const startExtend = startCorner >= 0 ? cornerExtend(startCorner, false) : 0;
+        const endExtend = endCorner >= 0 ? cornerExtend(endCorner, true) : 0;
 
         /**
          * The run is measured between the OFFSET ends, never between the drawn
@@ -420,15 +526,34 @@ export function planSketchFill(
         const face = outward > 0 ? lineAt : lineAt - panelDepth;
 
         const lo = Math.min(startAt, endAt);
+        const hi = Math.max(startAt, endAt);
+
+        /**
+         * Which end the run is laid from.
+         *
+         * `coverFace` returns the widest panels first and the odd strip last,
+         * so this decides where the strip ends up — and a strip belongs where
+         * nothing has been settled yet. An inside corner is a fixed part in a
+         * fixed place and holds the run; an open end is only where the drawing
+         * stops; an outside corner is a hole somebody is still going to think
+         * about. Read off the geometry rather than off the direction of travel,
+         * so the same wall drawn backwards still builds the same way.
+         */
+        const holds = (corner: number) =>
+          corner < 0 || straightThrough(corner) ? 1 : outsideCorner(corner) ? 0 : 2;
+        const lowHolds = holds(startAt <= endAt ? startCorner : endCorner);
+        const highHolds = holds(startAt <= endAt ? endCorner : startCorner);
+        const fromLow = lowHolds >= highHolds;
 
         let offset = 0;
         for (const option of used) {
           const pw = planW(option.material);
           const ph = planH(option.material);
           const rot = across ? 0 : 90;
+          const along = fromLow ? lo + offset : hi - offset - pw;
           const { x, y } = placeAt(
-            across ? lo + offset : face,
-            across ? face : lo + offset,
+            across ? along : face,
+            across ? face : along,
             pw,
             ph,
             rot,
@@ -439,49 +564,6 @@ export function planSketchFill(
           offset += pw;
         }
       }
-    }
-
-    /**
-     * Corner profiles, one per corner.
-     *
-     * There is only one run of panels now, so a corner needs one part, not a
-     * matched pair: an outer profile where the panels are on the outside of the
-     * turn and wrap around it, an inner one where they close into each other.
-     * Which of the two it is falls straight out of the turn direction and the
-     * side the panels are standing on.
-     */
-    for (let j = 0; j < turnCount; j++) {
-      const vertex = (j + 1) % n;
-      const convex = side * turns[j] > 0;
-      const profile = convex ? outer : inner;
-      if (!profile) continue;
-
-      // The diagonal out of the corner into open air: the two outward normals
-      // added together. They are perpendicular at a corner, so the sum is one
-      // of the four diagonals.
-      const a = leftNormal(dirs[j]);
-      const b = leftNormal(dirs[(j + 1) % legCount]);
-      const diag: Point = { x: side * (a.x + b.x), y: side * (a.y + b.y) };
-
-      const cw = planW(profile.material);
-      const ch = planH(profile.material);
-      const v = line[vertex];
-
-      // An outer profile wraps the outside, so it hangs a panel thickness past
-      // the face and reaches back from there. An inner one sits in the corner
-      // the panels are closing into, starting at the face itself.
-      const rot = convex ? cornerRot(diag) : (cornerRot(diag) + 180) % 360;
-      const cornerX = convex ? v.x + panelDepth * diag.x : v.x;
-      const cornerY = convex ? v.y + panelDepth * diag.y : v.y;
-      const { x, y } = placeAt(
-        diag.x > 0 ? cornerX - cw : cornerX,
-        diag.y > 0 ? cornerY - ch : cornerY,
-        cw,
-        ch,
-        rot,
-      );
-      pieces.push({ id: uid(), materialId: profile.material.id, x, y, rot, z: elevation });
-      cornerPieces++;
     }
 
     elevation += courseH;
@@ -497,6 +579,7 @@ export function planSketchFill(
       panels: panelCount,
       fillers: fillerCount,
       corners: cornerPieces,
+      openCorners: turns.filter((t) => side * t > 0).length,
       courses: courses.length,
       runLength: Math.round(pathLength(path)),
       turns: turnCount,
@@ -532,6 +615,7 @@ export function planSketchFillAll(
     summary.panels += plan.summary.panels;
     summary.fillers += plan.summary.fillers;
     summary.corners += plan.summary.corners;
+    summary.openCorners += plan.summary.openCorners;
     summary.runLength += plan.summary.runLength;
     summary.turns += plan.summary.turns;
     // Courses are how high the pour is, not something to add up: every run in
