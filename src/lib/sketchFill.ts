@@ -1,4 +1,4 @@
-import type { Material, Piece, SketchPath } from '../types';
+import type { Material, Piece, SketchPath, WallRunSpec } from '../types';
 import { uid } from './ids';
 import { planH, planW } from './geometry';
 import {
@@ -8,6 +8,7 @@ import {
   panelDepthFor,
   panelHeights,
   placeAt,
+  type PanelOption,
 } from './formwork';
 import { isHorizontal, isOrthogonal, legLength, pathLength, type Point } from './sketch';
 
@@ -303,17 +304,210 @@ function cornerRot(diag: Point): number {
   return diag.y < 0 ? 180 : 270;
 }
 
+// ── Runs, and the two faces of a wall ───────────────────────────────────────
+
+/**
+ * One straight stretch of face, sized and sided but not yet built.
+ *
+ * The generator works these out for every leg of every selected line first, and
+ * only then lays panels along them. The reason is the pair: two of these facing
+ * each other with the pour between them are the two sides of one wall, and a
+ * wall has to be panelled the same on both sides — see `pairFaces`. You cannot
+ * see that from inside one leg of one line, so nothing is placed until all of
+ * them are on the table.
+ */
+interface FaceRun {
+  /** true when the run travels along x */
+  across: boolean;
+  /** the face line's coordinate on the other axis */
+  at: number;
+  /** the run's extent along its own axis */
+  lo: number;
+  hi: number;
+  /** which way off the line the panels stand: +1 up the other axis, -1 down */
+  outward: 1 | -1;
+  /**
+   * How firmly each end is held, and so where the run is laid from: an inside
+   * corner is a fixed part in a fixed place (2), an open end is only where the
+   * drawing stops (1), an outside corner is a hole somebody is still going to
+   * think about (0). The odd strip goes to the loosest end.
+   */
+  holdLo: number;
+  holdHi: number;
+  /** an end that may be pulled back to line up with the other face */
+  trimLo: boolean;
+  trimHi: boolean;
+  elevation: number;
+  depth: number;
+  panels: PanelOption[];
+  fillers: PanelOption[];
+  /** the drawn leg, for the message when it turns out to be too short */
+  legCm: number;
+}
+
+/**
+ * The widest a wall can be and still be one wall.
+ *
+ * Two faces looking at each other across four metres are two walls with a room
+ * between them, not a pour. Two looking at each other across sixty centimetres
+ * are a wall, or a column, and either way they are built as a pair.
+ */
+const MAX_WALL_CM = 120;
+
+/**
+ * Give the two faces of a wall the same panels, opposite each other.
+ *
+ * Tie rods pass through the pour, so a panel on one face needs a panel on the
+ * other for the rod to reach: joints that do not line up are holes that do not
+ * line up. Filled a face at a time the two sides came out different, because
+ * each was fitted to its own length and the lengths differ — the outer face of
+ * a corner is longer than the inner one by the thickness of the wall.
+ *
+ * The fix is the corner. The inside profile is a real part in a real place and
+ * neither face can move it, so it is the datum both faces measure from; the
+ * outside corner is a hole the builder is going to close anyway, so the extra
+ * length is given to the hole. What is left is the same run on both faces, laid
+ * from the same end, which comes out as the same panels facing each other.
+ */
+function pairFaces(runs: FaceRun[]): void {
+  const paired = new Set<number>();
+
+  for (let i = 0; i < runs.length; i++) {
+    if (paired.has(i)) continue;
+    const a = runs[i];
+    let best = -1;
+    let widest = 0;
+
+    for (let j = i + 1; j < runs.length; j++) {
+      if (paired.has(j)) continue;
+      const b = runs[j];
+      if (b.across !== a.across || b.elevation !== a.elevation) continue;
+      // The pour has to be BETWEEN them: the near face's panels on the low
+      // side, the far face's on the high side, both looking away.
+      const near = a.at <= b.at ? a : b;
+      const far = a.at <= b.at ? b : a;
+      if (near.outward !== -1 || far.outward !== 1) continue;
+      const thickness = far.at - near.at;
+      if (thickness <= 0.01 || thickness > MAX_WALL_CM) continue;
+
+      const overlap = Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo);
+      if (overlap > widest) {
+        widest = overlap;
+        best = j;
+      }
+    }
+
+    if (best >= 0 && agreeEnds(a, runs[best])) {
+      paired.add(i);
+      paired.add(best);
+    }
+  }
+}
+
+/**
+ * Bring two facing runs onto the same extent, or leave both alone.
+ *
+ * Only an end at an outside corner may give way, because that is the only end
+ * where nothing has been decided. An end against a corner profile, or the end
+ * of the pour itself, stays where it is — and if that leaves the two faces
+ * different lengths they are not a pair after all and each is built to suit
+ * itself, which is what happened everywhere before this.
+ */
+function agreeEnds(a: FaceRun, b: FaceRun): boolean {
+  const lo = Math.max(a.lo, b.lo);
+  const hi = Math.min(a.hi, b.hi);
+  if (hi - lo <= 0.01) return false;
+
+  const canMeet = (run: FaceRun) =>
+    (run.trimLo || Math.abs(run.lo - lo) < 0.01) && (run.trimHi || Math.abs(run.hi - hi) < 0.01);
+  if (!canMeet(a) || !canMeet(b)) return false;
+
+  const holdLo = Math.max(a.holdLo, b.holdLo);
+  const holdHi = Math.max(a.holdHi, b.holdHi);
+  for (const run of [a, b]) {
+    run.lo = lo;
+    run.hi = hi;
+    run.holdLo = holdLo;
+    run.holdHi = holdHi;
+  }
+  return true;
+}
+
+/** Stand the panels along one run, and say what could not be covered. */
+function layRun(run: FaceRun): { pieces: Piece[]; panels: number; fillers: number; warning?: string } {
+  const pieces: Piece[] = [];
+  let panels = 0;
+  let fillers = 0;
+
+  const length = run.hi - run.lo;
+  if (length <= 0.01) {
+    return {
+      pieces,
+      panels,
+      fillers,
+      warning: `${Math.round(run.legCm)} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა - პანელი აღარ ეტევა.`,
+    };
+  }
+
+  const { used, remainder } = coverFace(length, run.panels, run.fillers);
+  let warning: string | undefined;
+  if (!used.length) {
+    warning = `${Math.round(length)} სმ სიგრძის მხარე ვერ დაიფარა - ყველაზე ვიწრო პანელია ${
+      run.panels.length ? Math.min(...run.panels.map((o) => o.w)) : '-'
+    } სმ.`;
+  } else if (remainder > 0.01) {
+    warning = `${Math.round(length)} სმ მხარეზე დარჩა ${remainder} სმ - ამ ზომის ელემენტი კატალოგში არ არის.`;
+  }
+
+  // The panel stands ON the line and reaches away from the concrete.
+  const face = run.outward > 0 ? run.at : run.at - run.depth;
+  // `coverFace` returns the widest panels first and the odd strip last, so the
+  // end laid from is the end the strip does NOT land at.
+  const fromLow = run.holdLo >= run.holdHi;
+
+  let offset = 0;
+  for (const option of used) {
+    const pw = planW(option.material);
+    const ph = planH(option.material);
+    const rot = run.across ? 0 : 90;
+    const along = fromLow ? run.lo + offset : run.hi - offset - pw;
+    const { x, y } = placeAt(
+      run.across ? along : face,
+      run.across ? face : along,
+      pw,
+      ph,
+      rot,
+    );
+    pieces.push({ id: uid(), materialId: option.material.id, x, y, rot, z: run.elevation });
+    if (option.material.category === 'filler') fillers++;
+    else panels++;
+    offset += pw;
+  }
+
+  return { pieces, panels, fillers, warning };
+}
+
 // ── The plan ────────────────────────────────────────────────────────────────
 
-export function planSketchFill(
+/** Everything one line contributes, before any of it is built. */
+interface FaceJob {
+  corners: Piece[];
+  runs: FaceRun[];
+  warnings: string[];
+  summary: FillPlan['summary'];
+}
+
+function describeFace(
   path: SketchPath,
   spec: SketchFillSpec,
   materials: Material[],
-): FillPlan {
+): FaceJob {
   const warnings: string[] = [];
-  const pieces: Piece[] = [];
-  const fail = (message: string): FillPlan => ({
-    pieces: [],
+  const corners: Piece[] = [];
+  const runs: FaceRun[] = [];
+  const fail = (message: string): FaceJob => ({
+    corners: [],
+    runs: [],
     warnings: [message],
     summary: EMPTY,
   });
@@ -381,8 +575,6 @@ export function planSketchFill(
   // arithmetic below still moves each run's ENDS along its own leg.
   const line: Point[] = pts.map((p) => ({ ...p }));
 
-  let panelCount = 0;
-  let fillerCount = 0;
   let cornerPieces = 0;
   let elevation = 0;
 
@@ -445,7 +637,7 @@ export function planSketchFill(
         ch,
         rot,
       );
-      pieces.push({ id: uid(), materialId: inner.material.id, x, y, rot, z: elevation });
+      corners.push({ id: uid(), materialId: inner.material.id, x, y, rot, z: elevation });
       cornerPieces++;
     }
 
@@ -496,73 +688,39 @@ export function planSketchFill(
          */
         const startAt = across ? from.x - dir.x * startExtend : from.y - dir.y * startExtend;
         const endAt = across ? to.x + dir.x * endExtend : to.y + dir.y * endExtend;
-        const runLength = (endAt - startAt) * (across ? dir.x : dir.y);
 
-        if (runLength <= 0.01) {
-          warnings.push(
-            `${Math.round(lengths[j])} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა - პანელი აღარ ეტევა.`,
-          );
-          continue;
-        }
-
-        const { used, remainder } = coverFace(runLength, panelOptions, fillerOptions);
-        if (!used.length) {
-          warnings.push(
-            `${Math.round(runLength)} სმ სიგრძის მხარე ვერ დაიფარა - ყველაზე ვიწრო პანელია ${
-              panelOptions.length ? Math.min(...panelOptions.map((o) => o.w)) : '-'
-            } სმ.`,
-          );
-        } else if (remainder > 0.01) {
-          warnings.push(
-            `${Math.round(runLength)} სმ მხარეზე დარჩა ${remainder} სმ - ამ ზომის ელემენტი კატალოგში არ არის.`,
-          );
-        }
-
-        // The panel stands ON the offset line and reaches outward from the
-        // concrete, so which side of the line it occupies follows the normal.
+        // Which side of the line the panels occupy follows the normal.
         const out = leftNormal(dir);
         const outward = across ? side * out.y : side * out.x;
-        const lineAt = across ? from.y : from.x;
-        const face = outward > 0 ? lineAt : lineAt - panelDepth;
-
-        const lo = Math.min(startAt, endAt);
-        const hi = Math.max(startAt, endAt);
 
         /**
-         * Which end the run is laid from.
-         *
-         * `coverFace` returns the widest panels first and the odd strip last,
-         * so this decides where the strip ends up — and a strip belongs where
-         * nothing has been settled yet. An inside corner is a fixed part in a
-         * fixed place and holds the run; an open end is only where the drawing
-         * stops; an outside corner is a hole somebody is still going to think
-         * about. Read off the geometry rather than off the direction of travel,
-         * so the same wall drawn backwards still builds the same way.
+         * Which end is held, and so which end the odd strip lands at. Read off
+         * the geometry rather than off the direction of travel, so the same
+         * wall drawn backwards still builds the same way.
          */
         const holds = (corner: number) =>
           corner < 0 || straightThrough(corner) ? 1 : outsideCorner(corner) ? 0 : 2;
-        const lowHolds = holds(startAt <= endAt ? startCorner : endCorner);
-        const highHolds = holds(startAt <= endAt ? endCorner : startCorner);
-        const fromLow = lowHolds >= highHolds;
+        const lowEnd = startAt <= endAt ? startCorner : endCorner;
+        const highEnd = startAt <= endAt ? endCorner : startCorner;
 
-        let offset = 0;
-        for (const option of used) {
-          const pw = planW(option.material);
-          const ph = planH(option.material);
-          const rot = across ? 0 : 90;
-          const along = fromLow ? lo + offset : hi - offset - pw;
-          const { x, y } = placeAt(
-            across ? along : face,
-            across ? face : along,
-            pw,
-            ph,
-            rot,
-          );
-          pieces.push({ id: uid(), materialId: option.material.id, x, y, rot, z: elevation });
-          if (option.material.category === 'filler') fillerCount++;
-          else panelCount++;
-          offset += pw;
-        }
+        runs.push({
+          across,
+          at: across ? from.y : from.x,
+          lo: Math.min(startAt, endAt),
+          hi: Math.max(startAt, endAt),
+          outward: outward > 0 ? 1 : -1,
+          holdLo: holds(lowEnd),
+          holdHi: holds(highEnd),
+          // Only a hole nobody has decided on yet may give way to the face on
+          // the other side of the pour.
+          trimLo: holds(lowEnd) === 0,
+          trimHi: holds(highEnd) === 0,
+          elevation,
+          depth: panelDepth,
+          panels: panelOptions,
+          fillers: fillerOptions,
+          legCm: lengths[j],
+        });
       }
     }
 
@@ -570,14 +728,12 @@ export function planSketchFill(
   }
 
   return {
-    pieces,
-    // Each face of each course reports for itself, so identical legs produce
-    // the same sentence repeatedly. Legs with different geometry differ and
-    // are kept.
-    warnings: [...new Set(warnings)],
+    corners,
+    runs,
+    warnings,
     summary: {
-      panels: panelCount,
-      fillers: fillerCount,
+      panels: 0,
+      fillers: 0,
       corners: cornerPieces,
       openCorners: turns.filter((t) => side * t > 0).length,
       courses: courses.length,
@@ -587,17 +743,48 @@ export function planSketchFill(
   };
 }
 
+export function planSketchFill(
+  path: SketchPath,
+  spec: SketchFillSpec,
+  materials: Material[],
+): FillPlan {
+  return planSketchFillAll([path], spec, materials);
+}
+
 /**
- * Fill several runs at once, as one job.
+ * The two lines a straight wall is.
+ *
+ * The typed thickness is spent here and nowhere else: it sets how far apart the
+ * two faces go, and everything after it is the ordinary fill of two drawn
+ * lines. The far one is an inner perimeter, which is what puts its panels on
+ * the far side of the pour rather than back inside it.
+ */
+export function wallFaces(spec: WallRunSpec): SketchPath[] {
+  const half = spec.thickness / 2;
+  const mid = spec.originY + half;
+  const face = (y: number, perimeter: 'outer' | 'inner'): SketchPath => ({
+    id: uid('sk'),
+    points: [
+      { x: spec.originX, y },
+      { x: spec.originX + spec.length, y },
+    ],
+    perimeter,
+  });
+  return [face(mid - half, 'outer'), face(mid + half, 'inner')];
+}
+
+/**
+ * Fill several lines at once, as one job.
  *
  * A layout is rarely one unbroken line — a building is a few runs that happen
  * to meet — and filling them one at a time means opening the same dialog with
- * the same thickness and height for each, then adding up the summaries by hand
- * to know what to order.
+ * the same height for each, then adding up the summaries by hand to know what
+ * to order.
  *
- * Each run is still planned on its own: they are separate walls, and a corner
- * only exists where one run turns, not where two happen to touch. What is
- * shared is the pour they belong to and the single count that comes out.
+ * It is also the only place a WALL can be seen. A wall is two lines and each is
+ * a face of the same pour, so filling them together is what lets the two sides
+ * be panelled to match — see `pairFaces`. Corners still belong to the line that
+ * turns, not to two lines that happen to touch.
  */
 export function planSketchFillAll(
   paths: SketchPath[],
@@ -608,20 +795,33 @@ export function planSketchFillAll(
   const warnings: string[] = [];
   const summary = { ...EMPTY };
 
-  for (const path of paths) {
-    const plan = planSketchFill(path, spec, materials);
-    pieces.push(...plan.pieces);
-    warnings.push(...plan.warnings);
-    summary.panels += plan.summary.panels;
-    summary.fillers += plan.summary.fillers;
-    summary.corners += plan.summary.corners;
-    summary.openCorners += plan.summary.openCorners;
-    summary.runLength += plan.summary.runLength;
-    summary.turns += plan.summary.turns;
+  const jobs = paths.map((path) => describeFace(path, spec, materials));
+  for (const job of jobs) {
+    pieces.push(...job.corners);
+    warnings.push(...job.warnings);
+    summary.corners += job.summary.corners;
+    summary.openCorners += job.summary.openCorners;
+    summary.runLength += job.summary.runLength;
+    summary.turns += job.summary.turns;
     // Courses are how high the pour is, not something to add up: every run in
     // one job stands the same number.
-    summary.courses = Math.max(summary.courses, plan.summary.courses);
+    summary.courses = Math.max(summary.courses, job.summary.courses);
   }
 
+  // Every face of every line is on the table before any of it is built, which
+  // is what makes the two sides of a wall visible to each other.
+  const runs = jobs.flatMap((job) => job.runs);
+  pairFaces(runs);
+
+  for (const run of runs) {
+    const laid = layRun(run);
+    pieces.push(...laid.pieces);
+    summary.panels += laid.panels;
+    summary.fillers += laid.fillers;
+    if (laid.warning) warnings.push(laid.warning);
+  }
+
+  // Each face of each course reports for itself, so identical legs produce the
+  // same sentence repeatedly. Legs with different geometry differ and are kept.
   return { pieces, warnings: [...new Set(warnings)], summary };
 }

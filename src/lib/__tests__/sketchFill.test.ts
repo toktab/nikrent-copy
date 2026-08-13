@@ -10,7 +10,9 @@ import {
   offsetPath,
   outwardSide,
   planSketchFill,
+  planSketchFillAll,
   turnSign,
+  wallFaces,
   type SketchFillSpec,
 } from '../sketchFill';
 
@@ -443,6 +445,72 @@ describe('a leg short enough that its two corners nearly meet', () => {
       return [{ ...pieceBounds(p, m), heightCm: m.h, bands: faceBands(pieceBounds(p, m), m, p.rot, false) }];
     });
     expect(allGaps(rects).some((g) => Math.abs(g.size - 10) < 0.5)).toBe(false);
+  });
+});
+
+/**
+ * Tie rods pass through the pour, so a panel on one face needs a panel on the
+ * other for the rod to reach: joints that do not line up are holes that do not
+ * line up. Filled a face at a time the two sides came out differently, because
+ * each was fitted to its own length and the lengths differ.
+ */
+describe('a wall, drawn as its two faces', () => {
+  // 20 thick, running east, turning south at the far end. The outer face is
+  // longer than the inner one by the thickness of the wall.
+  const outer = path([[0, 0], [600, 0], [600, 400]]);
+  const inner = inward(path([[0, 20], [580, 20], [580, 400]]));
+  const plan = planSketchFillAll([outer, inner], spec(), materials);
+
+  /** Where the pieces standing on one face begin and end, along the wall. */
+  const spansAt = (top: number) =>
+    ofCategory(plan.pieces, 'panel', 'filler')
+      .map((p) => pieceBounds(p, materialOf(p)))
+      .filter((b) => Math.abs(b.y - top) < 0.01)
+      .map((b) => `${Math.round(b.x)}-${Math.round(b.x + b.w)}`)
+      .sort();
+
+  it('puts the same panels on both sides, opposite each other', () => {
+    expect(spansAt(-9).length).toBeGreaterThan(1);
+    expect(spansAt(20)).toEqual(spansAt(-9));
+  });
+
+  it('gives the difference in length to the open corner, not to the panels', () => {
+    // The inner face stops against its profile at 560; the outer one, which
+    // could have run to 580, stops level with it and the extra 20 goes into
+    // the corner nobody has decided about yet.
+    expect(Math.max(...spansAt(-9).map((s) => Number(s.split('-')[1])))).toBe(560);
+  });
+
+  it('still closes the inside corner and leaves the outside one open', () => {
+    expect(plan.summary.corners).toBe(1);
+    expect(plan.summary.openCorners).toBe(1);
+  });
+
+  // The wizard is not a second generator: it draws the two faces and hands them
+  // to the same call, so it gets the matching too.
+  it('does the same for a straight wall typed into the wizard', () => {
+    const faces = wallFaces({ length: 500, thickness: 20, height: 300, originX: 0, originY: 0 });
+    const built = planSketchFillAll(faces, spec(), materials);
+    const at = (top: number) =>
+      ofCategory(built.pieces, 'panel', 'filler')
+        .map((p) => pieceBounds(p, materialOf(p)))
+        .filter((b) => Math.abs(b.y - top) < 0.01)
+        .map((b) => `${Math.round(b.x)}-${Math.round(b.x + b.w)}`)
+        .sort();
+    // Panels outside both faces of a 20 cm wall on y 0 and y 20 - never in it.
+    expect(at(-9).length).toBeGreaterThan(1);
+    expect(at(20)).toEqual(at(-9));
+  });
+
+  it('leaves two faces too far apart to be a wall to themselves', () => {
+    // A room is not a pour with two sides; each wall of it is.
+    const room = planSketchFillAll(
+      [path([[0, 0], [400, 0]]), inward(path([[0, 400], [400, 400]]))],
+      spec(),
+      materials,
+    );
+    expect(room.pieces.length).toBeGreaterThan(0);
+    expect(clashes(room.pieces)).toHaveLength(0);
   });
 });
 

@@ -44,8 +44,8 @@ import {
 } from '../lib/sketch';
 import {
   legDir,
-  planSketchFill,
   planSketchFillAll,
+  wallFaces,
   type SketchFillSpec,
 } from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
@@ -1135,59 +1135,25 @@ export const useEditorStore = create<EditorState>()(
         generateWallRun: (spec) => {
           const state = get();
           /**
-           * A wall is two faces, so it is two lines.
-           *
-           * The typed thickness is spent here and nowhere else: it sets how far
-           * apart the two lines go. Each is then filled by the same generator a
-           * hand-drawn line is, standing its panels on the side facing away
-           * from the pour - the near face's outward is the left of travel, the
-           * far face's is the right.
+           * A wall is two faces, so it is two lines - and they are filled in one
+           * call rather than one each, which is what lets the generator see them
+           * as the two sides of a pour and panel them to match.
            */
-          const half = spec.thickness / 2;
-          const mid = spec.originY + half;
-          const faces: Array<{ path: SketchPath; flip: boolean }> = [
-            {
-              path: {
-                id: uid('sk'),
-                points: [
-                  { x: spec.originX, y: mid - half },
-                  { x: spec.originX + spec.length, y: mid - half },
-                ],
-              },
-              flip: false,
-            },
-            {
-              path: {
-                id: uid('sk'),
-                points: [
-                  { x: spec.originX, y: mid + half },
-                  { x: spec.originX + spec.length, y: mid + half },
-                ],
-              },
-              flip: true,
-            },
-          ];
-
-          const pieces: Piece[] = [];
-          const warnings: string[] = [];
-          for (const face of faces) {
-            const plan = planSketchFill(
-              face.path,
-              { height: spec.height, flip: face.flip, includeCorners: true },
-              state.materials,
-            );
-            pieces.push(...plan.pieces);
-            warnings.push(...plan.warnings);
-          }
-          if (!pieces.length) return { added: 0, warnings: [...new Set(warnings)] };
+          const faces = wallFaces(spec);
+          const plan = planSketchFillAll(
+            faces,
+            { height: spec.height, includeCorners: true },
+            state.materials,
+          );
+          if (!plan.pieces.length) return { added: 0, warnings: plan.warnings };
 
           commit((s) => ({
-            sketch: [...s.sketch, ...faces.map((f) => f.path)],
-            pieces: [...s.pieces, ...pieces],
-            selectedIds: pieces.map((p) => p.id),
+            sketch: [...s.sketch, ...faces],
+            pieces: [...s.pieces, ...plan.pieces],
+            selectedIds: plan.pieces.map((p) => p.id),
             selectedSketchIds: [],
           }));
-          return { added: pieces.length, warnings: [...new Set(warnings)] };
+          return { added: plan.pieces.length, warnings: plan.warnings };
         },
 
         insertPieces: (incoming) => {

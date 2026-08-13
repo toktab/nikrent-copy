@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { dropOrigin } from '../lib/geometry';
 import type { WallRunSpec } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
-import { planSketchFill } from '../lib/sketchFill';
+import { planSketchFillAll, wallFaces } from '../lib/sketchFill';
 import { Modal } from './Modal';
 
 /**
@@ -52,35 +52,10 @@ export function WallWizardDialog() {
   // that will place it, so the count on the button is the count you get.
   const plan = useMemo(() => {
     if (errors.length) return null;
-    // Two faces, the thickness apart, each filled outward - the same two the
-    // store will build, so the count on the button is the count you get.
-    const half = spec.thickness / 2;
-    const mid = spec.originY + half;
-    const run = (y: number, flip: boolean) =>
-      planSketchFill(
-        {
-          id: 'preview',
-          points: [
-            { x: spec.originX, y },
-            { x: spec.originX + spec.length, y },
-          ],
-        },
-        { height: spec.height, flip, includeCorners: true },
-        materials,
-      );
-    // The near face stands up and away; the far face down and away.
-    const near = run(mid - half, false);
-    const far = run(mid + half, true);
-    return {
-      pieces: [...near.pieces, ...far.pieces],
-      warnings: [...new Set([...near.warnings, ...far.warnings])],
-      summary: {
-        ...near.summary,
-        panels: near.summary.panels + far.summary.panels,
-        fillers: near.summary.fillers + far.summary.fillers,
-        corners: near.summary.corners + far.summary.corners,
-      },
-    };
+    // Two faces, the thickness apart, filled TOGETHER - the same call the store
+    // will make, so the count on the button is the count you get, and the two
+    // sides are panelled to match each other.
+    return planSketchFillAll(wallFaces(spec), { height: spec.height, includeCorners: true }, materials);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec, materials, errors.length]);
 

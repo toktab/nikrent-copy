@@ -83,7 +83,10 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       <p className="hint-note" style={{ marginTop: 0 }}>
         დახაზული ხაზი ბეტონის <b>კიდეა</b> - პანელები ყოველთვის ბეტონის გარეთა მხარეს
         დგება, მხარეს კი ხაზის პერიმეტრი განსაზღვრავს: <b>{perimeters}</b>.
-        {paths.length > 1 ? ` მონიშნულია ${paths.length} ხაზი. ` : ' '}
+        {paths.length > 1
+          ? ` მონიშნულია ${paths.length} ხაზი - ერთი კედლის ორივე მხარე ერთნაირი
+             პანელებით, ერთმანეთის პირისპირ აეწყობა. `
+          : ' '}
         სიგრძე ნახაზიდან იკითხება:{' '}
         <b>{Math.round(paths.reduce((sum, p) => sum + pathLength(p), 0))} სმ</b>
         {plan && plan.summary.turns > 0 ? ` · ${plan.summary.turns} კუთხე` : ''}.
@@ -139,8 +142,8 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
           <p className="hint-note">
             {plan.summary.courses} რიგი · {plan.summary.runLength} სმ კედელი.
             {plan.summary.openCorners > 0 &&
-              ` გარე კუთხე ღიად რჩება (${plan.summary.openCorners} ცალი, თითო მხარეს 20 სმ) -
-                მის დახურვას ოსტატი ადგილზე წყვეტს.`}{' '}
+              ` გარე კუთხე ღიად რჩება (${plan.summary.openCorners} ცალი, თითო მხარეს
+                სულ მცირე 20 სმ) - მის დახურვას ოსტატი ადგილზე წყვეტს.`}{' '}
             ვოლერები, ჭანჭიკები და საყრდენები აქ არ ითვლება - ისინი ობიექტზე განისაზღვრება.
           </p>
         </div>
