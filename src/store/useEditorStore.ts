@@ -1129,7 +1129,7 @@ export const useEditorStore = create<EditorState>()(
            */
           const half = spec.thickness / 2;
           const mid = spec.originY + half;
-          const faces: Array<{ path: SketchPath; side: 1 | -1 }> = [
+          const faces: Array<{ path: SketchPath; flip: boolean }> = [
             {
               path: {
                 id: uid('sk'),
@@ -1138,7 +1138,7 @@ export const useEditorStore = create<EditorState>()(
                   { x: spec.originX + spec.length, y: mid - half },
                 ],
               },
-              side: 1,
+              flip: false,
             },
             {
               path: {
@@ -1148,7 +1148,7 @@ export const useEditorStore = create<EditorState>()(
                   { x: spec.originX + spec.length, y: mid + half },
                 ],
               },
-              side: -1,
+              flip: true,
             },
           ];
 
@@ -1157,7 +1157,7 @@ export const useEditorStore = create<EditorState>()(
           for (const face of faces) {
             const plan = planSketchFill(
               face.path,
-              { height: spec.height, side: face.side, includeCorners: true },
+              { height: spec.height, flip: face.flip, includeCorners: true },
               state.materials,
             );
             pieces.push(...plan.pieces);

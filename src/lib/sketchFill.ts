@@ -49,13 +49,13 @@ export interface SketchFillSpec {
   /** pour height in cm */
   height: number;
   /**
-   * Which side of the line the panels stand on: +1 is the left of travel.
+   * Put the panels on the other side than the one worked out from the shape.
    *
-   * A line has two sides and no opinion about which is the concrete, so this
-   * cannot be worked out — it has to be said. Left of travel is the default
-   * only because it has to be something.
+   * The side is normally decided by the run itself — see `outwardSide` — so
+   * this is only for the cases where a line genuinely has no outside, or where
+   * the concrete turns out to be on the far side of what was drawn.
    */
-  side: 1 | -1;
+  flip?: boolean;
   /** close the corners with profiles instead of butting the panels */
   includeCorners: boolean;
 }
@@ -114,6 +114,33 @@ export function leftNormal(d: Point): Point {
  */
 export function turnSign(dPrev: Point, dNext: Point): number {
   return dPrev.x * dNext.y - dPrev.y * dNext.x;
+}
+
+/**
+ * The side of a run that faces away from what it wraps around.
+ *
+ * Formwork stands on the OUTSIDE of the pour, always, and which side that is
+ * belongs to the shape rather than to the person drawing it. Taking it as a
+ * setting meant the panels landed inside or outside depending on whether a run
+ * happened to be drawn left-to-right, which is not a decision anybody made.
+ *
+ * The shoelace sum answers it. Reversing a run flips the sum AND flips left
+ * from right, so the two cancel and the same physical side comes out either
+ * way. Positive is clockwise on screen — y counts downward here — and a
+ * clockwise run holds its ground on the right, so its outside is the left.
+ *
+ * A straight line encloses nothing and has no outside; it falls back to the
+ * left of travel, and `flip` is there for when that guesses wrong.
+ */
+export function outwardSide(path: SketchPath): 1 | -1 {
+  const pts = path.points;
+  let twiceArea = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    twiceArea += a.x * b.y - b.x * a.y;
+  }
+  return twiceArea < 0 ? -1 : 1;
 }
 
 /** One vertex of the offset line: where the two offset legs cross. */
@@ -262,7 +289,7 @@ export function planSketchFill(
   const courseCount = Math.max(1, courses.length);
   const courseHeight = courses[0] ?? Math.min(...heights);
   const panelDepth = panelDepthFor(optionsAt(materials, 'panel', courseHeight));
-  const side = spec.side;
+  const side: 1 | -1 = spec.flip ? ((outwardSide(path) * -1) as 1 | -1) : outwardSide(path);
 
   // ── The layout, read once ─────────────────────────────────────────────────
   const dirs: Point[] = [];

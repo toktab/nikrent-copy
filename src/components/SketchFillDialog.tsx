@@ -21,18 +21,18 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
 
   const [height, setHeight] = useState('300');
   const [includeCorners, setIncludeCorners] = useState(true);
-  /** Which side of the line the panels stand on. A line has no opinion. */
-  const [side, setSide] = useState<1 | -1>(1);
+  /** The side is read off the run's shape; this is the override. */
+  const [flip, setFlip] = useState(false);
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
   const spec: SketchFillSpec = useMemo(
     () => ({
       height: n(height),
-      side,
+      flip,
       includeCorners,
     }),
-    [height, side, includeCorners],
+    [height, flip, includeCorners],
   );
 
   const errors: string[] = [];
@@ -76,7 +76,7 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        დახაზული ხაზი ბეტონის <b>კიდეა</b> - პანელები მის გარეთა მხარეს დგება.
+        დახაზული ხაზი ბეტონის <b>კიდეა</b> - პანელები ყოველთვის გარეთა მხარეს დგება.
         {paths.length > 1 ? ` მონიშნულია ${paths.length} ხაზი. ` : ' '}
         სიგრძე ნახაზიდან იკითხება:{' '}
         <b>{Math.round(paths.reduce((sum, p) => sum + pathLength(p), 0))} სმ</b>
@@ -100,8 +100,8 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
         <label className="check-row">
           <input
             type="checkbox"
-            checked={side === -1}
-            onChange={(e) => setSide(e.target.checked ? -1 : 1)}
+            checked={flip}
+            onChange={(e) => setFlip(e.target.checked)}
           />
           <span title="პანელები ხაზის მეორე მხარეს დადგება">მეორე მხარეს</span>
         </label>

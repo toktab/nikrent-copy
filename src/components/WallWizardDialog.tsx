@@ -56,7 +56,7 @@ export function WallWizardDialog() {
     // store will build, so the count on the button is the count you get.
     const half = spec.thickness / 2;
     const mid = spec.originY + half;
-    const run = (y: number, side: 1 | -1) =>
+    const run = (y: number, flip: boolean) =>
       planSketchFill(
         {
           id: 'preview',
@@ -65,11 +65,12 @@ export function WallWizardDialog() {
             { x: spec.originX + spec.length, y },
           ],
         },
-        { height: spec.height, side, includeCorners: true },
+        { height: spec.height, flip, includeCorners: true },
         materials,
       );
-    const near = run(mid - half, 1);
-    const far = run(mid + half, -1);
+    // The near face stands up and away; the far face down and away.
+    const near = run(mid - half, false);
+    const far = run(mid + half, true);
     return {
       pieces: [...near.pieces, ...far.pieces],
       warnings: [...new Set([...near.warnings, ...far.warnings])],

@@ -8,6 +8,7 @@ import {
   legDir,
   leftNormal,
   offsetPath,
+  outwardSide,
   planSketchFill,
   turnSign,
   type SketchFillSpec,
@@ -24,7 +25,6 @@ const path = (points: Array<[number, number]>, closed = false): SketchPath => ({
 
 const spec = (over: Partial<SketchFillSpec> = {}): SketchFillSpec => ({
   height: 300,
-  side: 1,
   includeCorners: true,
   ...over,
 });
@@ -199,7 +199,7 @@ describe('planSketchFill', () => {
     });
 
     it('puts them on the other side when told to', () => {
-      const plan = planSketchFill(line, spec({ side: -1 }), materials);
+      const plan = planSketchFill(line, spec({ flip: true }), materials);
       const faces = ofCategory(plan.pieces, 'panel', 'filler');
       const tops = new Set(faces.map((p) => pieceBounds(p, materialOf(p)).y));
       expect(tops).toEqual(new Set([0]));
@@ -208,7 +208,7 @@ describe('planSketchFill', () => {
     it('never crosses onto the concrete', () => {
       expect(crossesLine(planSketchFill(line, spec(), materials).pieces, line, 1)).toHaveLength(0);
       expect(
-        crossesLine(planSketchFill(line, spec({ side: -1 }), materials).pieces, line, -1),
+        crossesLine(planSketchFill(line, spec({ flip: true }), materials).pieces, line, -1),
       ).toHaveLength(0);
     });
 
@@ -237,8 +237,8 @@ describe('planSketchFill', () => {
     });
 
     it('takes the outer profile one way round and the inner the other', () => {
-      const left = planSketchFill(corner, spec({ side: 1 }), materials);
-      const right = planSketchFill(corner, spec({ side: -1 }), materials);
+      const left = planSketchFill(corner, spec(), materials);
+      const right = planSketchFill(corner, spec({ flip: true }), materials);
       const nameOf = (p: ReturnType<typeof planSketchFill>) =>
         materialOf(ofCategory(p.pieces, 'corner')[0]).name;
       expect(nameOf(left)).toContain('გარე');
@@ -246,10 +246,10 @@ describe('planSketchFill', () => {
     });
 
     it('never orders two pieces for the same spot', () => {
-      for (const sd of [1, -1] as const) {
-        expect(clashes(planSketchFill(corner, spec({ side: sd }), materials).pieces)).toHaveLength(0);
+      for (const sd of [false, true] as const) {
+        expect(clashes(planSketchFill(corner, spec({ flip: sd }), materials).pieces)).toHaveLength(0);
         expect(
-          clashes(planSketchFill(corner, spec({ side: sd, includeCorners: false }), materials).pieces),
+          clashes(planSketchFill(corner, spec({ flip: sd, includeCorners: false }), materials).pieces),
         ).toHaveLength(0);
       }
     });
@@ -342,5 +342,55 @@ describe('a leg short enough that its two corners nearly meet', () => {
       return [{ ...pieceBounds(p, m), heightCm: m.h, bands: faceBands(pieceBounds(p, m), m, p.rot, false) }];
     });
     expect(allGaps(rects).some((g) => Math.abs(g.size - 10) < 0.5)).toBe(false);
+  });
+});
+
+describe('which side is outside', () => {
+  const L = path([[0, 0], [300, 0], [300, 300]]);
+  const reversed = path([[300, 300], [300, 0], [0, 0]]);
+
+  /**
+   * The side belongs to the shape, not to the person drawing it.
+   *
+   * When it was a setting, the panels landed inside or outside depending on
+   * whether a run happened to be drawn left-to-right - which is not a decision
+   * anybody made, and put half a layout's formwork in the pour.
+   */
+  it('comes out the same however the run was drawn', () => {
+    expect(outwardSide(L)).toBe(1);
+    expect(outwardSide(reversed)).toBe(-1);
+
+    const geometry = (p: SketchPath) =>
+      planSketchFill(p, spec(), materials)
+        .pieces.map((q) => {
+          const b = pieceBounds(q, materialOf(q));
+          return `${materialOf(q).name}@${b.x},${b.y}`;
+        })
+        .sort();
+
+    // Opposite windings, opposite normals - and the same formwork on the ground.
+    expect(geometry(reversed)).toEqual(geometry(L));
+  });
+
+  it('puts a room\'s formwork outside it, drawn either way', () => {
+    const clockwise = path([[0, 0], [400, 0], [400, 300], [0, 300]], true);
+    const anti = path([[0, 300], [400, 300], [400, 0], [0, 0]], true);
+    for (const room of [clockwise, anti]) {
+      const plan = planSketchFill(room, spec(), materials);
+      for (const q of ofCategory(plan.pieces, 'panel', 'filler')) {
+        const b = pieceBounds(q, materialOf(q));
+        const inside =
+          b.x > 0.01 && b.y > 0.01 && b.x + b.w < 399.99 && b.y + b.h < 299.99;
+        expect(inside).toBe(false);
+      }
+    }
+  });
+
+  it('still lets the side be overridden, for a line with no outside', () => {
+    const line = path([[0, 0], [300, 0]]);
+    const up = planSketchFill(line, spec(), materials);
+    const down = planSketchFill(line, spec({ flip: true }), materials);
+    expect(pieceBounds(up.pieces[0], materialOf(up.pieces[0])).y).toBe(-9);
+    expect(pieceBounds(down.pieces[0], materialOf(down.pieces[0])).y).toBe(0);
   });
 });
