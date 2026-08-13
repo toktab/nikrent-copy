@@ -537,8 +537,9 @@ export function sidesFromNeighbours(
  * length is given to the hole. What is left is the same run on both faces, laid
  * from the same end, which comes out as the same panels facing each other.
  */
-function pairFaces(runs: FaceRun[]): void {
+function pairFaces(runs: FaceRun[]): Array<{ a: FaceRun; b: FaceRun }> {
   const paired = new Set<number>();
+  const pairs: Array<{ a: FaceRun; b: FaceRun }> = [];
 
   for (let i = 0; i < runs.length; i++) {
     if (paired.has(i)) continue;
@@ -585,10 +586,36 @@ function pairFaces(runs: FaceRun[]): void {
       if (agreeEnds(a, runs[c.j], c.thickness)) {
         paired.add(i);
         paired.add(c.j);
+        pairs.push({ a, b: runs[c.j] });
         break;
       }
     }
   }
+  return pairs;
+}
+
+/**
+ * The legs that close the END of a pour rather than face it.
+ *
+ * A wall drawn all the way round stops with a short leg spanning from one face
+ * to the other. It is not a third face — it is the end of the pour, and how it
+ * is shut is the same kind of decision as an outside corner: lap a panel past,
+ * batten it, or leave it to the next pour. So nothing is placed on it and its
+ * whole length is reported open, which also stops the tool ordering a 10 cm
+ * strip and two 5 cm ones for a hole nobody asked it to close.
+ *
+ * A leg is one of these when it runs across a pour rather than along it: it is
+ * perpendicular to a matched pair of faces and lies wholly within the band of
+ * concrete between them.
+ */
+function closesAnEnd(run: FaceRun, pairs: Array<{ a: FaceRun; b: FaceRun }>): boolean {
+  return pairs.some(({ a, b }) => {
+    if (a.across === run.across) return false;
+    if (Math.abs(a.elevation - run.elevation) > 0.01) return false;
+    const near = Math.min(a.at, b.at);
+    const far = Math.max(a.at, b.at);
+    return run.lo >= near - 0.01 && run.hi <= far + 0.01;
+  });
 }
 
 /**
@@ -1134,9 +1161,23 @@ export function planSketchFillAll(
   // Every face of every line is on the table before any of it is built, which
   // is what makes the two sides of a wall visible to each other.
   const runs = jobs.flatMap((job) => job.runs);
-  pairFaces(runs);
+  const pairs = pairFaces(runs);
 
   for (const run of runs) {
+    if (closesAnEnd(run, pairs)) {
+      // The whole leg, corner set-backs included: nothing stands anywhere on
+      // it, so the hole reported is the length that was drawn.
+      const at = run.at + (run.outward > 0 ? run.depth : -run.depth) / 2;
+      const from = run.lo - run.openLo;
+      const to = run.hi + run.openHi;
+      openings.push({
+        x: run.across ? (from + to) / 2 : at,
+        y: run.across ? at : (from + to) / 2,
+        cm: Math.round((to - from) * 10) / 10,
+        kind: 'corner',
+      });
+      continue;
+    }
     const laid = layRun(run);
     pieces.push(...laid.pieces);
     openings.push(...laid.openings);
