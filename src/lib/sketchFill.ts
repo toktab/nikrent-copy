@@ -605,22 +605,27 @@ function agreeEnds(a: FaceRun, b: FaceRun, thickness: number): boolean {
   const hi = Math.min(a.hi, b.hi);
   if (hi - lo <= 0.01) return false;
 
+  /**
+   * How much each end may give, and nothing about which end it is.
+   *
+   * It used to also require the end to be an outside corner — the one place
+   * nothing had been decided — and refuse the pair otherwise. That is the
+   * wrong way round. A refused pair does not leave the wall alone: it leaves
+   * each face fitted to its OWN length, which is two different sets of panels
+   * facing each other across the pour and rods that reach nothing. Matching
+   * the two faces is the requirement; where the ends sit is a detail.
+   *
+   * So any end may give way now, and the only limit is how far. The only
+   * honest reason the two faces of a wall differ in length is the corner, and
+   * a corner costs a face the thickness of the pour. Beyond that they are not
+   * one wall and must not be dragged together: unbounded, this quietly
+   * shortened a five-metre face to the thirty centimetres it shared with a
+   * wall across a corridor and ordered two panels for it.
+   *
+   * What a giving end leaves behind is reported, below, as the hole it is.
+   */
   const canMeet = (run: FaceRun) =>
-    (run.trimLo || Math.abs(run.lo - lo) < 0.01) &&
-    (run.trimHi || Math.abs(run.hi - hi) < 0.01) &&
-    /**
-     * And there is a limit to how much it may give.
-     *
-     * The only honest reason the two faces of a wall differ in length is the
-     * corner, and a corner costs a face the thickness of the pour. Anything
-     * beyond that is not a corner, it is wall being thrown away: unbounded,
-     * this quietly shortened a five-metre face to the thirty centimetres it
-     * happened to share with a wall on the other side of a corridor, ordered
-     * two panels for it, and reported the missing four and a half metres as
-     * an "outside corner the builder closes".
-     */
-    lo - run.lo <= thickness + 0.01 &&
-    run.hi - hi <= thickness + 0.01;
+    lo - run.lo <= thickness + 0.01 && run.hi - hi <= thickness + 0.01;
   if (!canMeet(a) || !canMeet(b)) return false;
 
   const holdLo = Math.max(a.holdLo, b.holdLo);

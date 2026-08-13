@@ -562,6 +562,42 @@ describe('what is left to fill', () => {
   });
 });
 
+/**
+ * The staircase off the drawing, kept because it is the shape that would not
+ * match: three legs, 30 cm thick, one face longer at one corner and shorter at
+ * the other. The two faces used to come out 90 + 45 against 90 + 30 + 5.
+ */
+describe('a staircase wall, drawn as its two faces', () => {
+  const near = path([[175, 0], [0, 0], [0, 100], [-55, 100]]);
+  const far = path([[175, 30], [30, 30], [30, 130], [-55, 130]]);
+  const plan = planSketchFillAll([near, far], spec(), materials);
+
+  /** Panel widths and where they start, on the face standing at `top`. */
+  const face = (top: number) =>
+    ofCategory(plan.pieces, 'panel', 'filler')
+      .map((p) => ({ m: materialOf(p), b: pieceBounds(p, materialOf(p)) }))
+      .filter((p) => Math.abs(p.b.y - top) < 0.01)
+      .map((p) => `${p.m.w}@${Math.round(p.b.x)}`)
+      .sort();
+
+  it('panels the two faces identically, opposite each other', () => {
+    expect(face(-9).length).toBeGreaterThan(1);
+    expect(face(30)).toEqual(face(-9));
+  });
+
+  it('keeps every piece out of the pour and clear of the others', () => {
+    expect(clashes(plan.pieces)).toHaveLength(0);
+  });
+
+  it('reports the corners it left open rather than quietly losing them', () => {
+    expect(plan.openings.length).toBeGreaterThan(0);
+    expect(plan.openings.every((o) => o.cm > 0 && Number.isFinite(o.cm))).toBe(true);
+    expect(plan.summary.openCm).toBe(
+      Math.round(plan.openings.reduce((sum, o) => sum + o.cm, 0)),
+    );
+  });
+});
+
 describe('which side is outside', () => {
   const L = path([[0, 0], [300, 0], [300, 300]]);
   const reversed = path([[300, 300], [300, 0], [0, 0]]);
