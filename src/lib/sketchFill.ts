@@ -1,6 +1,6 @@
 import type { Material, Piece, SketchPath, WallRunSpec } from '../types';
 import { uid } from './ids';
-import { planH, planW } from './geometry';
+import { planH, planW, rotatedExtent } from './geometry';
 import {
   coverExact,
   coverFace,
@@ -317,11 +317,15 @@ function innerCorner(
 }
 
 /**
- * Which way to turn an L so its solid legs lie in the panel planes.
+ * Which way to turn an L so its notch faces the corner it wraps.
  *
  * `diag` points from the corner out into open air — the side the panels are
  * on. An L is drawn with its legs on the left and the bottom, notch facing up
  * and right, so it is already correct where the air is down and to the left.
+ *
+ * That is the OUTER profile's orientation, which wraps a corner from outside.
+ * An inner profile stands in the notch instead and wants the opposite, which
+ * is why its one call site adds half a turn rather than this returning it.
  */
 function cornerRot(diag: Point): number {
   if (diag.x < 0) return diag.y > 0 ? 0 : 90;
@@ -382,6 +386,143 @@ interface FaceRun {
 const MAX_WALL_CM = 120;
 
 /**
+ * How far apart two faces can be and still be read as facing each other.
+ *
+ * Deliberately looser than `MAX_WALL_CM`: knowing which way a face looks is
+ * worth doing for a 180 cm core wall or a raft edge even when the two sides are
+ * too far apart to be panelled as a matched pair. What keeps it honest is that
+ * every leg listens to its NEAREST neighbour only — in a room the far wall is
+ * within reach as well, and it would vote the wrong way, but the near face of
+ * the same wall is always closer.
+ */
+const MAX_FACING_CM = 300;
+
+/** One leg of one face, before anything has decided which way it looks. */
+interface FaceLine {
+  /** true when the leg travels along x */
+  across: boolean;
+  /** the leg's coordinate on the other axis */
+  at: number;
+  lo: number;
+  hi: number;
+  /** which way off the line the panels point when the path's side is +1 */
+  outAtPlus: 1 | -1;
+}
+
+function faceLines(path: SketchPath): FaceLine[] {
+  const pts = path.points;
+  const n = pts.length;
+  if (n < 2) return [];
+  const legs = !!path.closed && n > 2 ? n : n - 1;
+  const out: FaceLine[] = [];
+  for (let j = 0; j < legs; j++) {
+    const a = pts[j];
+    const b = pts[(j + 1) % n];
+    const d = legDir(a, b);
+    const across = d.x !== 0;
+    const nrm = leftNormal(d);
+    const from = across ? a.x : a.y;
+    const to = across ? b.x : b.y;
+    out.push({
+      across,
+      at: across ? a.y : a.x,
+      lo: Math.min(from, to),
+      hi: Math.max(from, to),
+      outAtPlus: (across ? nrm.y : nrm.x) > 0 ? 1 : -1,
+    });
+  }
+  return out;
+}
+
+/**
+ * Which side each drawn line's panels stand on, decided by its neighbours.
+ *
+ * `outwardSide` reads the shape, and the shape cannot answer this on its own:
+ * an L drawn for a wall's outer face and an L drawn for its inner face are the
+ * same six numbers, which is why the pen asks. But when both faces are on the
+ * drawing the question is already answered, by the drawing. Two parallel legs
+ * closer together than a wall is thick have the POUR between them — nothing
+ * else is in there — so each of them faces away from the other, and no flag
+ * and no memory of which mode the pen was in comes into it.
+ *
+ * Only legs of DIFFERENT lines vote. Two opposite legs of one line are the
+ * genuinely ambiguous case — a narrow column has its pour between them, a lift
+ * shaft has its void — and that is exactly what `perimeter` is for.
+ *
+ * Each leg listens to its NEAREST facing neighbour. In a small room the far
+ * wall is within reach too, and it would vote the wrong way; the wall right in
+ * front is the one that knows.
+ *
+ * The vote is taken per line, not per leg, because a face is one side of a pour
+ * for its whole length and the corner treatment is derived from the same
+ * answer. Where there is no neighbour at all — a wall with one face drawn, a
+ * lone outline — nothing votes and the shape and the flag decide as before.
+ */
+export function sidesFromNeighbours(
+  paths: SketchPath[],
+  spec: SketchFillSpec,
+): Array<1 | -1> {
+  const runs = paths.map((path) => cornersOnly(path));
+  const legs = runs.map((run) => faceLines(run));
+  // By position rather than by id: nothing here needs a name, and a caller that
+  // hands the same line in twice should get two answers, not one.
+  const sides: Array<1 | -1> = [];
+
+  runs.forEach((run, i) => {
+    const guess: 1 | -1 = spec.flip
+      ? ((outwardSide(run) * -1) as 1 | -1)
+      : outwardSide(run);
+    sides[i] = guess;
+
+    /**
+     * `flip` is the escape hatch and has to stay absolute or it is not one.
+     * Everything else the neighbours may overrule, including an explicit
+     * `perimeter`.
+     *
+     * That is not disrespect for what the user said — it is that the winding
+     * the flag modifies is itself unreliable on the shapes people draw. A Z or
+     * a staircase encloses almost nothing, so its shoelace sum is a small
+     * number whose SIGN turns on the proportions: two lines that are exact
+     * parallel offsets of each other, one wall drawn as its two faces, came
+     * out at −2975 and +14875 and were handed opposite answers. A neighbouring
+     * face fifteen centimetres away is hard evidence and the winding of an
+     * open zigzag is not, so where both exist the evidence wins.
+     */
+    if (spec.flip) return;
+
+    let agree = 0;
+    let against = 0;
+
+    for (const leg of legs[i]) {
+      let nearest: FaceLine | null = null;
+      let gap = MAX_FACING_CM;
+      for (let k = 0; k < runs.length; k++) {
+        if (k === i) continue;
+        for (const other of legs[k]) {
+          if (other.across !== leg.across) continue;
+          const apart = Math.abs(other.at - leg.at);
+          if (apart <= 0.01 || apart > gap) continue;
+          // Facing each other means sharing some length, not merely being
+          // parallel: two walls end to end are not two sides of one pour.
+          if (Math.min(leg.hi, other.hi) - Math.max(leg.lo, other.lo) <= 0.01) continue;
+          gap = apart;
+          nearest = other;
+        }
+      }
+      if (!nearest) continue;
+      // Away from the concrete, and the concrete is what is between them.
+      const wanted: 1 | -1 = nearest.at > leg.at ? -1 : 1;
+      if (leg.outAtPlus * guess === wanted) agree++;
+      else against++;
+    }
+
+    if (against > agree) sides[i] = (guess * -1) as 1 | -1;
+  });
+
+  return sides;
+}
+
+/**
  * Give the two faces of a wall the same panels, opposite each other.
  *
  * Tie rods pass through the pour, so a panel on one face needs a panel on the
@@ -402,13 +543,13 @@ function pairFaces(runs: FaceRun[]): void {
   for (let i = 0; i < runs.length; i++) {
     if (paired.has(i)) continue;
     const a = runs[i];
-    let best = -1;
-    let widest = 0;
+    const candidates: Array<{ j: number; thickness: number; overlap: number }> = [];
 
     for (let j = i + 1; j < runs.length; j++) {
       if (paired.has(j)) continue;
       const b = runs[j];
-      if (b.across !== a.across || b.elevation !== a.elevation) continue;
+      if (b.across !== a.across) continue;
+      if (Math.abs(b.elevation - a.elevation) > 0.01 || b.depth !== a.depth) continue;
       // The pour has to be BETWEEN them: the near face's panels on the low
       // side, the far face's on the high side, both looking away.
       const near = a.at <= b.at ? a : b;
@@ -417,16 +558,35 @@ function pairFaces(runs: FaceRun[]): void {
       const thickness = far.at - near.at;
       if (thickness <= 0.01 || thickness > MAX_WALL_CM) continue;
 
+      /**
+       * The two faces of one wall run alongside each other the whole way bar
+       * the corners, and a corner costs a face the thickness of the pour. Two
+       * that merely cross for a metre are two different walls passing close
+       * by, and pairing them would drag one of them down to the length of the
+       * crossing.
+       */
       const overlap = Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo);
-      if (overlap > widest) {
-        widest = overlap;
-        best = j;
-      }
+      const longest = Math.max(a.hi - a.lo, b.hi - b.lo);
+      if (overlap < longest - 2 * thickness - 0.01) continue;
+      candidates.push({ j, thickness, overlap });
     }
 
-    if (best >= 0 && agreeEnds(a, runs[best])) {
-      paired.add(i);
-      paired.add(best);
+    /**
+     * Nearest first, and try them in turn.
+     *
+     * Ranking on overlap alone let a face on the far side of a corridor beat
+     * the true partner, because the true partner is routinely the SHORTER of
+     * the two — that is what a corner does to it. And one shot at the best
+     * candidate meant a run that failed to agree was abandoned even with a
+     * good partner sitting second.
+     */
+    candidates.sort((p, q) => p.thickness - q.thickness || q.overlap - p.overlap);
+    for (const c of candidates) {
+      if (agreeEnds(a, runs[c.j], c.thickness)) {
+        paired.add(i);
+        paired.add(c.j);
+        break;
+      }
     }
   }
 }
@@ -440,13 +600,27 @@ function pairFaces(runs: FaceRun[]): void {
  * different lengths they are not a pair after all and each is built to suit
  * itself, which is what happened everywhere before this.
  */
-function agreeEnds(a: FaceRun, b: FaceRun): boolean {
+function agreeEnds(a: FaceRun, b: FaceRun, thickness: number): boolean {
   const lo = Math.max(a.lo, b.lo);
   const hi = Math.min(a.hi, b.hi);
   if (hi - lo <= 0.01) return false;
 
   const canMeet = (run: FaceRun) =>
-    (run.trimLo || Math.abs(run.lo - lo) < 0.01) && (run.trimHi || Math.abs(run.hi - hi) < 0.01);
+    (run.trimLo || Math.abs(run.lo - lo) < 0.01) &&
+    (run.trimHi || Math.abs(run.hi - hi) < 0.01) &&
+    /**
+     * And there is a limit to how much it may give.
+     *
+     * The only honest reason the two faces of a wall differ in length is the
+     * corner, and a corner costs a face the thickness of the pour. Anything
+     * beyond that is not a corner, it is wall being thrown away: unbounded,
+     * this quietly shortened a five-metre face to the thirty centimetres it
+     * happened to share with a wall on the other side of a corridor, ordered
+     * two panels for it, and reported the missing four and a half metres as
+     * an "outside corner the builder closes".
+     */
+    lo - run.lo <= thickness + 0.01 &&
+    run.hi - hi <= thickness + 0.01;
   if (!canMeet(a) || !canMeet(b)) return false;
 
   const holdLo = Math.max(a.holdLo, b.holdLo);
@@ -552,6 +726,8 @@ function layRun(run: FaceRun): {
 interface FaceJob {
   corners: Piece[];
   runs: FaceRun[];
+  /** face this line cannot build at all - see the skipped legs below */
+  openings: Opening[];
   warnings: string[];
   summary: FillPlan['summary'];
 }
@@ -560,13 +736,17 @@ function describeFace(
   path: SketchPath,
   spec: SketchFillSpec,
   materials: Material[],
+  /** worked out across the whole job - see `sidesFromNeighbours` */
+  side: 1 | -1,
 ): FaceJob {
   const warnings: string[] = [];
   const corners: Piece[] = [];
   const runs: FaceRun[] = [];
+  const openings: Opening[] = [];
   const fail = (message: string): FaceJob => ({
     corners: [],
     runs: [],
+    openings: [],
     warnings: [message],
     summary: EMPTY,
   });
@@ -612,8 +792,6 @@ function describeFace(
   const courseCount = Math.max(1, courses.length);
   const courseHeight = courses[0] ?? Math.min(...heights);
   const panelDepth = panelDepthFor(optionsAt(materials, 'panel', courseHeight));
-  const side: 1 | -1 = spec.flip ? ((outwardSide(run) * -1) as 1 | -1) : outwardSide(run);
-
   // ── The layout, read once ─────────────────────────────────────────────────
   const dirs: Point[] = [];
   const lengths: number[] = [];
@@ -663,6 +841,72 @@ function describeFace(
     }
 
     /**
+     * How far this run moves at corner `j`, along its own leg, in cm.
+     * Negative shortens. `leaving` is true for the run that ends there.
+     *
+     * Outside the turn it stops 20 cm short and the corner is left to the
+     * builder. Inside it, the profile is standing and the run stops against
+     * it, both ends alike. Inside it with no profile the two faces have to
+     * close the corner between them, and a face cannot be in two places at
+     * once: exactly one of the two runs gives way by a panel thickness and the
+     * other holds the line. Move both and they overlap by a panel - which is a
+     * panel over-ordered at every corner.
+     *
+     * An open end is where the face simply stops. Nothing closes it: that is a
+     * decision for the person pouring, the same as an outside corner.
+     */
+    const cornerExtend = (j: number, leaving: boolean): number => {
+      if (straightThrough(j)) return 0;
+      if (outsideCorner(j)) return -OUTER_CORNER_GAP;
+      if (inner) return -inner.reach;
+      return leaving ? -panelDepth : 0;
+    };
+
+    const startCornerOf = (j: number) => (closed ? (j - 1 + legCount) % legCount : j - 1);
+    const endCornerOf = (j: number) => (closed ? j : j < legCount - 1 ? j : -1);
+
+    /**
+     * Where each run starts and stops, worked out before anything is placed.
+     *
+     * The corners need this as much as the panels do. A leg is only 20 cm long
+     * and has an inside corner at each end: the two profiles want the same
+     * 20 cm of it and land exactly on top of each other, which is a part
+     * ordered twice and a corner that cannot be built. Knowing which runs
+     * survive is what lets a corner stand down.
+     */
+    const extents: Array<{ startAt: number; endAt: number; reach: number; fits: boolean }> = [];
+    for (let j = 0; j < legCount; j++) {
+      const dir = dirs[j];
+      const across = dir.x !== 0;
+      const from = line[j];
+      const to = line[(j + 1) % n];
+      const startCorner = startCornerOf(j);
+      const endCorner = endCornerOf(j);
+      const startExtend = startCorner >= 0 ? cornerExtend(startCorner, false) : 0;
+      const endExtend = endCorner >= 0 ? cornerExtend(endCorner, true) : 0;
+      const startAt = across ? from.x - dir.x * startExtend : from.y - dir.y * startExtend;
+      const endAt = across ? to.x + dir.x * endExtend : to.y + dir.y * endExtend;
+      /**
+       * A leg its own two corners have eaten, measured ALONG the direction of
+       * travel - and it has to be measured that way. A 25 cm leg giving 20 cm
+       * to a corner at each end ends up with its start 15 cm PAST its end.
+       * Sorting the two into a low and a high, which is what everything
+       * downstream wants, turns that -15 into a +15 and lays panels back
+       * across the corner they were making way for, on top of the profile
+       * standing in it.
+       */
+      const reach = (endAt - startAt) * (across ? dir.x : dir.y);
+      extents.push({ startAt, endAt, reach, fits: reach > 0.01 });
+    }
+
+    /** A corner both of whose legs still have a run to hold it in place. */
+    const cornerFits = (j: number) => {
+      const leaving = extents[j];
+      const arriving = extents[(j + 1) % legCount];
+      return !!leaving?.fits && !!arriving?.fits;
+    };
+
+    /**
      * Inside corners first, panels after.
      *
      * Not just an order in a list: the profile is a fixed part in a fixed
@@ -674,6 +918,12 @@ function describeFace(
      */
     for (let j = 0; j < turnCount; j++) {
       if (straightThrough(j) || outsideCorner(j) || !inner) continue;
+      if (!cornerFits(j)) {
+        warnings.push(
+          `${Math.round(lengths[j])} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა - პანელი აღარ ეტევა.`,
+        );
+        continue;
+      }
 
       // The diagonal out of the corner into open air: the two outward normals
       // added together. They are perpendicular at a corner, so the sum is one
@@ -687,11 +937,15 @@ function describeFace(
       const v = line[(j + 1) % n];
 
       // It stands in the notch, so it starts at the vertex and reaches out
-      // along the diagonal — never back across the line into the pour.
+      // along the diagonal — never back across the line into the pour. The
+      // footprint is measured AFTER the turn: a square profile is the same
+      // either way, but a 20x15 one is 15 wide at a quarter turn and would
+      // otherwise hang five centimetres over the vertex, into the concrete.
       const rot = (cornerRot(diag) + 180) % 360;
+      const box = rotatedExtent(cw, ch, rot);
       const { x, y } = placeAt(
-        diag.x > 0 ? v.x : v.x - cw,
-        diag.y > 0 ? v.y : v.y - ch,
+        diag.x > 0 ? v.x : v.x - box.w,
+        diag.y > 0 ? v.y : v.y - box.h,
         cw,
         ch,
         rot,
@@ -708,49 +962,44 @@ function describeFace(
         const from = line[j];
         const to = line[(j + 1) % n];
 
-        const startCorner = closed ? (j - 1 + legCount) % legCount : j - 1;
-        const endCorner = closed ? j : j < legCount - 1 ? j : -1;
-
-        /**
-         * How far this run moves at corner `j`, along its own leg, in cm.
-         * Negative shortens. `leaving` is true for the run that ends there.
-         *
-         * Outside the turn it stops 20 cm short and the corner is left to the
-         * builder. Inside it, the profile is already standing and the run stops
-         * against it, both ends alike. Inside it with no profile the two faces
-         * have to close the corner between them, and a face cannot be in two
-         * places at once: exactly one of the two runs gives way by a panel
-         * thickness and the other holds the line. Move both and they overlap by
-         * a panel — which is a panel over-ordered at every corner.
-         *
-         * An open end is where the face simply stops. Nothing closes it: that
-         * is a decision for the person pouring, the same as an outside corner.
-         */
-        const cornerExtend = (j: number, leaving: boolean): number => {
-          if (straightThrough(j)) return 0;
-          if (outsideCorner(j)) return -OUTER_CORNER_GAP;
-          if (inner) return -inner.reach;
-          return leaving ? -panelDepth : 0;
-        };
-
-        const startExtend = startCorner >= 0 ? cornerExtend(startCorner, false) : 0;
-        const endExtend = endCorner >= 0 ? cornerExtend(endCorner, true) : 0;
-
-        /**
-         * The run is measured between the OFFSET ends, never between the drawn
-         * ones. A corner moves its offset vertex along the leg as well as
-         * sideways — by half the thickness, in opposite directions on the two
-         * sides — so the face is longer than the leg it follows on the outside
-         * of a turn and shorter on the inside. Sizing it from the drawn length
-         * leaves a gap on one face and drives a panel into the corner profile
-         * on the other.
-         */
-        const startAt = across ? from.x - dir.x * startExtend : from.y - dir.y * startExtend;
-        const endAt = across ? to.x + dir.x * endExtend : to.y + dir.y * endExtend;
+        const startCorner = startCornerOf(j);
+        const endCorner = endCornerOf(j);
+        const { startAt, endAt, fits } = extents[j];
+        if (!fits) {
+          warnings.push(
+            `${Math.round(lengths[j])} სმ მონაკვეთი კუთხეებისთვის ძალიან მოკლეა - პანელი აღარ ეტევა.`,
+          );
+          // Nothing stands along it, so the whole leg is face left open. It is
+          // the shortest legs that go unnoticed and the shortest legs that let
+          // the pour out, so it is reported like any other hole.
+          openings.push({
+            x: (from.x + to.x) / 2,
+            y: (from.y + to.y) / 2,
+            cm: Math.round(lengths[j] * 10) / 10,
+            kind: 'short',
+          });
+          continue;
+        }
 
         // Which side of the line the panels occupy follows the normal.
         const out = leftNormal(dir);
         const outward = across ? side * out.y : side * out.x;
+
+        /**
+         * How much face this run leaves bare beyond one of its ends.
+         *
+         * An outside corner is a hole on purpose. An inside one is normally
+         * filled by the profile standing in it — but a profile beside a leg too
+         * short to hold it stands down, and then the room the run made for it
+         * is a hole like any other. Unreported, it was the one kind of gap that
+         * could reach site as a surprise, because the run had politely stepped
+         * back for something that never arrived.
+         */
+        const bareAt = (corner: number) => {
+          if (corner < 0 || straightThrough(corner)) return 0;
+          if (outsideCorner(corner)) return OUTER_CORNER_GAP;
+          return inner && !cornerFits(corner) ? inner.reach : 0;
+        };
 
         /**
          * Which end is held, and so which end the odd strip lands at. Read off
@@ -774,10 +1023,8 @@ function describeFace(
           // the other side of the pour.
           trimLo: holds(lowEnd) === 0,
           trimHi: holds(highEnd) === 0,
-          // An outside corner is a hole on purpose; an inside one is filled by
-          // the profile and an open end is simply where the pour stops.
-          openLo: holds(lowEnd) === 0 ? OUTER_CORNER_GAP : 0,
-          openHi: holds(highEnd) === 0 ? OUTER_CORNER_GAP : 0,
+          openLo: bareAt(lowEnd),
+          openHi: bareAt(highEnd),
           elevation,
           depth: panelDepth,
           panels: panelOptions,
@@ -793,6 +1040,7 @@ function describeFace(
   return {
     corners,
     runs,
+    openings,
     warnings,
     summary: {
       panels: 0,
@@ -860,9 +1108,14 @@ export function planSketchFillAll(
   const openings: Opening[] = [];
   const summary = { ...EMPTY };
 
-  const jobs = paths.map((path) => describeFace(path, spec, materials));
+  // Which way each line faces is settled across the whole job before any one
+  // of them is planned: a line's neighbour knows the answer better than the
+  // line does — see `sidesFromNeighbours`.
+  const sides = sidesFromNeighbours(paths, spec);
+  const jobs = paths.map((path, i) => describeFace(path, spec, materials, sides[i]));
   for (const job of jobs) {
     pieces.push(...job.corners);
+    openings.push(...job.openings);
     warnings.push(...job.warnings);
     summary.corners += job.summary.corners;
     summary.openCorners += job.summary.openCorners;

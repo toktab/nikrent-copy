@@ -1,7 +1,8 @@
+import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { isHorizontal, legLength, pathLength, segments, type SegmentHit } from '../lib/sketch';
 import type { Point } from '../lib/sketch';
-import { legDir, leftNormal, outwardSide } from '../lib/sketchFill';
+import { legDir, leftNormal, outwardSide, sidesFromNeighbours } from '../lib/sketchFill';
 import type { SketchPath } from '../types';
 
 /**
@@ -35,6 +36,17 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
   const tool = useEditorStore((s) => s.tool);
   const zoom = useEditorStore((s) => s.zoom);
 
+  /**
+   * Which way each line's panels will stand, worked out across the whole
+   * layout rather than line by line - a line's neighbour knows better than the
+   * line does. Resolved with the same function the fill uses, so the ticks
+   * below promise exactly what gets built.
+   */
+  const sides = useMemo(
+    () => sidesFromNeighbours(sketch, { height: 1, includeCorners: true }),
+    [sketch],
+  );
+
   // The pen's target is drawn even on an empty surface: the first vertex is
   // the one that most needs to land on a square, and with nothing else on the
   // drawing there was nothing to render and so nothing to aim with.
@@ -55,10 +67,11 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
       // is picked by proximity in the canvas rather than by hitting it.
       pointerEvents="none"
     >
-      {sketch.map((path) => (
+      {sketch.map((path, i) => (
         <PathShape
           key={path.id}
           path={path}
+          side={sides[i] ?? outwardSide(path)}
           chosen={chosen.has(path.id)}
           hair={hair}
           hover={hover?.pathId === path.id ? hover : null}
@@ -166,12 +179,15 @@ function LegLabel({
 
 function PathShape({
   path,
+  side,
   chosen,
   hair,
   hover,
   part,
 }: {
   path: SketchPath;
+  /** which way the panels will stand, as the fill worked it out */
+  side: 1 | -1;
   chosen: boolean;
   hair: number;
   hover: SegmentHit | null;
@@ -189,15 +205,11 @@ function PathShape({
   const first = path.points[0];
 
   /**
-   * Which side of the line the formwork will stand on.
-   *
-   * Drawn as short ticks off each leg, the way a section arrow is: the one
-   * thing about a line that its coordinates do not record is which face of the
-   * pour it is, and finding out by filling it and looking is a poor way to
-   * ask. Same rule the generator uses, so what is ticked is what gets built.
+   * Which side of the line the formwork will stand on, drawn as short ticks
+   * off each leg the way a section arrow is. The one thing about a line that
+   * its coordinates do not record is which face of the pour it is, and finding
+   * out by filling it and looking is a poor way to ask.
    */
-  const side = outwardSide(path);
-
   return (
     <g className={`sketch-path${chosen ? ' chosen' : ''}${path.perimeter === 'inner' ? ' inner' : ''}`}>
       {legs.map(([a, b], i) => {
