@@ -25,6 +25,11 @@ is short, and it is the thing that is expensive to re-derive from the code.
 Getting it wrong produces formwork standing inside the concrete, which is the
 single most common bug in this project's history.
 
+`docs/STATE-AND-SYNC.md` is the other one worth reading before touching the
+store: two storage modes, why `pieces` is a mirror of the active document, when
+to use `commit` against `apply`, and the rehydration trap that silently drops a
+saved drawing.
+
 ## Where things live
 
 | what | where |
