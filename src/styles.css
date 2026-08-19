@@ -14,6 +14,19 @@
    shortage, read-only — and they were sharing three colours. Conflict and
    shortage now have their own rather than borrowing red.
    ========================================================================== */
+/* The whole palette, and there is no other. Anything not on this list does not
+   exist: three invented names in one session (--border, --surface-sunken,
+   --r-md) shipped as hardcoded fallbacks and quietly went off-theme.
+
+     ground      --bg --surface --panel --panel2 --well --stage --ink
+     lines       --line --line-strong --grid --gridMajor
+     type        --text --muted --text-tertiary
+     meaning     --accent (action) --accent2 (hover) --sel (selection)
+                 --warn (provisional, one job only) --ok --bad --conflict
+                 --shortage --readonly --badBg
+     shape       --r --r-sm --r-lg
+     surfaces    --row1 --row2 --statusbar
+*/
 :root {
   /* neutrals */
   --bg: #1e2228;
@@ -1462,7 +1475,7 @@ input.stock-input.bad {
 .open-list {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--line);
 }
 .open-list ul {
   margin: 4px 0 0;
@@ -1484,8 +1497,8 @@ input.stock-input.bad {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--r-md, 8px);
-  background: var(--surface-sunken, rgba(0, 0, 0, 0.18));
+  border-radius: var(--r-sm);
+  background: var(--well);
 }
 
 /* Leg lengths. Amber while drawing, because a measurement in progress is a
