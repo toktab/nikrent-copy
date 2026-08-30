@@ -2324,7 +2324,7 @@ input.stock-input.bad {
 }
 .det-sidebar-item {
   position: relative;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-bottom: 1px solid #1e2a3a;
   cursor: pointer;
   transition: background 0.1s;
@@ -2335,7 +2335,13 @@ input.stock-input.bad {
 .det-sidebar-item.active {
   background: rgba(112, 166, 245, 0.08);
   border-left: 3px solid #e8c840;
-  padding-left: 13px;
+  padding-left: 11px;
+}
+.det-sidebar-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
 }
 .det-sidebar-item-name {
   font-size: 13px;
@@ -2344,20 +2350,36 @@ input.stock-input.bad {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 20px;
+  min-width: 0;
 }
-.det-sidebar-item-meta {
-  font-size: 10px;
+.det-sidebar-item-desc {
+  margin-top: 2px;
+}
+.det-sidebar-item-desc-text {
+  font-size: 11px;
   color: #666;
-  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.det-sidebar-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #555;
+}
+.det-sidebar-item-time {
+  color: #555;
+  font-variant-numeric: tabular-nums;
+}
+.det-sidebar-item-stats {
+  color: #444;
+  font-variant-numeric: tabular-nums;
+}
 .det-sidebar-item-delete {
-  position: absolute;
-  top: 12px;
-  right: 10px;
+  flex: 0 0 auto;
   width: 18px;
   height: 18px;
   display: flex;
@@ -2377,6 +2399,35 @@ input.stock-input.bad {
 }
 .det-sidebar-item-delete:hover {
   color: var(--bad);
+}
+
+/* Inline editable field for detection sidebar */
+.editable-field {
+  cursor: text;
+  border-radius: 2px;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  transition: background 0.1s;
+  display: inline-block;
+  max-width: 100%;
+}
+.editable-field:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.editable-placeholder {
+  color: #444;
+  font-style: italic;
+}
+.editable-input {
+  background: #0a0e14;
+  border: 1px solid #e8c840;
+  border-radius: 2px;
+  color: #e0e0e0;
+  padding: 1px 4px;
+  font-size: inherit;
+  font-family: inherit;
+  width: 100%;
+  outline: none;
 }
 
 /* Red arrow toggle button on sidebar edge */

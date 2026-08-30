@@ -38,6 +38,16 @@ function saveHistory(entries: HistoryEntry[]): void {
   } catch { /* quota */ }
 }
 
+/** Format a timestamp for the sidebar. */
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getFullYear()}.${mm}.${dd} ${hh}:${mi}`;
+}
+
 /* ── ReadOnlyPiece: yellow outline style matching mockup ── */
 
 function ReadOnlyPiece({ piece, w, h, zoom }: { piece: Piece; w: number; h: number; zoom: number }) {
@@ -467,6 +477,50 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
 
 /* ── Main page ── */
 
+/** Editable inline field — click to edit, blur/Enter to save. */
+function EditableField({
+  value,
+  placeholder,
+  className,
+  onCommit,
+}: {
+  value: string;
+  placeholder?: string;
+  className?: string;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => setDraft(value), [value]);
+
+  if (!editing) {
+    return (
+      <span
+        className={`${className ?? ''} editable-field`}
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        title="Click to edit"
+      >
+        {value || <span className="editable-placeholder">{placeholder ?? '—'}</span>}
+      </span>
+    );
+  }
+  return (
+    <input
+      className={`${className ?? ''} editable-input`}
+      value={draft}
+      placeholder={placeholder}
+      autoFocus
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { setEditing(false); onCommit(draft); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.currentTarget.blur(); }
+        if (e.key === 'Escape') { setDraft(value); setEditing(false); }
+      }}
+    />
+  );
+}
+
 export default function DetectionPage() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
   const [selected, setSelected] = useState<string | null>(null);
@@ -489,6 +543,15 @@ export default function DetectionPage() {
     saveHistory(updated);
     if (selected === id) setSelected(updated[0]?.id ?? null);
   }, [history, selected]);
+
+  /** Update a single field on a history entry. */
+  const updateEntry = useCallback((id: string, patch: Partial<Pick<HistoryEntry, 'name' | 'description'>>) => {
+    setHistory((prev) => {
+      const updated = prev.map((h) => h.id === id ? { ...h, ...patch } : h);
+      saveHistory(updated);
+      return updated;
+    });
+  }, []);
 
   const exportToFile = useCallback(() => {
     if (!active) return;
@@ -521,17 +584,33 @@ export default function DetectionPage() {
                 className={`det-sidebar-item${selected === h.id ? ' active' : ''}`}
                 onClick={() => setSelected(h.id)}
               >
-                <div className="det-sidebar-item-name">{h.name}</div>
-                <div className="det-sidebar-item-meta">
-                  {h.fileName} · {h.pageCount}p · {h.totalColumns}C {h.totalWalls}W
+                <div className="det-sidebar-item-top">
+                  <EditableField
+                    className="det-sidebar-item-name"
+                    value={h.name}
+                    placeholder="Detection"
+                    onCommit={(v) => updateEntry(h.id, { name: v || h.name })}
+                  />
+                  <button
+                    className="det-sidebar-item-delete"
+                    onClick={(e) => { e.stopPropagation(); deleteEntry(h.id); }}
+                    title="Delete"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <button
-                  className="det-sidebar-item-delete"
-                  onClick={(e) => { e.stopPropagation(); deleteEntry(h.id); }}
-                  title="Delete"
-                >
-                  ✕
-                </button>
+                <div className="det-sidebar-item-desc">
+                  <EditableField
+                    className="det-sidebar-item-desc-text"
+                    value={h.description}
+                    placeholder="No description"
+                    onCommit={(v) => updateEntry(h.id, { description: v })}
+                  />
+                </div>
+                <div className="det-sidebar-item-meta">
+                  <span className="det-sidebar-item-time">{fmtTime(h.timestamp)}</span>
+                  <span className="det-sidebar-item-stats">{h.pageCount}p · {h.totalColumns}C {h.totalWalls}W</span>
+                </div>
               </div>
             ))}
           </div>

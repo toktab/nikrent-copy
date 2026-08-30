@@ -7,6 +7,8 @@ import {
   parseCatalogFile,
   parseLayoutFile,
 } from '../lib/catalogFile';
+import { isLegacyBritania, legacyBritaniaToV1, schemaToSketchPaths } from '../lib/detectImport';
+import type { LegacyDetectedDoc } from '../lib/detection/types';
 import { pickFile, readFileAsText } from '../lib/files';
 import { combo, overrideLabel } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
@@ -178,7 +180,40 @@ export function Header() {
     const file = await pickFile('application/json,.json');
     if (!file) return;
     try {
-      const incoming = parseLayoutFile(await readFileAsText(file));
+      const text = await readFileAsText(file);
+      const data = JSON.parse(text);
+
+      // Check if this is a detection JSON (LegacyDetectedDoc) first.
+      if (isLegacyBritania(data)) {
+        const doc = data as LegacyDetectedDoc;
+        const schema = legacyBritaniaToV1(doc, doc.source?.pdf || file.name);
+        const sketchPaths = schemaToSketchPaths(schema);
+        if (!sketchPaths.length) {
+          setToast('დეტექციის ფაილში ელემენტები არ მოიძებნა.');
+          return;
+        }
+        const apply = () => {
+          const prev = useEditorStore.getState().sketch;
+          useEditorStore.setState({ sketch: [...prev, ...sketchPaths] });
+          useEditorStore.getState().fitToContent();
+          setToast(`დეტექციიდან ${sketchPaths.length} მონახაზი ჩაიტვირთა.`);
+        };
+        if (pieces.length || useEditorStore.getState().sketch.length) {
+          openDialog({
+            kind: 'confirm',
+            title: 'დეტექციის იმპორტი',
+            message: `მიმდინარე მონახაზს დაემატება ${sketchPaths.length} ელემენტი დეტექციიდან. გავაგრძელო?`,
+            confirmLabel: 'დამატება',
+            onConfirm: apply,
+          });
+        } else {
+          apply();
+        }
+        return;
+      }
+
+      // Otherwise, try as a layout file.
+      const incoming = parseLayoutFile(text);
       const known = new Set(materials.map((m) => m.id));
       const usable = incoming.filter((p) => known.has(p.materialId));
       const dropped = incoming.length - usable.length;
