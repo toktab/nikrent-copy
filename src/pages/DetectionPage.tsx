@@ -38,9 +38,9 @@ function saveHistory(entries: HistoryEntry[]): void {
   } catch { /* quota */ }
 }
 
-/* ── PieceView (read-only) ── */
+/* ── ReadOnlyPiece: yellow outline style matching mockup ── */
 
-function ReadOnlyPiece({ piece, w, h, color, zoom }: { piece: Piece; w: number; h: number; color: string; zoom: number }) {
+function ReadOnlyPiece({ piece, w, h, zoom }: { piece: Piece; w: number; h: number; zoom: number }) {
   return (
     <div
       className="piece"
@@ -56,10 +56,10 @@ function ReadOnlyPiece({ piece, w, h, color, zoom }: { piece: Piece; w: number; 
         <rect
           width={w}
           height={h}
-          fill={color}
-          stroke="rgba(10,13,17,0.55)"
-          strokeWidth={1 / zoom}
-          rx={1}
+          fill="none"
+          stroke="#e8c840"
+          strokeWidth={2.5 / zoom}
+          rx={0}
         />
       </svg>
     </div>
@@ -98,7 +98,7 @@ function ReadOnlySketchLayer({ sketch, zoom }: { sketch: SketchPath[]; zoom: num
   );
 }
 
-/* ── Canvas: read-only editor-style view ── */
+/* ── Canvas: dark navy background with yellow outline detection ── */
 
 function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -111,7 +111,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   const { pieces, sketch, dimsById } = useMemo(() => {
     const materialByPage: Piece[] = [];
     const sketchByPage: SketchPath[] = [];
-    const dimsMap = new Map<string, { w: number; h: number; color: string }>();
+    const dimsMap = new Map<string, { w: number; h: number }>();
     let xOff = 0;
     const GAP = 100;
     const MARGIN = 40;
@@ -135,7 +135,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
           const h = Math.max(5, col.y1 - col.y0);
           const cx = col.x0 - left + xOff;
           const cy = col.y0 - top;
-          dimsMap.set(id, { w, h, color: '#70a6f5' });
+          dimsMap.set(id, { w, h });
           materialByPage.push({ id, materialId: id, x: cx, y: cy, rot: 0, z: 0 });
         }
 
@@ -145,7 +145,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
           const h = Math.max(3, wall.y1 - wall.y0);
           const cx = wall.x0 - left + xOff;
           const cy = wall.y0 - top;
-          dimsMap.set(id, { w, h, color: '#efa831' });
+          dimsMap.set(id, { w, h });
           materialByPage.push({ id, materialId: id, x: cx, y: cy, rot: 0, z: 0 });
         }
 
@@ -175,7 +175,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
           const id = `det-scol-${pageIdx}-${col.id}`;
           const w = col.widthCm ?? 30;
           const h = col.depthCm ?? 30;
-          dimsMap.set(id, { w, h, color: '#70a6f5' });
+          dimsMap.set(id, { w, h });
           materialByPage.push({ id, materialId: id, x: col.cx - w / 2 - baseX + xOff, y: col.cy - h / 2 - baseY, rot: 0, z: 0 });
         }
 
@@ -186,7 +186,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
           const isVert = wall.rotation === 90;
           const w = isVert ? hw * 2 : hl * 2;
           const h = isVert ? hl * 2 : hw * 2;
-          dimsMap.set(id, { w, h, color: '#efa831' });
+          dimsMap.set(id, { w, h });
           materialByPage.push({ id, materialId: id, x: wall.cx - w / 2 - baseX + xOff, y: wall.cy - h / 2 - baseY, rot: 0, z: 0 });
         }
         if (allCx.length) xOff += Math.max(...allCx) - Math.min(...allCx) + 2 * MARGIN + GAP;
@@ -240,7 +240,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   return (
     <main
       ref={stageRef}
-      className="stage"
+      className="det-stage"
       style={{ cursor: grabbing ? 'grabbing' : 'grab' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -267,10 +267,10 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
         {pieces.map((piece) => {
           const dim = dimsById.get(piece.materialId);
           if (!dim) return null;
-          return <ReadOnlyPiece key={piece.id} piece={piece} w={dim.w} h={dim.h} color={dim.color} zoom={zoom} />;
+          return <ReadOnlyPiece key={piece.id} piece={piece} w={dim.w} h={dim.h} zoom={zoom} />;
         })}
       </div>
-      <div className="surface-hint">
+      <div className="det-canvas-hint">
         {zoom > 0 ? `${Math.round(zoom * 100)}%` : '—'} · Read-only · Detected elements
       </div>
     </main>
@@ -497,100 +497,85 @@ export default function DetectionPage() {
 
   const exportToEditor = useCallback(() => {
     if (!active) return;
-    // Store in sessionStorage for the main editor to pick up
     sessionStorage.setItem('detect-import', JSON.stringify(active.doc));
     window.location.href = '/';
   }, [active]);
-
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
 
   return (
     <div className="det-page">
       {/* Sidebar */}
       <aside className={`det-sidebar${sidebarOpen ? ' open' : ''}`}>
-        <div className="det-sidebar-header">
-          {sidebarOpen && <span className="det-sidebar-title">Detections</span>}
-          <button className="det-sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} title={sidebarOpen ? 'Collapse' : 'Expand'}>
-            {sidebarOpen ? '‹' : '›'}
-          </button>
-        </div>
-        {sidebarOpen && (
-          <>
+        <div className="det-sidebar-content">
+          <div className="det-sidebar-header">
             <button className="det-sidebar-add" onClick={() => setModalOpen(true)}>
-              <span className="det-sidebar-add-icon">+</span>
-              New Detection
+              +
             </button>
-            <div className="det-sidebar-list">
-              {history.length === 0 && (
-                <div className="det-sidebar-empty">No detections yet</div>
-              )}
-              {history.map((h) => (
-                <div
-                  key={h.id}
-                  className={`det-sidebar-item${selected === h.id ? ' active' : ''}`}
-                  onClick={() => setSelected(h.id)}
-                >
-                  <div className="det-sidebar-item-name">{h.name}</div>
-                  <div className="det-sidebar-item-meta">
-                    {h.fileName} · {h.pageCount}p · {h.totalColumns}C {h.totalWalls}W
-                  </div>
-                  <div className="det-sidebar-item-time">{formatTime(h.timestamp)}</div>
-                  <button
-                    className="det-sidebar-item-delete"
-                    onClick={(e) => { e.stopPropagation(); deleteEntry(h.id); }}
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
+          </div>
+          <div className="det-sidebar-list">
+            {history.length === 0 && (
+              <div className="det-sidebar-empty">No detections yet</div>
+            )}
+            {history.map((h) => (
+              <div
+                key={h.id}
+                className={`det-sidebar-item${selected === h.id ? ' active' : ''}`}
+                onClick={() => setSelected(h.id)}
+              >
+                <div className="det-sidebar-item-name">{h.name}</div>
+                <div className="det-sidebar-item-meta">
+                  {h.fileName} · {h.pageCount}p · {h.totalColumns}C {h.totalWalls}W
                 </div>
-              ))}
-            </div>
-          </>
-        )}
+                <button
+                  className="det-sidebar-item-delete"
+                  onClick={(e) => { e.stopPropagation(); deleteEntry(h.id); }}
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Red arrow toggle button */}
+        <button
+          className="det-sidebar-toggle"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d={sidebarOpen ? "M10 3L5 8L10 13" : "M6 3L11 8L6 13"}
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </aside>
 
       {/* Main content */}
       <div className="det-main">
-        {/* Top bar */}
-        <header className="det-topbar">
-          <div className="det-topbar-left">
-            <a href="/" className="det-topbar-link">← Editor</a>
-            {active && <span className="det-topbar-name">{active.name}</span>}
-          </div>
-          <div className="det-topbar-right">
-            {active && (
-              <>
-                <button className="btn" onClick={exportToFile}>
-                  💾 Save to PC
-                </button>
-                <button className="btn primary" onClick={exportToEditor}>
-                  ↗ Import to Editor
-                </button>
-              </>
-            )}
-            <button className="btn primary" onClick={() => setModalOpen(true)}>
-              + New
+        {/* Canvas */}
+        <div className="det-canvas-wrap">
+          {/* Export/Import buttons - top right */}
+          <div className="det-actions">
+            <button className="det-action-btn" onClick={exportToFile} disabled={!active}>
+              Export
+            </button>
+            <button className="det-action-btn primary" onClick={exportToEditor} disabled={!active}>
+              Import
             </button>
           </div>
-        </header>
 
-        {/* Canvas */}
-        <div className="det-canvas">
           {active ? (
             <DetectionCanvas doc={active.doc} />
           ) : (
             <div className="det-empty-state">
-              <div className="det-empty-icon">📐</div>
               <div className="det-empty-title">No detection selected</div>
               <div className="det-empty-sub">
-                Click <strong>+ New Detection</strong> to drop a PDF and start auto-detecting columns and walls.
+                Click + to add a new detection
               </div>
-              <button className="btn primary" onClick={() => setModalOpen(true)}>
-                + New Detection
-              </button>
             </div>
           )}
         </div>

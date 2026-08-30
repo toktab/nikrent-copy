@@ -2243,47 +2243,438 @@ input.stock-input.bad {
   font-size: 11.5px !important;
   color: var(--text-tertiary) !important;
 }
-.detect-results-view {
+
+/* ==========================================================================
+   /detection — mockup style: sidebar + canvas with gray border
+   ========================================================================== */
+
+/* ── Page layout ── */
+.det-page {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 20px;
-  width: 100%;
-  max-width: 900px;
-  overflow-y: auto;
-}
-.detect-visual-pages {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.detect-visual-page {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--panel);
+  height: 100vh;
+  background: #0a0e18;
+  color: var(--text);
   overflow: hidden;
 }
-.detect-visual-label {
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  background: var(--panel2);
-  border-bottom: 1px solid var(--line);
+
+/* ── Sidebar ── */
+.det-sidebar {
+  width: 220px;
+  background: #0d1117;
+  border-right: 1px solid #1e2a3a;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.det-sidebar:not(.open) {
+  width: 0;
+  border-right: none;
+}
+.det-sidebar-content {
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #1e2a3a;
+}
+.det-sidebar-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  padding: 12px 12px 8px;
+  flex: 0 0 auto;
 }
-.detect-visual-svg {
-  display: block;
-  width: 100%;
-  height: 320px;
-  background: var(--well);
+.det-sidebar-add {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r);
+  background: var(--panel2);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.det-sidebar-add:hover {
+  background: var(--accent);
+  color: var(--ink);
+}
+.det-sidebar-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0;
+}
+.det-sidebar-empty {
+  padding: 20px 16px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.det-sidebar-item {
+  position: relative;
+  padding: 14px 16px;
+  border-bottom: 1px solid #1e2a3a;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.det-sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.det-sidebar-item.active {
+  background: rgba(112, 166, 245, 0.08);
+  border-left: 3px solid #e8c840;
+  padding-left: 13px;
+}
+.det-sidebar-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 20px;
+}
+.det-sidebar-item-meta {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.det-sidebar-item-delete {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: #555;
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.det-sidebar-item:hover .det-sidebar-item-delete {
+  opacity: 1;
+}
+.det-sidebar-item-delete:hover {
+  color: var(--bad);
 }
 
-  accent-color: var(--accent);
-  margin: 2px 0 0;
+/* Red arrow toggle button on sidebar edge */
+.det-sidebar-toggle {
+  width: 24px;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-left: 1px solid #1e2a3a;
+  background: #0d1117;
+  color: #e74c3c;
+  cursor: pointer;
+  transition: background 0.12s;
+  flex: 0 0 auto;
 }
+.det-sidebar-toggle:hover {
+  background: #141a22;
+}
+.det-sidebar-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Main area ── */
+.det-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #0a0e18;
+}
+
+/* ── Canvas wrapper with gray border ── */
+.det-canvas-wrap {
+  flex: 1 1 auto;
+  margin: 12px;
+  border: 2px solid #3a4a5c;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #0f1923;
+}
+
+/* ── Export/Import buttons top right ── */
+.det-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+}
+.det-action-btn {
+  padding: 6px 16px;
+  border: 1px solid #3a4a5c;
+  border-radius: 3px;
+  background: transparent;
+  color: #aaa;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.det-action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+.det-action-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.det-action-btn.primary {
+  background: rgba(112, 166, 245, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.det-action-btn.primary:hover:not(:disabled) {
+  background: rgba(112, 166, 245, 0.25);
+}
+
+/* ── Detection stage (dark navy background) ── */
+.det-stage {
+  flex: 1 1 auto;
+  position: relative;
+  overflow: hidden;
+  background: #0f1923;
+  cursor: grab;
+}
+.det-stage:active {
+  cursor: grabbing;
+}
+.det-canvas-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 8px;
+  font-size: 10px;
+  color: #556;
+  background: rgba(10, 14, 24, 0.8);
+  border: 1px solid #1e2a3a;
+  border-radius: 4px;
+  padding: 3px 8px;
+  pointer-events: none;
+}
+
+/* ── Empty state ── */
+.det-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  gap: 8px;
+  text-align: center;
+  color: #445;
+}
+.det-empty-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.det-empty-sub {
+  font-size: 11px;
+  color: #334;
+}
+
+/* ── Modal overlay ── */
+.dm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: dm-fade-in 0.2s ease-out;
+}
+@keyframes dm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.dm-modal {
+  position: relative;
+  width: 440px;
+  max-height: 80vh;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.6);
+  padding: 28px;
+  overflow-y: auto;
+  animation: dm-slide-up 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes dm-slide-up {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.dm-close:hover {
+  background: var(--panel2);
+  color: var(--text);
+}
+.dm-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.dm-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 16px;
+  border: 2px dashed var(--line);
+  border-radius: var(--r-lg);
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dm-drop.over {
+  border-color: var(--accent);
+  background: rgba(112, 166, 245, 0.06);
+}
+.dm-drop-icon {
+  font-size: 36px;
+  opacity: 0.5;
+}
+.dm-drop-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.dm-drop-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.dm-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 8px;
+  margin-top: 14px;
+}
+.dm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.dm-chip {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--well);
+  color: var(--muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.dm-chip:hover {
+  background: var(--panel2);
+  color: var(--text);
+}
+.dm-chip.sel {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+}
+.dm-select {
+  width: 100%;
+  margin-bottom: 14px;
+}
+.dm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.dm-field span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.dm-field input {
+  width: 100%;
+}
+.dm-progress {
+  margin: 16px 0;
+}
+.dm-progress-bar {
+  height: 3px;
+  background: var(--well);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.dm-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.25s ease;
+}
+.dm-progress-text {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.dm-success {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ok);
+  margin-bottom: 14px;
+}
+
+/* ── Pieces in detection view: yellow outline only ── */
+.det-stage .piece {
+  pointer-events: none;
+}}
 
 /* The legs of a drawn run, listed so each one can be typed exactly. Long
    layouts scroll inside the list rather than pushing the fill button out of
