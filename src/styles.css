@@ -1938,9 +1938,9 @@ input.stock-input.bad {
 }
 .rot-field .deg {
   color: var(--muted);
-}
-.rot-slider {
+}.rot-slider {
   width: 100%;
+}
 
 /* ==========================================================================
    /detection — standalone page styles
@@ -2680,7 +2680,7 @@ input.stock-input.bad {
 /* ── Pieces in detection view: yellow outline only ── */
 .det-stage .piece {
   pointer-events: none;
-}}
+}
 
 /* The legs of a drawn run, listed so each one can be typed exactly. Long
    layouts scroll inside the list rather than pushing the fill button out of
