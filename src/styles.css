@@ -2269,8 +2269,7 @@ input.stock-input.bad {
   overflow: hidden;
 }
 .det-sidebar:not(.open) {
-  width: 0;
-  border-right: none;
+  width: 24px;
 }
 .det-sidebar-content {
   width: 220px;
@@ -2278,6 +2277,13 @@ input.stock-input.bad {
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid #1e2a3a;
+  flex: 0 0 auto;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
+}
+.det-sidebar:not(.open) .det-sidebar-content {
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 .det-sidebar-header {
   display: flex;
