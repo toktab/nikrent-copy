@@ -1,696 +1,603 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AlgorithmChoice,
-  AlgorithmName,
   LegacyDetectedDoc,
-  PageResult,
   WorkerMessage,
 } from '../lib/detection/types';
-import { isLegacyBritania, legacyBritaniaToV1, schemaPageKeys, schemaToSketchPaths } from '../lib/detectImport';
-/* Note: schemaToSketchPaths is used by importJsonFile below */
-import { downloadJson, pickFile, readFileAsArrayBuffer, readFileAsText } from '../lib/files';
+import { downloadJson, pickFile, readFileAsArrayBuffer } from '../lib/files';
+import type { Piece, SketchPath } from '../types';
 
 /* ── Constants ── */
 
-const ALGO_LABELS: Record<AlgorithmName, string> = {
-  britania: 'Britania',
-  glassworks: 'GlassWorks',
-  super: 'SUPER (Adaptive)',
-  custom: 'Custom (.ts)',
-};
+const HISTORY_KEY = 'detect-history';
 
-const ALGO_HELP: Record<AlgorithmChoice, string> = {
-  auto: 'Auto — each page picks its own algorithm (5-signal probe).',
-  britania: 'Britania — raster pipeline: threshold → morphology → contours → filter.',
-  glassworks: 'GlassWorks — vector (operator list) + raster fallback.',
-  super: 'SUPER — adaptive algorithm with auto thresholds and hatch patterns.',
-  custom: 'Custom — upload your own .ts detector algorithm.',
-};
-
-/* ── Types ── */
-
-interface PageReport {
-  pageNo: number;
-  algo: string;
-  columns: number;
-  walls: number;
-  ms: number;
+interface HistoryEntry {
+  id: string;
+  name: string;
+  description: string;
+  fileName: string;
+  timestamp: number;
+  doc: LegacyDetectedDoc;
+  pageCount: number;
+  totalColumns: number;
+  totalWalls: number;
 }
 
-/* ── SVG Visualisation of detected elements ── */
-
-function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageResult }) {
-  const pageNo = pageKey.replace('page_', '');
-
-  /** Clamp stroke width so it is visible at any scale. */
-  const strokeW = (vw: number, vh: number) =>
-    Math.max(0.5, Math.min(3, Math.max(vw, vh) * 0.003));
-
-  if (result.drawing_type === 'section') {
-    const walls = result.detectedWalls ?? [];
-    const cols = result.detectedColumns ?? [];
-    const allX = [...walls.map((w) => w.cx), ...cols.map((c) => c.cx)];
-    const allY = [...walls.map((w) => w.cy), ...cols.map((c) => c.cy)];
-    if (allX.length === 0) return null;
-    const minX = Math.min(...allX) - 50;
-    const maxX = Math.max(...allX) + 50;
-    const minY = Math.min(...allY) - 50;
-    const maxY = Math.max(...allY) + 50;
-    const vw = Math.max(maxX - minX, 100);
-    const vh = Math.max(maxY - minY, 100);
-    return (
-      <div className="detect-visual-page">
-        <div className="detect-visual-label">Page {pageNo} — Section ({cols.length} columns, {walls.length} walls)</div>
-        <svg viewBox={`${minX} ${minY} ${vw} ${vh}`} className="detect-visual-svg">
-          {walls.map((w, i) => {
-            const hw = (w.thicknessCm ?? 20) / 2;
-            const hl = (w.lengthCm ?? 100) / 2;
-            const isVert = w.rotation === 90;
-            return (
-              <rect
-                key={`w${i}`}
-                x={isVert ? w.cx - hw : w.cx - hl}
-                y={isVert ? w.cy - hl : w.cy - hw}
-                width={isVert ? hw * 2 : hl * 2}
-                height={isVert ? hl * 2 : hw * 2}
-                fill="rgba(239,168,49,0.25)"
-                stroke="#efa831"
-                strokeWidth={strokeW(vw, vh)}
-              />
-            );
-          })}
-          {cols.map((c, i) => (
-            <rect
-              key={`c${i}`}
-              x={c.cx - (c.widthCm ?? 30) / 2}
-              y={c.cy - (c.depthCm ?? 30) / 2}
-              width={c.widthCm ?? 30}
-              height={c.depthCm ?? 30}
-              fill="rgba(112,166,245,0.25)"
-              stroke="#70a6f5"
-              strokeWidth={strokeW(vw, vh)}
-            />
-          ))}
-        </svg>
-      </div>
-    );
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
+}
 
-  // Plan view
-  const columns = result.columns ?? [];
-  const walls = result.walls ?? [];
-  const allX = [...columns.map((c) => c.x0), ...columns.map((c) => c.x1), ...walls.map((w) => w.x0), ...walls.map((w) => w.x1)];
-  const allY = [...columns.map((c) => c.y0), ...columns.map((c) => c.y1), ...walls.map((w) => w.y0), ...walls.map((w) => w.y1)];
-  if (allX.length === 0) return null;
-  const minX = Math.min(...allX) - 20;
-  const maxX = Math.max(...allX) + 20;
-  const minY = Math.min(...allY) - 20;
-  const maxY = Math.max(...allY) + 20;
-  const vw = Math.max(maxX - minX, 100);
-  const vh = Math.max(maxY - minY, 100);
+function saveHistory(entries: HistoryEntry[]): void {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+  } catch { /* quota */ }
+}
+
+/* ── PieceView (read-only) ── */
+
+function ReadOnlyPiece({ piece, w, h, color, zoom }: { piece: Piece; w: number; h: number; color: string; zoom: number }) {
   return (
-    <div className="detect-visual-page">
-      <div className="detect-visual-label">Page {pageNo} — Plan ({columns.length} columns, {walls.length} walls)</div>
-      <svg viewBox={`${minX} ${minY} ${vw} ${vh}`} className="detect-visual-svg">
-        {walls.map((w, i) => (
-          <rect
-            key={`w${i}`}
-            x={w.x0}
-            y={w.y0}
-            width={w.x1 - w.x0}
-            height={w.y1 - w.y0}
-            fill="rgba(239,168,49,0.2)"
-            stroke="#efa831"
-            strokeWidth={strokeW(vw, vh)}
-          />
-        ))}
-        {columns.map((c, i) => (
-          <rect
-            key={`c${i}`}
-            x={c.x0}
-            y={c.y0}
-            width={c.x1 - c.x0}
-            height={c.y1 - c.y0}
-            fill="rgba(112,166,245,0.25)"
-            stroke="#70a6f5"
-            strokeWidth={strokeW(vw, vh)}
-          />
-        ))}
+    <div
+      className="piece"
+      style={{
+        left: piece.x,
+        top: piece.y,
+        width: w,
+        height: h,
+        transform: `rotate(${piece.rot}deg)`,
+      }}
+    >
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+        <rect
+          width={w}
+          height={h}
+          fill={color}
+          stroke="rgba(10,13,17,0.55)"
+          strokeWidth={1 / zoom}
+          rx={1}
+        />
       </svg>
     </div>
   );
 }
 
-/* ── Component ── */
+/* ── SketchPath (read-only) ── */
 
-export default function DetectionPage() {
+function ReadOnlySketchLayer({ sketch, zoom }: { sketch: SketchPath[]; zoom: number }) {
+  if (!sketch.length) return null;
+  const hair = 1.5 / zoom;
+  return (
+    <svg className="sketch-layer" style={{ left: 0, top: 0, width: 4000, height: 3000 }} viewBox="0 0 4000 3000" pointerEvents="none">
+      {sketch.map((path) => {
+        const pts = path.points;
+        if (pts.length < 2) return null;
+        return (
+          <g key={path.id} className="sketch-path">
+            {pts.map((p, i) => {
+              const next = pts[(i + 1) % pts.length];
+              if (i >= pts.length - 1 && !path.closed) return null;
+              return (
+                <g key={i}>
+                  <line className="sketch-under" x1={p.x} y1={p.y} x2={next.x} y2={next.y} strokeWidth={hair * 3.4} />
+                  <line x1={p.x} y1={p.y} x2={next.x} y2={next.y} strokeWidth={hair * 1.8} />
+                </g>
+              );
+            })}
+            {pts.map((p, i) => (
+              <circle key={`v${i}`} className="sketch-vertex" cx={p.x} cy={p.y} r={hair * 2.4} />
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ── Canvas: read-only editor-style view ── */
+
+function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(40);
+  const [panY, setPanY] = useState(40);
+  const [grabbing, setGrabbing] = useState(false);
+  const panning = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
+
+  const { pieces, sketch, dimsById } = useMemo(() => {
+    const materialByPage: Piece[] = [];
+    const sketchByPage: SketchPath[] = [];
+    const dimsMap = new Map<string, { w: number; h: number; color: string }>();
+    let xOff = 0;
+    const GAP = 100;
+    const MARGIN = 40;
+
+    for (const [key, page] of Object.entries(doc.all_pages)) {
+      const isPlan = page.drawing_type === 'plan';
+      const pageIdx = Number(key.replace('page_', '')) || 1;
+
+      if (isPlan) {
+        const columns = (page as any).columns ?? [];
+        const walls = (page as any).walls ?? [];
+        const allBoxes = [...columns, ...walls];
+        const xs = allBoxes.flatMap((b: any) => [b.x0, b.x1]);
+        const ys = allBoxes.flatMap((b: any) => [b.y0, b.y1]);
+        const left = xs.length ? Math.min(...xs) - MARGIN : 0;
+        const top = ys.length ? Math.min(...ys) - MARGIN : 0;
+
+        for (const col of columns) {
+          const id = `det-col-${pageIdx}-${col.id ?? Math.random().toString(36).slice(2)}`;
+          const w = Math.max(5, col.x1 - col.x0);
+          const h = Math.max(5, col.y1 - col.y0);
+          const cx = col.x0 - left + xOff;
+          const cy = col.y0 - top;
+          dimsMap.set(id, { w, h, color: '#70a6f5' });
+          materialByPage.push({ id, materialId: id, x: cx, y: cy, rot: 0, z: 0 });
+        }
+
+        for (const wall of walls) {
+          const id = `det-wall-${pageIdx}-${wall.id ?? Math.random().toString(36).slice(2)}`;
+          const w = Math.max(3, wall.x1 - wall.x0);
+          const h = Math.max(3, wall.y1 - wall.y0);
+          const cx = wall.x0 - left + xOff;
+          const cy = wall.y0 - top;
+          dimsMap.set(id, { w, h, color: '#efa831' });
+          materialByPage.push({ id, materialId: id, x: cx, y: cy, rot: 0, z: 0 });
+        }
+
+        // Sketch from walls
+        for (const wall of walls) {
+          sketchByPage.push({
+            id: `det-sk-${pageIdx}-${wall.id ?? Math.random().toString(36).slice(2)}`,
+            points: [
+              { x: wall.x0 - left + xOff, y: wall.y0 - top },
+              { x: wall.x1 - left + xOff, y: wall.y1 - top },
+            ],
+          });
+        }
+        if (xs.length) xOff += Math.max(...xs) - Math.min(...xs) + 2 * MARGIN + GAP;
+        else xOff += 800 + GAP;
+      } else {
+        // Section
+        const columns = (page as any).detectedColumns ?? [];
+        const walls = (page as any).detectedWalls ?? [];
+        const allCx = [...walls.map((w: any) => w.cx), ...columns.map((c: any) => c.cx)];
+        const allCy = [...walls.map((w: any) => w.cy), ...columns.map((c: any) => c.cy)];
+        if (allCx.length === 0) { xOff += 800; continue; }
+        const baseX = Math.min(...allCx) - MARGIN + xOff;
+        const baseY = Math.min(...allCy) - MARGIN;
+
+        for (const col of columns) {
+          const id = `det-scol-${pageIdx}-${col.id}`;
+          const w = col.widthCm ?? 30;
+          const h = col.depthCm ?? 30;
+          dimsMap.set(id, { w, h, color: '#70a6f5' });
+          materialByPage.push({ id, materialId: id, x: col.cx - w / 2 - baseX + xOff, y: col.cy - h / 2 - baseY, rot: 0, z: 0 });
+        }
+
+        for (const wall of walls) {
+          const id = `det-swall-${pageIdx}-${wall.id}`;
+          const hw = (wall.thicknessCm ?? 20) / 2;
+          const hl = (wall.lengthCm ?? 100) / 2;
+          const isVert = wall.rotation === 90;
+          const w = isVert ? hw * 2 : hl * 2;
+          const h = isVert ? hl * 2 : hw * 2;
+          dimsMap.set(id, { w, h, color: '#efa831' });
+          materialByPage.push({ id, materialId: id, x: wall.cx - w / 2 - baseX + xOff, y: wall.cy - h / 2 - baseY, rot: 0, z: 0 });
+        }
+        if (allCx.length) xOff += Math.max(...allCx) - Math.min(...allCx) + 2 * MARGIN + GAP;
+        else xOff += 800 + GAP;
+      }
+    }
+
+    return { pieces: materialByPage, sketch: sketchByPage, dimsById: dimsMap };
+  }, [doc]);
+
+  // Wheel zoom
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newZoom = Math.min(8, Math.max(0.08, zoom * factor));
+      const wx = (e.clientX - r.left - panX) / zoom;
+      const wy = (e.clientY - r.top - panY) / zoom;
+      setZoom(newZoom);
+      setPanX(e.clientX - r.left - wx * newZoom);
+      setPanY(e.clientY - r.top - wy * newZoom);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, panX, panY]);
+
+  // Pointer pan
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    panning.current = { sx: e.clientX, sy: e.clientY, px: panX, py: panY };
+    setGrabbing(true);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!panning.current) return;
+    setPanX(panning.current.px + (e.clientX - panning.current.sx));
+    setPanY(panning.current.py + (e.clientY - panning.current.sy));
+  };
+  const onPointerUp = () => { panning.current = null; setGrabbing(false); };
+
+  const WORLD_W = 4000;
+  const WORLD_H = 3000;
+  const gridStep = (() => {
+    const target = 4.5 / zoom;
+    return [5, 10, 20, 50, 100, 200, 500].find((s) => s >= target) ?? 500;
+  })();
+
+  return (
+    <main
+      ref={stageRef}
+      className="stage"
+      style={{ cursor: grabbing ? 'grabbing' : 'grab' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      <div
+        className="world"
+        style={{
+          transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+          '--z': zoom,
+        } as any}
+      >
+        <div
+          className="grid"
+          style={{
+            width: WORLD_W,
+            height: WORLD_H,
+            '--gw': `${1 / zoom}px`,
+            '--gf': `${gridStep}px`,
+            '--gm': '100px',
+          } as any}
+        />
+        <ReadOnlySketchLayer sketch={sketch} zoom={zoom} />
+        {pieces.map((piece) => {
+          const dim = dimsById.get(piece.materialId);
+          if (!dim) return null;
+          return <ReadOnlyPiece key={piece.id} piece={piece} w={dim.w} h={dim.h} color={dim.color} zoom={zoom} />;
+        })}
+      </div>
+      <div className="surface-hint">
+        {zoom > 0 ? `${Math.round(zoom * 100)}%` : '—'} · Read-only · Detected elements
+      </div>
+    </main>
+  );
+}
+
+/* ── Modal: Detection wizard ── */
+
+function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (entry: HistoryEntry) => void }) {
+  const [step, setStep] = useState<'pick' | 'pages' | 'details'>('pick');
   const [busy, setBusy] = useState(false);
-  const [algorithm, setAlgorithm] = useState<AlgorithmChoice>('auto');
-  const [progress, setProgress] = useState<string | null>(null);
-  const [progressPct, setProgressPct] = useState<number | null>(null);
-  const [log, setLog] = useState<string[]>([]);
-  const [pageReport, setPageReport] = useState<PageReport[]>([]);
-  const [manualScale, setManualScale] = useState<number | null>(null);
-  const [done, setDone] = useState<{
-    doc: LegacyDetectedDoc;
-    fileName: string;
-    processedPages: number;
-  } | null>(null);
-  const [pick, setPick] = useState<{ pageCount: number; fileName: string } | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pageCount, setPageCount] = useState(0);
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
+  const [algorithm, setAlgorithm] = useState<AlgorithmChoice>('auto');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [progress, setProgress] = useState('');
+  const [progressPct, setProgressPct] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [elapsedSec, setElapsedSec] = useState(0);
-
   const workerRef = useRef<Worker | null>(null);
   const jobIdRef = useRef<string | null>(null);
-  const elapsedTimerRef = useRef<number | null>(null);
-  const runAlgoRef = useRef<AlgorithmChoice>('auto');
+  const [nextNum, setNextNum] = useState(() => loadHistory().length + 1);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      workerRef.current?.terminate();
-      workerRef.current = null;
-      if (elapsedTimerRef.current) {
-        clearInterval(elapsedTimerRef.current);
-        elapsedTimerRef.current = null;
-      }
-    };
-  }, []);
+  useEffect(() => () => { workerRef.current?.terminate(); }, []);
 
-  const stopElapsedTimer = () => {
-    if (elapsedTimerRef.current) {
-      clearInterval(elapsedTimerRef.current);
-      elapsedTimerRef.current = null;
-    }
-  };
-
-  const startElapsedTimer = () => {
-    stopElapsedTimer();
-    setElapsedSec(0);
-    const start = Date.now();
-    elapsedTimerRef.current = setInterval(() => {
-      setElapsedSec(Math.floor((Date.now() - start) / 1000));
-    }, 500);
-  };
-
-  const togglePage = (p: number) => {
-    setSelectedPages((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p].sort((a, b) => a - b)
-    );
-  };
-
-  const algoLabel = (a: AlgorithmName) => ALGO_LABELS[a] ?? a;
-
-  /** Run detection on the selected pages */
-  const startRun = () => {
-    const worker = workerRef.current;
-    const id = jobIdRef.current;
-    if (!worker || !id || !pick) return;
-    if (!selectedPages.length) return;
-
-    setLog([]);
-    setPageReport([]);
-    setDone(null);
-    startElapsedTimer();
-    runAlgoRef.current = algorithm;
-    setPick(null);
-    setProgress('Processing pages…');
-
-    worker.postMessage({
-      type: 'run',
-      id,
-      pages: selectedPages,
-      algorithm,
-      ...(manualScale && manualScale > 0 ? { scale: manualScale } : {}),
-    });
-  };
-
-  /** Pick a PDF file and start detection */
-  const runPdf = useCallback(async (file?: File) => {
-    if (busy && !pick) return;
-    const f = file ?? (await pickFile('.pdf,application/pdf'));
-    if (!f) return;
-
+  const openPdf = useCallback(async (file: File) => {
+    setPdfFile(file);
     setBusy(true);
-    setDone(null);
-    setLog([]);
     setProgress('Reading PDF…');
-
     const id = `det-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     jobIdRef.current = id;
-
-    let buffer: ArrayBuffer;
-    let worker: Worker;
-    try {
-      buffer = await readFileAsArrayBuffer(f);
-      worker = new Worker(
-        new URL('../lib/detection/detectionWorker.ts', import.meta.url),
-        { type: 'module' }
-      );
-    } catch (e) {
-      setBusy(false);
-      setProgress(null);
-      alert(`Failed to read file: ${(e as Error).message}`);
-      return;
-    }
+    const buffer = await readFileAsArrayBuffer(file);
+    const worker = new Worker(new URL('../lib/detection/detectionWorker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
-
-    const stop = () => {
-      stopElapsedTimer();
-      setProgressPct(null);
-      try { worker.terminate(); } finally {
-        workerRef.current = null;
-        jobIdRef.current = null;
-      }
-    };
-
     worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
       const msg = ev.data;
-      if (msg.type === 'ready') {
-        setProgress('OpenCV ready, counting pages…');
-        return;
-      }
       if (msg.type === 'pages') {
         const all = Array.from({ length: msg.pageCount }, (_, i) => i + 1);
         setSelectedPages(all);
-        setPick({ pageCount: msg.pageCount, fileName: f.name });
-        setProgress('Select pages to process…');
-        return;
+        setPageCount(msg.pageCount);
+        setStep('pages');
+        setBusy(false);
+        setProgress('');
       }
-      if (msg.type === 'progress') {
-        setProgress(`Page ${msg.pageNo}/${msg.pageCount}…`);
-        setProgressPct(msg.pageCount > 0 ? Math.round(((msg.pageNo - 1) / msg.pageCount) * 100) : null);
-        return;
-      }
+    };
+    worker.onerror = (e) => { setBusy(false); setProgress('Error: ' + e.message); };
+    worker.postMessage({ type: 'detect', id, pdf: buffer, fileName: file.name, algorithm: 'auto', drawingType: 'auto', mode: 'auto', scale: 50 });
+  }, []);
+
+  const runDetection = useCallback(() => {
+    const worker = workerRef.current;
+    const id = jobIdRef.current;
+    if (!worker || !id || !pdfFile) return;
+    setBusy(true);
+    setProgress('Detecting…');
+    setStep('details');
+    setName(`Detection ${nextNum}`);
+    worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
+      const msg = ev.data;
       if (msg.type === 'page') {
         const r = msg.result;
         const isSection = r.drawing_type === 'section';
         const cols = isSection ? r.detectedColumns.length : r.columns.length;
         const walls = isSection ? r.detectedWalls.length : r.walls.length;
-        setLog((prev) => [
-          ...prev,
-          `Page ${msg.pageNo}: ${algoLabel(msg.algo)} — ${walls} walls, ${cols} columns (${msg.elapsedMs}ms)`,
-        ]);
-        setPageReport((prev) => [
-          ...prev,
-          { pageNo: msg.pageNo, algo: algoLabel(msg.algo), columns: cols, walls, ms: msg.elapsedMs },
-        ]);
+        setProgress(`Page ${msg.pageNo}: ${cols} cols, ${walls} walls`);
         setProgressPct(msg.pageCount > 0 ? Math.round((msg.pageNo / msg.pageCount) * 100) : null);
-        return;
+      }
+      if (msg.type === 'done') {
+        worker.terminate();
+        workerRef.current = null;
+        const doc: LegacyDetectedDoc = {
+          source: { pdf: pdfFile.name, n_pages: msg.pageCount },
+          algorithms: msg.algorithms,
+          all_pages: Object.fromEntries(msg.pages.map((r, i) => [`page_${msg.pageNos[i]}`, r])),
+        };
+        const totalCols = msg.counts.reduce((s, c) => s + c.columns, 0);
+        const totalWalls = msg.counts.reduce((s, c) => s + c.walls, 0);
+        onDone({
+          id: `det-${Date.now()}`,
+          name: name || `Detection ${nextNum}`,
+          description,
+          fileName: pdfFile.name,
+          timestamp: Date.now(),
+          doc,
+          pageCount: msg.pages.length,
+          totalColumns: totalCols,
+          totalWalls: totalWalls,
+        });
+        setNextNum((n) => n + 1);
+        setBusy(false);
+        setProgress('');
+        setProgressPct(null);
       }
       if (msg.type === 'error') {
-        stop();
+        worker.terminate();
+        workerRef.current = null;
         setBusy(false);
-        setProgress(null);
-        setLog((prev) => [...prev, `Error: ${msg.message}`]);
-        return;
+        setProgress('Error: ' + msg.message);
       }
-      if (msg.type !== 'done') return;
-
-      stop();
-      const doc: LegacyDetectedDoc = {
-        source: { pdf: f.name, n_pages: msg.pageCount },
-        algorithms: msg.algorithms,
-        all_pages: Object.fromEntries(msg.pages.map((r, i) => [`page_${msg.pageNos[i]}`, r])),
-      };
-      setBusy(false);
-      setProgress(null);
-      setPick(null);
-      setSelectedPages([]);
-      setDone({ doc, fileName: f.name, processedPages: msg.pages.length });
-      setLog((prev) => [
-        ...prev,
-        `Done: ${msg.pages.length} pages — ${Object.entries(msg.algorithms)
-          .map(([k, v]) => `${k}: ${algoLabel(v)}`)
-          .join(', ')}`,
-      ]);
     };
-
-    worker.onerror = (e) => {
-      stop();
-      setBusy(false);
-      setProgress(null);
-      alert(`Detection failed: ${e.message}`);
-    };
-
     worker.postMessage({
-      type: 'detect',
+      type: 'run',
       id,
-      pdf: buffer,
-      fileName: f.name,
+      pages: selectedPages,
       algorithm,
-      drawingType: 'auto',
-      mode: 'auto',
-      scale: 50,
     });
-  }, [busy, pick, algorithm, manualScale]);
+  }, [pdfFile, selectedPages, algorithm, name, description, nextNum, onDone]);
 
-  /** Import a JSON file (shared helper for import button and drag-drop). */
-  const importJsonFile = async (f: File) => {
-    try {
-      const text = await readFileAsText(f);
-      const doc: unknown = JSON.parse(text);
-      let schema: Record<string, unknown>;
-      if (isLegacyBritania(doc)) {
-        schema = legacyBritaniaToV1(doc, f.name);
-      } else {
-        schema = doc as Record<string, unknown>;
-      }
-      const paths = schemaToSketchPaths(schema);
-      const pages = schemaPageKeys(schema).length;
-      alert(`Imported ${paths.length} elements (${pages} pages) from ${f.name}`);
-    } catch (e) {
-      alert(`Import failed: ${(e as Error).message}`);
-    }
-  };
+  const togglePage = (p: number) => setSelectedPages((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p].sort((a, b) => a - b));
 
-  /** Export detection results as JSON */
-  const onExport = () => {
-    if (!done) return;
-    const stem = done.fileName.replace(/\.pdf$/i, '');
-    downloadJson(done.doc, `${stem}_detected.json`);
-  };
-
-  /** Import a JSON file */
-  const onImport = async () => {
-    const f = await pickFile('.json,application/json');
-    if (f) await importJsonFile(f);
-  };
-
-  /** Handle drag and drop */
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files?.[0];
-    if (!f || (busy && !pick)) return;
-    if (/\.pdf$/i.test(f.name)) await runPdf(f);
-    else if (/\.json$/i.test(f.name)) await importJsonFile(f);
-  };
-
-  /** Cancel the current pick */
-  const cancelPick = () => {
-    workerRef.current?.terminate();
-    workerRef.current = null;
-    jobIdRef.current = null;
-    stopElapsedTimer();
-    setBusy(false);
-    setPick(null);
-    setSelectedPages([]);
-    setProgress(null);
-    setProgressPct(null);
-    setLog([]);
-    setDone(null);
+    if (f && /\.pdf$/i.test(f.name)) await openPdf(f);
   };
 
   return (
-    <div className="detect-page" style={{ height: '100vh' }}>
-      {/* Header */}
-      <header className="detect-header">
-        <div className="detect-header-left">
-          <h1 className="detect-title">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <path d="M16 13H8"/>
-              <path d="M16 17H8"/>
-              <path d="M10 9H8"/>
-            </svg>
-            PDF Auto-Detection
-          </h1>
-          <span className="detect-subtitle">
-            Detect columns &amp; walls from architectural drawings — runs entirely in your browser
-          </span>
-        </div>
-        <div className="detect-header-right">
-          <a href="/" className="btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5"/>
-              <polyline points="12 19 5 12 12 5"/>
-            </svg>
-            Back to Editor
-          </a>
-          {done && (
-            <>
-              <button className="btn primary" onClick={onExport}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                Export JSON
-              </button>
-              <button className="btn" onClick={onImport}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                Import JSON
-              </button>
-            </>
-          )}
-        </div>
-      </header>
+    <div className="dm-overlay" onClick={onClose}>
+      <div className="dm-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="dm-close" onClick={onClose}>✕</button>
+        <div className="dm-title">New Detection</div>
 
-      {/* Main content */}
-      <div className="detect-body">
-        {/* Left panel - Controls */}
-        <div className="detect-panel">
-          {/* Drop zone / PDF picker */}
+        {step === 'pick' && (
           <div
-            className={`detect-drop${dragOver ? ' over' : ''}`}
+            className={`dm-drop${dragOver ? ' over' : ''}`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
           >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span className="detect-drop-title">
-              {busy && !pick ? 'Processing…' : 'Drop PDF or click to pick'}
-            </span>
-            <span className="detect-drop-sub">
-              Runs entirely in browser — no server needed
-            </span>
-          </div>
-
-          {/* Action buttons */}
-          <div className="detect-actions">
-            <button
-              className="btn primary full"
-              onClick={() => runPdf()}
-              disabled={busy && !pick}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              {busy && !pick ? 'Processing…' : 'Pick PDF…'}
+            <div className="dm-drop-icon">📄</div>
+            <div className="dm-drop-label">Drop a PDF here</div>
+            <div className="dm-drop-sub">or</div>
+            <button className="btn primary" onClick={() => pickFile('.pdf').then((f) => f && openPdf(f))}>
+              Choose PDF
             </button>
-            {done && (
-              <>
-                <button className="btn full" onClick={onExport}>
-                  Export JSON
+          </div>
+        )}
+
+        {step === 'pages' && (
+          <>
+            <div className="dm-section-label">Select pages ({pageCount} total)</div>
+            <div className="dm-chips">
+              {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+                <button key={p} className={`dm-chip${selectedPages.includes(p) ? ' sel' : ''}`} onClick={() => togglePage(p)}>
+                  {p}
                 </button>
-                <button className="btn full" onClick={onImport}>
-                  Import JSON
+              ))}
+            </div>
+            <div className="dm-section-label">Algorithm</div>
+            <select className="dm-select" value={algorithm} onChange={(e) => setAlgorithm(e.target.value as AlgorithmChoice)}>
+              <option value="auto">Auto (per-page)</option>
+              <option value="britania">Britania</option>
+              <option value="glassworks">GlassWorks</option>
+              <option value="super">SUPER</option>
+            </select>
+            <button className="btn primary full" onClick={runDetection} disabled={!selectedPages.length || busy}>
+              {busy ? 'Processing…' : 'Start Detection'}
+            </button>
+          </>
+        )}
+
+        {step === 'details' && (
+          <>
+            {busy && (
+              <div className="dm-progress">
+                <div className="dm-progress-bar">
+                  <div className="dm-progress-fill" style={{ width: progressPct ? `${progressPct}%` : '100%' }} />
+                </div>
+                <div className="dm-progress-text">{progress}</div>
+              </div>
+            )}
+            {!busy && (
+              <>
+                <div className="dm-success">✓ Detection complete</div>
+                <label className="dm-field">
+                  <span>Name</span>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={`Detection ${nextNum}`} />
+                </label>
+                <label className="dm-field">
+                  <span>Description (optional)</span>
+                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Ground floor plan" />
+                </label>
+                <button className="btn primary full" onClick={onClose}>View Results</button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Main page ── */
+
+export default function DetectionPage() {
+  const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
+  const [selected, setSelected] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const active = useMemo(() => history.find((h) => h.id === selected) ?? null, [history, selected]);
+
+  const handleNewDetection = useCallback((entry: HistoryEntry) => {
+    const updated = [entry, ...history];
+    setHistory(updated);
+    saveHistory(updated);
+    setSelected(entry.id);
+    setModalOpen(false);
+  }, [history]);
+
+  const deleteEntry = useCallback((id: string) => {
+    const updated = history.filter((h) => h.id !== id);
+    setHistory(updated);
+    saveHistory(updated);
+    if (selected === id) setSelected(updated[0]?.id ?? null);
+  }, [history, selected]);
+
+  const exportToFile = useCallback(() => {
+    if (!active) return;
+    downloadJson(active.doc, `${active.name.replace(/\s+/g, '_')}_detected.json`);
+  }, [active]);
+
+  const exportToEditor = useCallback(() => {
+    if (!active) return;
+    // Store in sessionStorage for the main editor to pick up
+    sessionStorage.setItem('detect-import', JSON.stringify(active.doc));
+    window.location.href = '/';
+  }, [active]);
+
+  const formatTime = (ts: number) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="det-page">
+      {/* Sidebar */}
+      <aside className={`det-sidebar${sidebarOpen ? ' open' : ''}`}>
+        <div className="det-sidebar-header">
+          {sidebarOpen && <span className="det-sidebar-title">Detections</span>}
+          <button className="det-sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} title={sidebarOpen ? 'Collapse' : 'Expand'}>
+            {sidebarOpen ? '‹' : '›'}
+          </button>
+        </div>
+        {sidebarOpen && (
+          <>
+            <button className="det-sidebar-add" onClick={() => setModalOpen(true)}>
+              <span className="det-sidebar-add-icon">+</span>
+              New Detection
+            </button>
+            <div className="det-sidebar-list">
+              {history.length === 0 && (
+                <div className="det-sidebar-empty">No detections yet</div>
+              )}
+              {history.map((h) => (
+                <div
+                  key={h.id}
+                  className={`det-sidebar-item${selected === h.id ? ' active' : ''}`}
+                  onClick={() => setSelected(h.id)}
+                >
+                  <div className="det-sidebar-item-name">{h.name}</div>
+                  <div className="det-sidebar-item-meta">
+                    {h.fileName} · {h.pageCount}p · {h.totalColumns}C {h.totalWalls}W
+                  </div>
+                  <div className="det-sidebar-item-time">{formatTime(h.timestamp)}</div>
+                  <button
+                    className="det-sidebar-item-delete"
+                    onClick={(e) => { e.stopPropagation(); deleteEntry(h.id); }}
+                    title="Delete"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </aside>
+
+      {/* Main content */}
+      <div className="det-main">
+        {/* Top bar */}
+        <header className="det-topbar">
+          <div className="det-topbar-left">
+            <a href="/" className="det-topbar-link">← Editor</a>
+            {active && <span className="det-topbar-name">{active.name}</span>}
+          </div>
+          <div className="det-topbar-right">
+            {active && (
+              <>
+                <button className="btn" onClick={exportToFile}>
+                  💾 Save to PC
+                </button>
+                <button className="btn primary" onClick={exportToEditor}>
+                  ↗ Import to Editor
                 </button>
               </>
             )}
+            <button className="btn primary" onClick={() => setModalOpen(true)}>
+              + New
+            </button>
           </div>
+        </header>
 
-          {/* Page picker - appears after PDF is opened */}
-          {pick && (
-            <div className="detect-pick">
-              <div className="detect-pick-title">
-                PDF has {pick.pageCount} pages — select which to process:
-              </div>
-              <div className="detect-pick-chips">
-                {Array.from({ length: pick.pageCount }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`detect-page-chip${selectedPages.includes(p) ? ' sel' : ''}`}
-                    onClick={() => togglePage(p)}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-
-              {/* Algorithm selection */}
-              <label className="detect-field">
-                <span className="detect-field-label">Algorithm:</span>
-                <select
-                  value={algorithm}
-                  onChange={(e) => setAlgorithm(e.target.value as AlgorithmChoice)}
-                  disabled={busy && !pick}
-                >
-                  <option value="auto">Auto (per-page)</option>
-                  <option value="britania">Britania</option>
-                  <option value="glassworks">GlassWorks</option>
-                  <option value="super">SUPER (Adaptive)</option>
-                </select>
-                <span className="detect-field-hint">{ALGO_HELP[algorithm]}</span>
-              </label>
-
-              {/* Scale override */}
-              <label className="detect-field">
-                <span className="detect-field-label">Scale (mm/pt):</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  step={0.1}
-                  value={manualScale ?? ''}
-                  placeholder="Auto"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setManualScale(v === '' || Number.isNaN(Number(v)) ? null : Number(v));
-                  }}
-                  disabled={busy && !pick}
-                />
-                <span className="detect-field-hint">
-                  Empty = auto-detect. Override if scale is wrong.
-                </span>
-              </label>
-
-              {/* Start / Cancel buttons */}
-              <div className="detect-actions">
-                <button
-                  className="btn primary full"
-                  onClick={startRun}
-                  disabled={busy || !selectedPages.length}
-                >
-                  Start Detection
-                </button>
-                <button className="btn full" onClick={cancelPick}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Progress */}
-          {progress && (
-            <div className="detect-progress">
-              <span>{progress}</span>
-              {elapsedSec > 0 && <span className="detect-elapsed">{elapsedSec}s</span>}
-              {progressPct !== null && (
-                <div className="detect-progress-bar">
-                  <div className="detect-progress-fill" style={{ width: `${progressPct}%` }} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Results summary */}
-          {done && (
-            <div className="detect-results">
-              <div className="detect-results-title">Results</div>
-              <div className="detect-results-stats">
-                <span>{done.processedPages} pages</span>
-                <span>{done.fileName}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Log */}
-          {log.length > 0 && (
-            <div className="detect-log">
-              <div className="detect-log-title">Log</div>
-              {log.map((line, i) => (
-                <div key={i} className="detect-log-line">{line}</div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right panel - Visual results + table */}
-        <div className="detect-canvas">
-          {done ? (
-            <div className="detect-results-view">
-              {/* Visual overlay of detected elements per page */}
-              <div className="detect-visual-pages">
-                {Object.entries(done.doc.all_pages).map(([key, page]) => (
-                  <DetectionVisual key={key} pageKey={key} result={page} />
-                ))}
-              </div>
-
-              {/* Table summary */}
-              {pageReport.length > 0 && (
-                <div className="detect-report-table">
-                  <div className="detect-report-header">
-                    <span>Page</span>
-                    <span>Algorithm</span>
-                    <span>Columns</span>
-                    <span>Walls</span>
-                    <span>Time</span>
-                  </div>
-                  {pageReport.map((r) => (
-                    <div key={r.pageNo} className="detect-report-row">
-                      <span>{r.pageNo}</span>
-                      <span>{r.algo}</span>
-                      <span>{r.columns}</span>
-                      <span>{r.walls}</span>
-                      <span>{r.ms}ms</span>
-                    </div>
-                  ))}
-                  <div className="detect-report-footer">
-                    <span>Total</span>
-                    <span />
-                    <span>{pageReport.reduce((s, r) => s + r.columns, 0)}</span>
-                    <span>{pageReport.reduce((s, r) => s + r.walls, 0)}</span>
-                    <span>{pageReport.reduce((s, r) => s + r.ms, 0)}ms</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : pageReport.length > 0 ? (
-            <div className="detect-results-view">
-              <div className="detect-report-table">
-                <div className="detect-report-header">
-                  <span>Page</span>
-                  <span>Algorithm</span>
-                  <span>Columns</span>
-                  <span>Walls</span>
-                  <span>Time</span>
-                </div>
-                {pageReport.map((r) => (
-                  <div key={r.pageNo} className="detect-report-row">
-                    <span>{r.pageNo}</span>
-                    <span>{r.algo}</span>
-                    <span>{r.columns}</span>
-                    <span>{r.walls}</span>
-                    <span>{r.ms}ms</span>
-                  </div>
-                ))}
-                <div className="detect-report-footer">
-                  <span>Total</span>
-                  <span />
-                  <span>{pageReport.reduce((s, r) => s + r.columns, 0)}</span>
-                  <span>{pageReport.reduce((s, r) => s + r.walls, 0)}</span>
-                  <span>{pageReport.reduce((s, r) => s + r.ms, 0)}ms</span>
-                </div>
-              </div>
-            </div>
+        {/* Canvas */}
+        <div className="det-canvas">
+          {active ? (
+            <DetectionCanvas doc={active.doc} />
           ) : (
-            <div className="detect-empty">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.3">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              <p>Drop a PDF or click "Pick PDF" to start detection</p>
-              <p className="detect-empty-sub">
-                Detected columns (blue) and walls (orange) will be shown as bounding boxes.
-                Export the JSON and import it in the main editor.
-              </p>
+            <div className="det-empty-state">
+              <div className="det-empty-icon">📐</div>
+              <div className="det-empty-title">No detection selected</div>
+              <div className="det-empty-sub">
+                Click <strong>+ New Detection</strong> to drop a PDF and start auto-detecting columns and walls.
+              </div>
+              <button className="btn primary" onClick={() => setModalOpen(true)}>
+                + New Detection
+              </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Modal */}
+      {modalOpen && <DetectionModal onClose={() => setModalOpen(false)} onDone={handleNewDetection} />}
     </div>
   );
 }

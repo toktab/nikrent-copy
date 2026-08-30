@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './store/useEditorStore';
+import { legacyBritaniaToV1, schemaToSketchPaths } from './lib/detectImport';
+import type { LegacyDetectedDoc } from './lib/detection/types';
 import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -40,6 +42,29 @@ export default function App() {
     const t = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(t);
   }, [toast, setToast]);
+
+  // Import detection results from /detection page via sessionStorage.
+  // Runs after data has loaded to avoid hydrateFromServer overwriting the paths.
+  const dataLoaded = useEditorStore((s) => s.dataLoaded);
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const raw = sessionStorage.getItem('detect-import');
+    if (!raw) return;
+    try {
+      const doc: LegacyDetectedDoc = JSON.parse(raw);
+      const schema = legacyBritaniaToV1(doc, doc.source?.pdf);
+      const paths = schemaToSketchPaths(schema);
+      if (paths.length) {
+        const prev = useEditorStore.getState().sketch;
+        useEditorStore.setState({ sketch: [...prev, ...paths] });
+      }
+      setToast(`Imported ${paths.length} detection shapes from /detection`);
+    } catch (e) {
+      setToast('Failed to import detection results');
+    } finally {
+      sessionStorage.removeItem('detect-import');
+    }
+  }, [dataLoaded]);
 
   return (
     <div className="app">
