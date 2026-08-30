@@ -42,6 +42,10 @@ interface PageReport {
 function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageResult }) {
   const pageNo = pageKey.replace('page_', '');
 
+  /** Clamp stroke width so it is visible at any scale. */
+  const strokeW = (vw: number, vh: number) =>
+    Math.max(0.5, Math.min(3, Math.max(vw, vh) * 0.003));
+
   if (result.drawing_type === 'section') {
     const walls = result.detectedWalls ?? [];
     const cols = result.detectedColumns ?? [];
@@ -52,8 +56,8 @@ function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageRes
     const maxX = Math.max(...allX) + 50;
     const minY = Math.min(...allY) - 50;
     const maxY = Math.max(...allY) + 50;
-    const vw = maxX - minX;
-    const vh = maxY - minY;
+    const vw = Math.max(maxX - minX, 100);
+    const vh = Math.max(maxY - minY, 100);
     return (
       <div className="detect-visual-page">
         <div className="detect-visual-label">Page {pageNo} — Section ({cols.length} columns, {walls.length} walls)</div>
@@ -71,7 +75,7 @@ function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageRes
                 height={isVert ? hl * 2 : hw * 2}
                 fill="rgba(239,168,49,0.25)"
                 stroke="#efa831"
-                strokeWidth={Math.max(vw, vh) * 0.003}
+                strokeWidth={strokeW(vw, vh)}
               />
             );
           })}
@@ -84,7 +88,7 @@ function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageRes
               height={c.depthCm ?? 30}
               fill="rgba(112,166,245,0.25)"
               stroke="#70a6f5"
-              strokeWidth={Math.max(vw, vh) * 0.003}
+              strokeWidth={strokeW(vw, vh)}
             />
           ))}
         </svg>
@@ -102,8 +106,8 @@ function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageRes
   const maxX = Math.max(...allX) + 20;
   const minY = Math.min(...allY) - 20;
   const maxY = Math.max(...allY) + 20;
-  const vw = maxX - minX;
-  const vh = maxY - minY;
+  const vw = Math.max(maxX - minX, 100);
+  const vh = Math.max(maxY - minY, 100);
   return (
     <div className="detect-visual-page">
       <div className="detect-visual-label">Page {pageNo} — Plan ({columns.length} columns, {walls.length} walls)</div>
@@ -117,7 +121,7 @@ function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageRes
             height={w.y1 - w.y0}
             fill="rgba(239,168,49,0.2)"
             stroke="#efa831"
-            strokeWidth={Math.max(vw, vh) * 0.003}
+            strokeWidth={strokeW(vw, vh)}
           />
         ))}
         {columns.map((c, i) => (
@@ -129,7 +133,7 @@ function DetectionVisual({ pageKey, result }: { pageKey: string; result: PageRes
             height={c.y1 - c.y0}
             fill="rgba(112,166,245,0.25)"
             stroke="#70a6f5"
-            strokeWidth={Math.max(vw, vh) * 0.003}
+            strokeWidth={strokeW(vw, vh)}
           />
         ))}
       </svg>
