@@ -380,6 +380,73 @@
   justify-content: center;
   text-align: center;
   padding: 40px;
+  animation: det-empty-fade 0.5s ease;
+}
+
+@keyframes det-empty-fade {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.det-empty-anim {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.det-empty-rings {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.det-empty-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  opacity: 0;
+  animation: det-empty-pulse 3s ease-in-out infinite;
+}
+
+.det-empty-ring.r1 {
+  width: 80px;
+  height: 80px;
+  animation-delay: 0s;
+}
+
+.det-empty-ring.r2 {
+  width: 100px;
+  height: 100px;
+  animation-delay: 0.6s;
+}
+
+.det-empty-ring.r3 {
+  width: 120px;
+  height: 120px;
+  animation-delay: 1.2s;
+}
+
+@keyframes det-empty-pulse {
+  0%, 100% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 0.4; transform: scale(1); }
+}
+
+.det-empty-pdf {
+  position: relative;
+  z-index: 1;
+  animation: det-empty-bob 3s ease-in-out infinite;
+  filter: drop-shadow(0 4px 12px rgba(112, 91, 245, 0.2));
+}
+
+@keyframes det-empty-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .det-empty-title {
@@ -392,6 +459,45 @@
 .det-empty-sub {
   font-size: 13px;
   color: var(--muted);
+  max-width: 320px;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.det-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent) 0%, #7c5bf5 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 16px rgba(112, 91, 245, 0.3);
+}
+
+.det-empty-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(112, 91, 245, 0.45);
+}
+
+.det-empty-cta:active {
+  transform: translateY(0) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .det-empty-pdf,
+  .det-empty-ring {
+    animation: none;
+  }
+  .det-empty-state {
+    animation: none;
+  }
 }
 
 /* ── Canvas (DetectionCanvas) ── */

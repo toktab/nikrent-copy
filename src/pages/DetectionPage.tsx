@@ -694,8 +694,29 @@ export default function DetectionPage() {
             <DetectionCanvas doc={active.doc} />
           ) : (
             <div className="det-empty-state">
+              <div className="det-empty-anim">
+                <div className="det-empty-rings">
+                  <div className="det-empty-ring r1" />
+                  <div className="det-empty-ring r2" />
+                  <div className="det-empty-ring r3" />
+                </div>
+                <div className="det-empty-pdf">
+                  <svg width="64" height="80" viewBox="0 0 64 80" fill="none">
+                    <rect x="4" y="2" width="56" height="76" rx="8" fill="var(--surface)" stroke="var(--line-strong)" strokeWidth="1.5" />
+                    <path d="M40 2v18h18" stroke="var(--line-strong)" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+                    <path d="M40 2l18 18" stroke="var(--line-strong)" strokeWidth="1.5" strokeLinejoin="round" fill="none" />
+                    <rect x="16" y="36" width="32" height="4" rx="2" fill="var(--accent)" opacity="0.5" />
+                    <rect x="16" y="46" width="24" height="4" rx="2" fill="var(--accent)" opacity="0.3" />
+                    <rect x="16" y="56" width="28" height="4" rx="2" fill="var(--accent)" opacity="0.2" />
+                  </svg>
+                </div>
+              </div>
               <div className="det-empty-title">No detection selected</div>
-              <div className="det-empty-sub">Click + to add a new detection, or select one from the list</div>
+              <div className="det-empty-sub">Upload a PDF and run AI-powered detection to extract structural elements</div>
+              <button className="det-empty-cta" onClick={() => setModalOpen(true)}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                Create Detection
+              </button>
             </div>
           )}
         </div>
