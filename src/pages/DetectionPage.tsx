@@ -6,6 +6,7 @@ import type {
 } from '../lib/detection/types';
 import { downloadJson, pickFile, readFileAsArrayBuffer } from '../lib/files';
 import type { Piece, SketchPath } from '../types';
+import '../styles/detection.css';
 
 /* ── Constants ── */
 
@@ -48,34 +49,6 @@ function fmtTime(ts: number): string {
   return `${d.getFullYear()}.${mm}.${dd} ${hh}:${mi}`;
 }
 
-/* ── ReadOnlyPiece: yellow outline style matching mockup ── */
-
-function ReadOnlyPiece({ piece, w, h, zoom }: { piece: Piece; w: number; h: number; zoom: number }) {
-  return (
-    <div
-      className="piece"
-      style={{
-        left: piece.x,
-        top: piece.y,
-        width: w,
-        height: h,
-        transform: `rotate(${piece.rot}deg)`,
-      }}
-    >
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
-        <rect
-          width={w}
-          height={h}
-          fill="none"
-          stroke="#e8c840"
-          strokeWidth={2.5 / zoom}
-          rx={0}
-        />
-      </svg>
-    </div>
-  );
-}
-
 /* ── SketchPath (read-only) ── */
 
 function ReadOnlySketchLayer({ sketch, zoom }: { sketch: SketchPath[]; zoom: number }) {
@@ -108,7 +81,7 @@ function ReadOnlySketchLayer({ sketch, zoom }: { sketch: SketchPath[]; zoom: num
   );
 }
 
-/* ── Canvas: dark navy background with yellow outline detection ── */
+/* ── Canvas ── */
 
 function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -143,23 +116,18 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
           const id = `det-col-${pageIdx}-${col.id ?? Math.random().toString(36).slice(2)}`;
           const w = Math.max(5, col.x1 - col.x0);
           const h = Math.max(5, col.y1 - col.y0);
-          const cx = col.x0 - left + xOff;
-          const cy = col.y0 - top;
           dimsMap.set(id, { w, h });
-          materialByPage.push({ id, materialId: id, x: cx, y: cy, rot: 0, z: 0 });
+          materialByPage.push({ id, materialId: id, x: col.x0 - left + xOff, y: col.y0 - top, rot: 0, z: 0 });
         }
 
         for (const wall of walls) {
           const id = `det-wall-${pageIdx}-${wall.id ?? Math.random().toString(36).slice(2)}`;
           const w = Math.max(3, wall.x1 - wall.x0);
           const h = Math.max(3, wall.y1 - wall.y0);
-          const cx = wall.x0 - left + xOff;
-          const cy = wall.y0 - top;
           dimsMap.set(id, { w, h });
-          materialByPage.push({ id, materialId: id, x: cx, y: cy, rot: 0, z: 0 });
+          materialByPage.push({ id, materialId: id, x: wall.x0 - left + xOff, y: wall.y0 - top, rot: 0, z: 0 });
         }
 
-        // Sketch from walls
         for (const wall of walls) {
           sketchByPage.push({
             id: `det-sk-${pageIdx}-${wall.id ?? Math.random().toString(36).slice(2)}`,
@@ -172,7 +140,6 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
         if (xs.length) xOff += Math.max(...xs) - Math.min(...xs) + 2 * MARGIN + GAP;
         else xOff += 800 + GAP;
       } else {
-        // Section
         const columns = (page as any).detectedColumns ?? [];
         const walls = (page as any).detectedWalls ?? [];
         const allCx = [...walls.map((w: any) => w.cx), ...columns.map((c: any) => c.cx)];
@@ -207,7 +174,6 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
     return { pieces: materialByPage, sketch: sketchByPage, dimsById: dimsMap };
   }, [doc]);
 
-  // Wheel zoom
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -226,7 +192,6 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
     return () => el.removeEventListener('wheel', onWheel);
   }, [zoom, panX, panY]);
 
-  // Pointer pan
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     panning.current = { sx: e.clientX, sy: e.clientY, px: panX, py: panY };
@@ -258,26 +223,20 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
     >
       <div
         className="world"
-        style={{
-          transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-          '--z': zoom,
-        } as any}
+        style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})`, '--z': zoom } as any}
       >
-        <div
-          className="grid"
-          style={{
-            width: WORLD_W,
-            height: WORLD_H,
-            '--gw': `${1 / zoom}px`,
-            '--gf': `${gridStep}px`,
-            '--gm': '100px',
-          } as any}
-        />
+        <div className="grid" style={{ width: WORLD_W, height: WORLD_H, '--gw': `${1 / zoom}px`, '--gf': `${gridStep}px`, '--gm': '100px' } as any} />
         <ReadOnlySketchLayer sketch={sketch} zoom={zoom} />
         {pieces.map((piece) => {
           const dim = dimsById.get(piece.materialId);
           if (!dim) return null;
-          return <ReadOnlyPiece key={piece.id} piece={piece} w={dim.w} h={dim.h} zoom={zoom} />;
+          return (
+            <div key={piece.id} className="piece" style={{ left: piece.x, top: piece.y, width: dim.w, height: dim.h, transform: `rotate(${piece.rot}deg)` }}>
+              <svg width={dim.w} height={dim.h} viewBox={`0 0 ${dim.w} ${dim.h}`}>
+                <rect width={dim.w} height={dim.h} fill="none" stroke="#e8c840" strokeWidth={2.5 / zoom} />
+              </svg>
+            </div>
+          );
         })}
       </div>
       <div className="det-canvas-hint">
@@ -287,23 +246,29 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   );
 }
 
-/* ── Modal: Detection wizard ── */
+/* ── Single-page Detection Wizard ── */
 
-function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (entry: HistoryEntry) => void }) {
-  const [step, setStep] = useState<'pick' | 'pages' | 'details'>('pick');
-  const [busy, setBusy] = useState(false);
+const ALGO_OPTIONS: { value: AlgorithmChoice; label: string; icon: string; desc: string; color: string }[] = [
+  { value: 'auto',       label: 'Auto',        icon: '🤖', desc: 'Best algorithm per page',        color: '#70a6f5' },
+  { value: 'britania',   label: 'Britania',     icon: '🏛️', desc: 'Structural columns & walls',      color: '#e8c840' },
+  { value: 'glassworks', label: 'GlassWorks',   icon: '🪟', desc: 'Glass façade detection',          color: '#5ad4a8' },
+  { value: 'super',      label: 'SUPER',        icon: '🚀', desc: 'Advanced multi-pass detection',   color: '#f0786c' },
+];
+
+function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (entry: HistoryEntry) => void }) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
   const [algorithm, setAlgorithm] = useState<AlgorithmChoice>('auto');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [progressPct, setProgressPct] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const jobIdRef = useRef<string | null>(null);
-  const [nextNum, setNextNum] = useState(() => loadHistory().length + 1);
+  const [nextNum] = useState(() => loadHistory().length + 1);
 
   useEffect(() => () => { workerRef.current?.terminate(); }, []);
 
@@ -311,6 +276,7 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
     setPdfFile(file);
     setBusy(true);
     setProgress('Reading PDF…');
+    setName(`Detection ${nextNum}`);
     const id = `det-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     jobIdRef.current = id;
     const buffer = await readFileAsArrayBuffer(file);
@@ -322,14 +288,13 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
         const all = Array.from({ length: msg.pageCount }, (_, i) => i + 1);
         setSelectedPages(all);
         setPageCount(msg.pageCount);
-        setStep('pages');
         setBusy(false);
         setProgress('');
       }
     };
     worker.onerror = (e) => { setBusy(false); setProgress('Error: ' + e.message); };
     worker.postMessage({ type: 'detect', id, pdf: buffer, fileName: file.name, algorithm: 'auto', drawingType: 'auto', mode: 'auto', scale: 50 });
-  }, []);
+  }, [nextNum]);
 
   const runDetection = useCallback(() => {
     const worker = workerRef.current;
@@ -337,8 +302,7 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
     if (!worker || !id || !pdfFile) return;
     setBusy(true);
     setProgress('Detecting…');
-    setStep('details');
-    setName(`Detection ${nextNum}`);
+    setProgressPct(null);
     worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
       const msg = ev.data;
       if (msg.type === 'page') {
@@ -370,7 +334,6 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
           totalColumns: totalCols,
           totalWalls: totalWalls,
         });
-        setNextNum((n) => n + 1);
         setBusy(false);
         setProgress('');
         setProgressPct(null);
@@ -382,15 +345,14 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
         setProgress('Error: ' + msg.message);
       }
     };
-    worker.postMessage({
-      type: 'run',
-      id,
-      pages: selectedPages,
-      algorithm,
-    });
+    worker.postMessage({ type: 'run', id, pages: selectedPages, algorithm });
   }, [pdfFile, selectedPages, algorithm, name, description, nextNum, onDone]);
 
   const togglePage = (p: number) => setSelectedPages((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p].sort((a, b) => a - b));
+  const toggleAllPages = () => {
+    if (selectedPages.length === pageCount) setSelectedPages([]);
+    else setSelectedPages(Array.from({ length: pageCount }, (_, i) => i + 1));
+  };
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -399,95 +361,195 @@ function DetectionModal({ onClose, onDone }: { onClose: () => void; onDone: (ent
     if (f && /\.pdf$/i.test(f.name)) await openPdf(f);
   };
 
+  const hasFile = !!pdfFile;
+  const hasPages = selectedPages.length > 0;
+  const canDetect = hasFile && hasPages && !busy;
+  const selectedAlgo = ALGO_OPTIONS.find((a) => a.value === algorithm) ?? ALGO_OPTIONS[0];
+
   return (
     <div className="dm-overlay" onClick={onClose}>
-      <div className="dm-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="dm-modal dm-modal-wide" onClick={(e) => e.stopPropagation()}>
         <button className="dm-close" onClick={onClose}>✕</button>
-        <div className="dm-title">New Detection</div>
 
-        {step === 'pick' && (
-          <div
-            className={`dm-drop${dragOver ? ' over' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-          >
-            <div className="dm-drop-icon">📄</div>
-            <div className="dm-drop-label">Drop a PDF here</div>
-            <div className="dm-drop-sub">or</div>
-            <button className="btn primary" onClick={() => pickFile('.pdf').then((f) => f && openPdf(f))}>
-              Choose PDF
-            </button>
+        {/* Header */}
+        <div className="dm-header">
+          <div className="dm-header-icon">✨</div>
+          <div>
+            <div className="dm-title">New Detection</div>
+            <div className="dm-subtitle">Upload a PDF, pick your algorithm, and choose pages — all in one step.</div>
           </div>
-        )}
+        </div>
 
-        {step === 'pages' && (
-          <>
-            <div className="dm-section-label">Select pages ({pageCount} total)</div>
+        {/* Upload Section */}
+        <div className="dm-section">
+          {!hasFile ? (
+            <div
+              className={`dm-drop ${dragOver ? 'over' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+            >
+              <div className="dm-drop-icon">
+                <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                  <rect x="8" y="4" width="40" height="48" rx="6" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" fill="none" opacity="0.4" />
+                  <path d="M28 20v16M20 28l8-8 8 8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                </svg>
+              </div>
+              <div className="dm-drop-label">Drop a PDF here</div>
+              <div className="dm-drop-sub">or</div>
+              <button className="btn primary dm-drop-btn" onClick={() => pickFile('.pdf').then((f) => f && openPdf(f))}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                Choose PDF
+              </button>
+            </div>
+          ) : (
+            <div className="dm-file-loaded">
+              <div className="dm-file-icon-wrap">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                  <rect x="3" y="1" width="22" height="26" rx="4" stroke="var(--ok)" strokeWidth="1.5" fill="none" />
+                  <path d="M8 14l4 4 8-8" stroke="var(--ok)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="dm-file-info">
+                <div className="dm-file-name">{pdfFile.name}</div>
+                <div className="dm-file-meta">{pageCount} pages · Ready</div>
+              </div>
+              <button className="btn ghost small" onClick={() => { setPdfFile(null); setPageCount(0); setSelectedPages([]); }}>Change</button>
+            </div>
+          )}
+        </div>
+
+        {/* Algorithm Cards — always visible */}
+        <div className="dm-section">
+          <div className="dm-section-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2" /><path d="M7 4.5v5M4.5 7h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
+            Algorithm
+          </div>
+          <div className="dm-algo-grid">
+            {ALGO_OPTIONS.map((a) => (
+              <button
+                key={a.value}
+                className={`dm-algo-card ${algorithm === a.value ? 'sel' : ''}`}
+                style={{ '--algo-color': a.color } as any}
+                onClick={() => setAlgorithm(a.value)}
+              >
+                <div className="dm-algo-icon">{a.icon}</div>
+                <div className="dm-algo-label">{a.label}</div>
+                <div className="dm-algo-desc">{a.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Pages — always visible, disabled until file loads */}
+        <div className="dm-section">
+          <div className="dm-section-title">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none" /><path d="M5 5h4M5 7.5h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.6" /></svg>
+            Pages
+            {pageCount > 0 && <span className="dm-section-badge">{selectedPages.length}/{pageCount}</span>}
+            {pageCount > 0 && <button className="dm-page-toggle" onClick={toggleAllPages}>{selectedPages.length === pageCount ? 'Deselect all' : 'Select all'}</button>}
+          </div>
+          {!hasFile ? (
+            <div className="dm-pages-placeholder">Upload a PDF to select pages</div>
+          ) : (
             <div className="dm-chips">
               {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-                <button key={p} className={`dm-chip${selectedPages.includes(p) ? ' sel' : ''}`} onClick={() => togglePage(p)}>
+                <button key={p} className={`dm-chip ${selectedPages.includes(p) ? 'sel' : ''}`} onClick={() => togglePage(p)}>
                   {p}
                 </button>
               ))}
             </div>
-            <div className="dm-section-label">Algorithm</div>
-            <select className="dm-select" value={algorithm} onChange={(e) => setAlgorithm(e.target.value as AlgorithmChoice)}>
-              <option value="auto">Auto (per-page)</option>
-              <option value="britania">Britania</option>
-              <option value="glassworks">GlassWorks</option>
-              <option value="super">SUPER</option>
-            </select>
-            <button className="btn primary full" onClick={runDetection} disabled={!selectedPages.length || busy}>
-              {busy ? 'Processing…' : 'Start Detection'}
-            </button>
-          </>
+          )}
+        </div>
+
+        {/* Details row — always visible */}
+        <div className="dm-columns-2">
+          <label className="dm-field">
+            <span>Name</span>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={`Detection ${nextNum}`} />
+          </label>
+          <label className="dm-field">
+            <span>Description (optional)</span>
+            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Ground floor plan" />
+          </label>
+        </div>
+
+        {/* Progress */}
+        {busy && (
+          <div className="dm-progress">
+            <div className="dm-progress-bar">
+              <div className="dm-progress-fill" style={{ width: progressPct ? `${progressPct}%` : '100%' }} />
+            </div>
+            <div className="dm-progress-text">{progress}</div>
+          </div>
         )}
 
-        {step === 'details' && (
-          <>
-            {busy && (
-              <div className="dm-progress">
-                <div className="dm-progress-bar">
-                  <div className="dm-progress-fill" style={{ width: progressPct ? `${progressPct}%` : '100%' }} />
-                </div>
-                <div className="dm-progress-text">{progress}</div>
-              </div>
-            )}
-            {!busy && (
-              <>
-                <div className="dm-success">✓ Detection complete</div>
-                <label className="dm-field">
-                  <span>Name</span>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={`Detection ${nextNum}`} />
-                </label>
-                <label className="dm-field">
-                  <span>Description (optional)</span>
-                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Ground floor plan" />
-                </label>
-                <button className="btn primary full" onClick={onClose}>View Results</button>
-              </>
-            )}
-          </>
-        )}
+        {/* Action Button */}
+        <button className="btn primary full dm-action-btn" onClick={runDetection} disabled={!canDetect}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l5-5v3.5h5v3H8V13z" fill="currentColor" /></svg>
+          {busy ? 'Detecting…' : 'Start Detection'}
+        </button>
       </div>
     </div>
   );
 }
 
-/* ── Main page ── */
+/* ── Confirm Dialog ── */
 
-/** Editable inline field — click to edit, blur/Enter to save. */
-function EditableField({
-  value,
-  placeholder,
-  className,
-  onCommit,
-}: {
-  value: string;
-  placeholder?: string;
-  className?: string;
-  onCommit: (v: string) => void;
+function ConfirmDialog({ title, message, icon, onConfirm, onCancel, danger }: {
+  title: string; message: string; icon?: string; onConfirm: () => void; onCancel: () => void; danger?: boolean;
+}) {
+  return (
+    <div className="dm-confirm-overlay" onClick={onCancel}>
+      <div className="dm-confirm" onClick={(e) => e.stopPropagation()}>
+        <div className="dm-confirm-icon">{icon || '🔍'}</div>
+        <div className="dm-confirm-title">{title}</div>
+        <div className="dm-confirm-message">{message}</div>
+        <div className="dm-confirm-actions">
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className={`btn ${danger ? 'danger' : 'primary'}`} onClick={onConfirm}>
+            {danger ? 'Delete' : 'Open'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Detection Info Panel ── */
+
+function DetectionInfoPanel({ entry, onClose, onExport, onImport }: {
+  entry: HistoryEntry; onClose: () => void; onExport: () => void; onImport: () => void;
+}) {
+  return (
+    <div className="det-info-panel">
+      <div className="det-info-header">
+        <div className="det-info-title">{entry.name}</div>
+        <button className="det-info-close" onClick={onClose}>✕</button>
+      </div>
+      {entry.description && <div className="det-info-desc">{entry.description}</div>}
+      <div className="det-info-stats">
+        <div className="det-info-stat"><div className="det-info-stat-value">{entry.pageCount}</div><div className="det-info-stat-label">Pages</div></div>
+        <div className="det-info-stat"><div className="det-info-stat-value">{entry.totalColumns}</div><div className="det-info-stat-label">Columns</div></div>
+        <div className="det-info-stat"><div className="det-info-stat-value">{entry.totalWalls}</div><div className="det-info-stat-label">Walls</div></div>
+        <div className="det-info-stat"><div className="det-info-stat-value">{entry.totalColumns + entry.totalWalls}</div><div className="det-info-stat-label">Elements</div></div>
+      </div>
+      <div className="det-info-meta">
+        <span>{entry.fileName}</span>
+        <span>{fmtTime(entry.timestamp)}</span>
+      </div>
+      <div className="det-info-actions">
+        <button className="det-info-btn" onClick={onExport}>Export JSON</button>
+        <button className="det-info-btn primary" onClick={onImport}>Import to Editor</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Editable inline field ── */
+
+function EditableField({ value, placeholder, className, onCommit }: {
+  value: string; placeholder?: string; className?: string; onCommit: (v: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
   const [editing, setEditing] = useState(false);
@@ -495,11 +557,7 @@ function EditableField({
 
   if (!editing) {
     return (
-      <span
-        className={`${className ?? ''} editable-field`}
-        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-        title="Click to edit"
-      >
+      <span className={`${className ?? ''} editable-field`} onClick={(e) => { e.stopPropagation(); setEditing(true); }} title="Click to edit">
         {value || <span className="editable-placeholder">{placeholder ?? '—'}</span>}
       </span>
     );
@@ -521,11 +579,16 @@ function EditableField({
   );
 }
 
+/* ── Main page ── */
+
 export default function DetectionPage() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
   const [selected, setSelected] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmSwitch, setConfirmSwitch] = useState<HistoryEntry | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   const active = useMemo(() => history.find((h) => h.id === selected) ?? null, [history, selected]);
 
@@ -542,9 +605,9 @@ export default function DetectionPage() {
     setHistory(updated);
     saveHistory(updated);
     if (selected === id) setSelected(updated[0]?.id ?? null);
+    setConfirmDelete(null);
   }, [history, selected]);
 
-  /** Update a single field on a history entry. */
   const updateEntry = useCallback((id: string, patch: Partial<Pick<HistoryEntry, 'name' | 'description'>>) => {
     setHistory((prev) => {
       const updated = prev.map((h) => h.id === id ? { ...h, ...patch } : h);
@@ -564,48 +627,43 @@ export default function DetectionPage() {
     window.location.href = '/';
   }, [active]);
 
+  const handleItemClick = useCallback((entry: HistoryEntry) => {
+    if (entry.id === selected) {
+      setShowInfo(true);
+      return;
+    }
+    setConfirmSwitch(entry);
+  }, [selected]);
+
+  const confirmSwitchTo = useCallback((entry: HistoryEntry) => {
+    setSelected(entry.id);
+    setShowInfo(true);
+    setConfirmSwitch(null);
+  }, []);
+
+  const deleteTarget = useMemo(() => history.find((h) => h.id === confirmDelete) ?? null, [history, confirmDelete]);
+
   return (
     <div className="det-page">
       {/* Sidebar */}
-      <aside className={`det-sidebar${sidebarOpen ? ' open' : ''}`}>
+      <aside className={`det-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="det-sidebar-content">
           <div className="det-sidebar-header">
             <button className="det-sidebar-add" onClick={() => setModalOpen(true)}>
               +
+              <span className="det-add-shimmer" />
             </button>
           </div>
           <div className="det-sidebar-list">
-            {history.length === 0 && (
-              <div className="det-sidebar-empty">No detections yet</div>
-            )}
+            {history.length === 0 && <div className="det-sidebar-empty">No detections yet</div>}
             {history.map((h) => (
-              <div
-                key={h.id}
-                className={`det-sidebar-item${selected === h.id ? ' active' : ''}`}
-                onClick={() => setSelected(h.id)}
-              >
+              <div key={h.id} className={`det-sidebar-item ${selected === h.id ? 'active' : ''}`} onClick={() => handleItemClick(h)}>
                 <div className="det-sidebar-item-top">
-                  <EditableField
-                    className="det-sidebar-item-name"
-                    value={h.name}
-                    placeholder="Detection"
-                    onCommit={(v) => updateEntry(h.id, { name: v || h.name })}
-                  />
-                  <button
-                    className="det-sidebar-item-delete"
-                    onClick={(e) => { e.stopPropagation(); deleteEntry(h.id); }}
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
+                  <EditableField className="det-sidebar-item-name" value={h.name} placeholder="Detection" onCommit={(v) => updateEntry(h.id, { name: v || h.name })} />
+                  <button className="det-sidebar-item-delete" onClick={(e) => { e.stopPropagation(); setConfirmDelete(h.id); }} title="Delete">✕</button>
                 </div>
                 <div className="det-sidebar-item-desc">
-                  <EditableField
-                    className="det-sidebar-item-desc-text"
-                    value={h.description}
-                    placeholder="No description"
-                    onCommit={(v) => updateEntry(h.id, { description: v })}
-                  />
+                  <EditableField value={h.description} placeholder="No description" onCommit={(v) => updateEntry(h.id, { description: v })} />
                 </div>
                 <div className="det-sidebar-item-meta">
                   <span className="det-sidebar-item-time">{fmtTime(h.timestamp)}</span>
@@ -615,53 +673,44 @@ export default function DetectionPage() {
             ))}
           </div>
         </div>
-        {/* Red arrow toggle button */}
-        <button
-          className="det-sidebar-toggle"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d={sidebarOpen ? "M10 3L5 8L10 13" : "M6 3L11 8L6 13"}
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+        <button className="det-sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 3L5 7L9 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       </aside>
 
       {/* Main content */}
       <div className="det-main">
-        {/* Canvas */}
         <div className="det-canvas-wrap">
-          {/* Export/Import buttons - top right */}
           <div className="det-actions">
-            <button className="det-action-btn" onClick={exportToFile} disabled={!active}>
-              Export
-            </button>
-            <button className="det-action-btn primary" onClick={exportToEditor} disabled={!active}>
-              Import
-            </button>
+            <button className="det-action-btn" onClick={exportToFile} disabled={!active}>Export</button>
+            <button className="det-action-btn primary" onClick={exportToEditor} disabled={!active}>Import</button>
           </div>
-
+          {active && showInfo && (
+            <DetectionInfoPanel entry={active} onClose={() => setShowInfo(false)} onExport={exportToFile} onImport={exportToEditor} />
+          )}
           {active ? (
             <DetectionCanvas doc={active.doc} />
           ) : (
             <div className="det-empty-state">
               <div className="det-empty-title">No detection selected</div>
-              <div className="det-empty-sub">
-                Click + to add a new detection
-              </div>
+              <div className="det-empty-sub">Click + to add a new detection, or select one from the list</div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal */}
-      {modalOpen && <DetectionModal onClose={() => setModalOpen(false)} onDone={handleNewDetection} />}
+      {/* Wizard Modal */}
+      {modalOpen && <DetectionWizard onClose={() => setModalOpen(false)} onDone={handleNewDetection} />}
+
+      {/* Confirm Dialogs */}
+      {confirmDelete && deleteTarget && (
+        <ConfirmDialog title="Delete Detection" message={`Are you sure you want to delete "${deleteTarget.name}"?`} icon="🗑️" danger onConfirm={() => deleteEntry(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
+      )}
+      {confirmSwitch && (
+        <ConfirmDialog title="Switch Detection" message={`Open "${confirmSwitch.name}"?`} icon="🔍" onConfirm={() => confirmSwitchTo(confirmSwitch)} onCancel={() => setConfirmSwitch(null)} />
+      )}
     </div>
   );
 }
