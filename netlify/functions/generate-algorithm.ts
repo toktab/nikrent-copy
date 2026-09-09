@@ -129,7 +129,7 @@ export default async (req: Request, context: Context) => {
   const prompt = `${SYSTEM_PROMPT}\n\nUSER CONTEXT:\n${body.userContext || '(none provided)'}\n\nAnalyze the PDF and generate the TypeScript detector code.`;
 
   // 5. Call Gemini API
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   try {
