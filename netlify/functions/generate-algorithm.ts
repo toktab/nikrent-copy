@@ -54,7 +54,7 @@ PageResult is ONE of:
 AVAILABLE IMPORTS (only these are allowed \u2014 ANY other import will fail):
 \`\`\`typescript
 import * as cvMod from './opencv'              // opencv.js WASM helpers: newTracker, releaseMats, inRangeT, morphT, rectKernel, findContoursT, contourBoxes, thresholdT, blurT, dilateT, paintRectsWhite, bitwiseOrT, absdiffT, maskOutBoxes
-import { getPageDrawings, getPageText } from './pdf'  // vector drawings + text extraction
+import { getPageDrawings, getPageText } from './pdf'  // getPageText(page) => string (joined text); getPageDrawings(page) => drawings[]
 import type { PageResult, PlanColumn, PlanWall } from './types'
 import { BRITANIA_PARAMS, detectBritaniaPage } from './britania_detector_pdf'
 import { analyzeUnifiedPage } from './unified_detector_v2_pdf'
