@@ -162,7 +162,7 @@ export interface DetectRunMessage {
    * in hand when it places it on the stage. Folding it into the run message
    * (instead of a separate concurrent `renderBg`) removes a race where the
    * background could be lost when `done` arrived ahead of the image. */
-  bg?: { pageNo: number; pxWidth: number; pxHeight: number };
+  bg?: { pageNo: number; dpi: number };
 }
 
 /** Worker -> UI: the PDF is open; here is how many pages it has. */
@@ -251,10 +251,9 @@ export interface RenderBgMessage {
   type: 'renderBg';
   id: string;
   pageNo: number;
-  /** Target width in pixels for the rendered image. */
-  pxWidth: number;
-  /** Target height in pixels. */
-  pxHeight: number;
+  /** Render DPI (e.g., 150). The worker creates a canvas matching the
+   *  viewport exactly at this DPI, guaranteeing uniform scaling. */
+  dpi: number;
 }
 
 /** Worker -> UI: the rendered background page image. */

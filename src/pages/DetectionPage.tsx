@@ -363,7 +363,7 @@ function renderBackgrounds(
       if (!('id' in msg) || msg.id !== id) return; // 'ready' has no id — ignore
       if (msg.type === 'pages') {
         for (const pageNo of pages) {
-          worker.postMessage({ type: 'renderBg', id, pageNo, pxWidth: 1600, pxHeight: 1600 });
+          worker.postMessage({ type: 'renderBg', id, pageNo, dpi: 150 });
         }
       } else if (msg.type === 'bgImage') {
         const pageNo = queue.shift();

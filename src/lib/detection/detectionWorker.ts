@@ -108,13 +108,12 @@ ctx.onmessage = async (event: MessageEvent) => {
       console.error('[worker] renderBg: no matching pending job', { msgId: msg.id, hasPending: !!pending });
       return;
     }
-    console.log('[worker] renderBg: rendering page', { pageNo: msg.pageNo, pxWidth: msg.pxWidth, pxHeight: msg.pxHeight });
+    console.log('[worker] renderBg: rendering page', { pageNo: msg.pageNo, dpi: msg.dpi });
     try {
       const bg = await renderBackground(
         pending.pdf,
         msg.pageNo,
-        msg.pxWidth,
-        msg.pxHeight,
+        msg.dpi,
       );
       console.log('[worker] renderBg: done, dataUrl length', bg.dataUrl.length);
       ctx.postMessage({
@@ -288,13 +287,11 @@ async function runPages(msg: DetectRunMessage): Promise<void> {
       const bg = await renderBackground(
         pdf,
         msg.bg.pageNo,
-        msg.bg.pxWidth,
-        msg.bg.pxHeight,
+        msg.bg.dpi,
       );
       console.log('[worker] runPages: bg rendered', {
         pageNo: msg.bg.pageNo,
-        pxWidth: msg.bg.pxWidth,
-        pxHeight: msg.bg.pxHeight,
+        dpi: msg.bg.dpi,
         dataUrlLen: bg.dataUrl.length,
       });
       ctx.postMessage({
@@ -336,30 +333,30 @@ async function runPages(msg: DetectRunMessage): Promise<void> {
 async function renderBackground(
   pdf: any,
   pageNo: number,
-  targetW: number,
-  targetH: number,
+  dpi: number = 150,
 ): Promise<{ dataUrl: string; pagePtW: number; pagePtH: number }> {
   const page = await pdf.page(pageNo);
   try {
     const base = page.getViewport({ scale: 1 });
 
-    // OffscreenCanvas has a hard per-edge limit (~32767 px in Chromium and
-    // Firefox); beyond it the canvas is created but `convertToBlob` throws
-    // "Failed to execute 'convertToBlob'". The background is an <img> scaled
-    // by the browser to its cm size, so a 150-dpi raster buys nothing here —
-    // clamp to a safe, ample edge size while preserving the aspect ratio.
+    // Render at the requested DPI. This matches the detection rasterisation
+    // approach and guarantees uniform scaling (no distortion).
+    // OffscreenCanvas has a hard per-edge limit (~32767 px); clamp to a safe
+    // maximum while preserving aspect ratio.
     const MAX_EDGE = 8192;
-    let w = targetW;
-    let h = targetH;
-    if (!(w > 0) || !(h > 0)) {
-      w = base.width;
-      h = base.height;
-    }
-    const shrink = Math.min(1, MAX_EDGE / w, MAX_EDGE / h);
-    w = Math.max(1, Math.round(w * shrink));
-    h = Math.max(1, Math.round(h * shrink));
+    const scale = dpi / 72;
+    let viewport = page.getViewport({ scale });
+    let w = Math.ceil(viewport.width);
+    let h = Math.ceil(viewport.height);
 
-    const viewport = page.getViewport({ scale: w / base.width });
+    if (w > MAX_EDGE || h > MAX_EDGE) {
+      const shrink = Math.min(MAX_EDGE / w, MAX_EDGE / h);
+      const clampedScale = scale * shrink;
+      viewport = page.getViewport({ scale: clampedScale });
+      w = Math.ceil(viewport.width);
+      h = Math.ceil(viewport.height);
+    }
+
     const canvas = new OffscreenCanvas(w, h);
     const context = canvas.getContext('2d');
     if (!context) throw new Error('OffscreenCanvas 2D context-ი ვერ შეიქმნა');
