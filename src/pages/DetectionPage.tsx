@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AlgorithmChoice,
+  CustomAlgorithmSource,
   LegacyDetectedDoc,
   WorkerMessage,
 } from '../lib/detection/types';
-import { downloadJson, pickFile, readFileAsArrayBuffer } from '../lib/files';
+import {
+  deleteCustomAlgorithm,
+  listCustomAlgorithms,
+  saveCustomAlgorithm,
+} from '../lib/customAlgorithms';
+import type { SavedCustomAlgorithm, StorageWhere } from '../lib/customAlgorithms';
+import {
+  downloadJson,
+  pickFile,
+  readFileAsArrayBuffer,
+  readFileAsText,
+} from '../lib/files';
 import type { Piece, SketchPath } from '../types';
 import '../styles/detection.css';
 
@@ -270,7 +282,196 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
   const jobIdRef = useRef<string | null>(null);
   const [nextNum] = useState(() => loadHistory().length + 1);
 
-  useEffect(() => () => { workerRef.current?.terminate(); }, []);
+  /** Info panel for the custom-algorithm contract. */
+  const [customInfoOpen, setCustomInfoOpen] = useState(false);
+  /** The active user-uploaded algorithm (.ts source). */
+  const [customSource, setCustomSource] = useState<CustomAlgorithmSource | null>(null);
+  const [customName, setCustomName] = useState('');
+  /** Inline paste/edit box for the active source — debounced so a re-verify
+   * (which spawns a worker) runs after typing pauses, not per keystroke. */
+  const [pasteSource, setPasteSource] = useState('');
+  const pasteTimerRef = useRef<number | null>(null);
+  const [savedCustom, setSavedCustom] = useState<SavedCustomAlgorithm[]>([]);
+  /** Where the saved list lives — account (server) or this device. */
+  const [storageWhere, setStorageWhere] = useState<StorageWhere>('local');
+  /** Upload-time live test of the active custom .ts detector. */
+  const [verify, setVerify] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifyErrorDetail, setVerifyErrorDetail] = useState<string | null>(null);
+  const verifyWorkerRef = useRef<Worker | null>(null);
+  /** Bumped on every source change so a stale result can never win. */
+  const verifySeqRef = useRef(0);
+  /** Pending verify timeout — cleared on source change/unmount so a stale
+   * timer from a previous algorithm can never flip the UI after a newer
+   * source already settled. */
+  const verifyTimerRef = useRef<number | null>(null);
+  /** User accepted the risk after a failed synthetic check — the PDF run may
+   * still work even though the 8×8 test page was too small for the algorithm. */
+  const forceRunRef = useRef(false);
+  /** Local drag highlight for the custom-algorithm slot. */
+  const [slotDragOver, setSlotDragOver] = useState(false);
+
+  useEffect(() => () => {
+    workerRef.current?.terminate();
+    verifyWorkerRef.current?.terminate();
+    if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current);
+    if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
+  }, []);
+
+  // Load the saved algorithms when the wizard opens (the account's rows when
+  // signed in, this device's otherwise). Refreshed after every save/delete.
+  useEffect(() => {
+    let alive = true;
+    listCustomAlgorithms().then(({ items, where }) => {
+      if (alive) {
+        setSavedCustom(items);
+        setStorageWhere(where);
+      }
+    });
+    return () => { alive = false; };
+  }, []);
+
+  /**
+   * Live-test the active custom .ts the moment it is loaded (pick or
+   * load-saved): transpile + run detectPage once on a synthetic page in a
+   * throwaway worker. Mistakes show here, before any PDF is chosen.
+   */
+  useEffect(() => {
+    verifyWorkerRef.current?.terminate();
+    verifyWorkerRef.current = null;
+    if (verifyTimerRef.current) {
+      clearTimeout(verifyTimerRef.current);
+      verifyTimerRef.current = null;
+    }
+    forceRunRef.current = false;
+    setVerifyErrorDetail(null);
+    if (!customSource) {
+      setVerify('idle');
+      setVerifyError(null);
+      return;
+    }
+    const seq = ++verifySeqRef.current;
+    setVerify('checking');
+    setVerifyError(null);
+    let worker: Worker;
+    try {
+      worker = new Worker(
+        new URL('../lib/detection/detectionWorker.ts', import.meta.url),
+        { type: 'module' },
+      );
+    } catch {
+      setVerify('error');
+      setVerifyError('Verification worker could not be created.');
+      return;
+    }
+    verifyWorkerRef.current = worker;
+    const id = `ver-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const settle = (ok: boolean, message?: string, detail?: string) => {
+      if (verifyTimerRef.current) {
+        clearTimeout(verifyTimerRef.current);
+        verifyTimerRef.current = null;
+      }
+      worker.terminate();
+      if (verifyWorkerRef.current === worker) verifyWorkerRef.current = null;
+      if (ok) {
+        setVerify('ok');
+      } else {
+        setVerify('error');
+        setVerifyError(message ?? 'Unknown error.');
+        setVerifyErrorDetail(detail ?? null);
+      }
+    };
+    // A busy worker never fires onerror — a hung detectPage (infinite loop or
+    // a promise that never resolves) would otherwise leave "checking…" up
+    // forever. The main thread can kill a busy worker, so time it out.
+    verifyTimerRef.current = window.setTimeout(() => {
+      if (seq !== verifySeqRef.current) return;
+      settle(false, 'Verification timed out — possible infinite loop.');
+    }, 60_000);
+    worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
+      const msg = ev.data;
+      if (msg.type !== 'verifyResult' || msg.id !== id || seq !== verifySeqRef.current) return;
+      settle(msg.ok, msg.message, msg.detail);
+    };
+    worker.onerror = (e) => {
+      if (seq !== verifySeqRef.current) return;
+      settle(false, e.message || 'Verification failed.');
+    };
+    worker.postMessage({
+      type: 'verify',
+      id,
+      source: customSource.source,
+      fileName: customSource.fileName,
+    });
+  }, [customSource]);
+
+  // Keep the inline paste/edit box in sync with the active source, and cancel
+  // any pending paste commit when the source changes from elsewhere so a stale
+  // debounce can never overwrite the new file.
+  useEffect(() => {
+    if (pasteTimerRef.current) {
+      clearTimeout(pasteTimerRef.current);
+      pasteTimerRef.current = null;
+    }
+    setPasteSource(customSource?.source ?? '');
+  }, [customSource]);
+
+  /** Inline edit: update the box immediately, commit to the active source
+   * (and thus re-trigger the live test) only after typing pauses. */
+  const onPasteEdit = (v: string) => {
+    setPasteSource(v);
+    if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
+    pasteTimerRef.current = window.setTimeout(() => {
+      pasteTimerRef.current = null;
+      setCustomSource((prev) =>
+        prev
+          ? { ...prev, source: v }
+          : { fileName: 'pasted.ts', source: v },
+      );
+    }, 600);
+  };
+
+  /** Load a user .ts algorithm from disk into the active slot. */
+  const pickCustomTs = async () => {
+    const f = await pickFile('.ts,text/typescript');
+    if (!f) return;
+    const source = await readFileAsText(f);
+    setCustomSource({ fileName: f.name, source });
+    setCustomName(f.name.replace(/\.ts$/i, ''));
+    setAlgorithm('custom');
+  };
+
+  const saveCustomAlgo = async () => {
+    if (!customSource) return;
+    const res = await saveCustomAlgorithm(customName || customSource.fileName, customSource.source);
+    if (res.ok) {
+      const { items, where } = await listCustomAlgorithms();
+      setSavedCustom(items);
+      setStorageWhere(where);
+    }
+  };
+
+  const loadSavedAlgo = (a: SavedCustomAlgorithm) => {
+    setCustomSource({ fileName: `${a.name}.ts`, source: a.source });
+    setCustomName(a.name);
+    setAlgorithm('custom');
+  };
+
+  const deleteSavedAlgo = async (id: string) => {
+    await deleteCustomAlgorithm(id);
+    const { items, where } = await listCustomAlgorithms();
+    setSavedCustom(items);
+    setStorageWhere(where);
+  };
+
+  /** Why a custom algorithm may not run, or null — gates the run button and
+   * any start attempt identically. */
+  const customRunBlock = (): string | null => {
+    if (algorithm === 'custom' && !customSource) return 'Pick a .ts algorithm first.';
+    if (algorithm === 'custom' && verify === 'error' && !forceRunRef.current)
+      return `Algorithm is not working: ${verifyError ?? 'check the code.'}`;
+    return null;
+  };
 
   const openPdf = useCallback(async (file: File) => {
     setPdfFile(file);
@@ -300,6 +501,12 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
     const worker = workerRef.current;
     const id = jobIdRef.current;
     if (!worker || !id || !pdfFile) return;
+    const block = customRunBlock();
+    if (block) {
+      setProgress(`Cannot run: ${block}`);
+      setBusy(false);
+      return;
+    }
     setBusy(true);
     setProgress('Detecting…');
     setProgressPct(null);
@@ -345,8 +552,14 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
         setProgress('Error: ' + msg.message);
       }
     };
-    worker.postMessage({ type: 'run', id, pages: selectedPages, algorithm });
-  }, [pdfFile, selectedPages, algorithm, name, description, nextNum, onDone]);
+    worker.postMessage({
+      type: 'run',
+      id,
+      pages: selectedPages,
+      algorithm,
+      ...(algorithm === 'custom' && customSource ? { custom: customSource } : {}),
+    });
+  }, [pdfFile, selectedPages, algorithm, name, description, nextNum, onDone, customSource, customRunBlock]);
 
   const togglePage = (p: number) => setSelectedPages((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p].sort((a, b) => a - b));
   const toggleAllPages = () => {
@@ -363,7 +576,7 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
 
   const hasFile = !!pdfFile;
   const hasPages = selectedPages.length > 0;
-  const canDetect = hasFile && hasPages && !busy;
+  const canDetect = hasFile && hasPages && !busy && customRunBlock() === null;
 
   return (
     <div className="dm-overlay" onClick={onClose}>
@@ -437,7 +650,142 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
                 <div className="dm-algo-desc">{a.desc}</div>
               </button>
             ))}
+            <div
+              role="button"
+              tabIndex={0}
+              className={`dm-algo-card dm-algo-custom ${algorithm === 'custom' ? 'sel' : ''}`}
+              style={{ '--algo-color': '#5a93e0' } as any}
+              onClick={() => setAlgorithm('custom')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAlgorithm('custom'); }}
+            >
+              <button
+                className="dm-algo-info"
+                onClick={(e) => { e.stopPropagation(); setCustomInfoOpen(true); }}
+                title="How to write a custom algorithm"
+              >
+                ⓘ
+              </button>
+              <div className="dm-algo-icon">🧩</div>
+              <div className="dm-algo-label">Custom</div>
+              <div className="dm-algo-desc">Upload your own .ts detector</div>
+            </div>
           </div>
+          {algorithm === 'custom' && (
+            <div className="dm-custom-panel">
+              <div
+                className={`dm-custom-drop${slotDragOver ? ' over' : ''}${customSource ? ' ready' : ''}`}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('Files')) {
+                    e.preventDefault();
+                    setSlotDragOver(true);
+                    setDragOver(true);
+                  }
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setSlotDragOver(false);
+                    setDragOver(false);
+                  }
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSlotDragOver(false);
+                  setDragOver(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (!f) return;
+                  if (!/\.ts$/i.test(f.name)) {
+                    setProgress('Custom algorithm must be a .ts file.');
+                    return;
+                  }
+                  const source = await readFileAsText(f);
+                  setCustomSource({ fileName: f.name, source });
+                  setCustomName(f.name.replace(/\.ts$/i, ''));
+                  setAlgorithm('custom');
+                }}
+              >
+                <div className="dm-custom-row">
+                  <button className="btn small" onClick={pickCustomTs} disabled={busy}>
+                    {customSource ? 'Replace .ts…' : 'Choose .ts file…'}
+                  </button>
+                  {customSource && (
+                    <>
+                      <span className="dm-custom-file" title={customSource.fileName}>
+                        {customSource.fileName}
+                      </span>
+                      <input
+                        className="dm-custom-name"
+                        value={customName}
+                        onChange={(e) => setCustomName(e.target.value)}
+                        placeholder="Name to save as"
+                        maxLength={60}
+                      />
+                      <button className="btn small primary" onClick={saveCustomAlgo} disabled={busy}>
+                        Save
+                      </button>
+                    </>
+                  )}
+                </div>
+                <textarea
+                  className="dm-paste"
+                  value={pasteSource}
+                  onChange={(e) => onPasteEdit(e.target.value)}
+                  placeholder="Or paste / edit the code here — it is verified automatically after you stop typing"
+                  spellCheck={false}
+                  rows={5}
+                  disabled={busy}
+                />
+                {customSource && (
+                  <p
+                    className={`dm-verify ${verify}`}
+                    title={
+                      verify === 'error' && verifyErrorDetail
+                        ? verifyErrorDetail
+                        : 'Verification: the code is compiled and run once on a synthetic page'
+                    }
+                  >
+                    {verify === 'checking' && <span className="busy">Checking…</span>}
+                    {verify === 'ok' && '✓ Works — ready for the PDF'}
+                    {verify === 'error' && (
+                      <>
+                        <span className="dm-verify-err">✗ {verifyError ?? 'check the code.'}</span>
+                        <button
+                          className="btn small"
+                          onClick={() => { forceRunRef.current = true; }}
+                          title="The test page is 8x8 pixels — some algorithms find it too small, but may still work on a real PDF"
+                        >
+                          Run anyway
+                        </button>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+              {savedCustom.length > 0 && (
+                <div className="dm-saved">
+                  <div className="dm-saved-label">
+                    {storageWhere === 'server'
+                      ? 'Saved algorithms (on your account — any device):'
+                      : 'Saved algorithms (on this device):'}
+                  </div>
+                  {savedCustom.map((a) => (
+                    <div key={a.id} className="dm-saved-item">
+                      <span className="dm-saved-name" title={a.name}>
+                        {a.name}
+                      </span>
+                      {a.local && <span className="dm-saved-local">device</span>}
+                      <button className="dm-saved-load" onClick={() => loadSavedAlgo(a)}>
+                        Load
+                      </button>
+                      <button className="dm-saved-del" onClick={() => deleteSavedAlgo(a.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Pages — always visible, disabled until file loads */}
@@ -489,6 +837,8 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
           {busy ? 'Detecting…' : 'Start Detection'}
         </button>
       </div>
+
+      {customInfoOpen && <CustomInfoModal onClose={() => setCustomInfoOpen(false)} />}
     </div>
   );
 }
@@ -509,6 +859,110 @@ function ConfirmDialog({ title, message, icon, onConfirm, onCancel, danger }: {
           <button className={`btn ${danger ? 'danger' : 'primary'}`} onClick={onConfirm}>
             {danger ? 'Delete' : 'Open'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Custom Algorithm Info Modal ── */
+
+function CustomInfoModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="dm-overlay dm-info-overlay" onClick={onClose}>
+      <div className="dm-modal dm-modal-wide dm-info-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="dm-close" onClick={onClose}>✕</button>
+        <div className="dm-header">
+          <div className="dm-header-icon">🧩</div>
+          <div>
+            <div className="dm-title">Custom algorithm — how it works</div>
+            <div className="dm-subtitle">
+              Upload one <code>.ts</code> file; it runs entirely in your browser, no server, no Python.
+            </div>
+          </div>
+        </div>
+
+        <div className="dm-info-body">
+          <section className="dm-info-sec">
+            <h4>The file</h4>
+            <p>
+              A single <b>TypeScript</b> file (<code>.ts</code>, <code>.tsx</code> <i>not</i> supported).
+              It must export a <b>single function</b> that receives one PDF page and returns a{' '}
+              <code>PageResult</code> — the exact same shape the built-in detectors produce.
+            </p>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>The contract</h4>
+            <pre>{`export function detectPage(\n  page,        // pdf.js page\n  rasterAt,    // (dpi) => Promise<gray Mat>\n  options,     // { cv, algorithm, drawingType, mode, scale, pagePtH }\n): Promise<PageResult>`}</pre>
+            <ul>
+              <li><b>page</b> — a pdf.js page object. Read its vector draws with <code>getPageDrawings(page)</code> and text with <code>getPageText(page)</code> (from <code>./pdf</code>).</li>
+              <li><b>rasterAt(dpi)</b> — renders the page at the requested DPI and resolves to an 8-bit grayscale <code>cv.Mat</code> owned by you — free it with <code>delete()</code>.</li>
+              <li><b>options</b> — the run context: <code>{'{'}cv, algorithm, drawingType, mode, scale, pagePtH{'}'}</code>.</li>
+            </ul>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>What it must return</h4>
+            <p>A <code>PageResult</code> — one of:</p>
+            <pre>{`// plan page (PDF page points, y-down)\n{\n  drawing_type: 'plan',\n  columns: [{ x0, y0, x1, y1, cx, cy, w_mm?, h_mm? }],\n  walls:   [{ x0, y0, x1, y1, cx, cy, kind: 'wall' }],\n}\n\n// section page (world centimetres, y-up)\n{\n  drawing_type: 'section',\n  scale,\n  detectedWalls:   [{ id, cx, cy, lengthCm, thicknessCm, rotation, confidence }],\n  detectedColumns: [{ id, cx, cy, widthCm, depthCm, rotation, confidence }],\n  foundations:     [{ id, cx, cy, ... }],\n}`}</pre>
+            <p><code>drawing_type</code> is mandatory — the page loop reads it to count elements.</p>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>What you may import</h4>
+            <p>
+              Only the built-in helpers are available — anything else (npm packages, node builtins)
+              is rejected with a clear error:
+            </p>
+            <pre>{`import * as cvMod from './opencv'     // opencv.js WASM helpers\nimport { getPageDrawings, getPageText } from './pdf'\nimport type { PageResult } from './types'`}</pre>
+            <p>
+              You can also <code>import</code> the built-in detectors themselves
+              (<code>./britania_detector_pdf</code>, <code>./unified_detector_v2_pdf</code>) — and a
+              verbatim copy of their source runs unchanged.
+            </p>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>Memory rules (non-negotiable)</h4>
+            <p>
+              Every <code>cv.Mat</code> you allocate must be freed. Use the <code>*T</code> helpers
+              (<code>newTracker()</code> + <code>releaseMats(t)</code> from <code>./opencv</code>)
+              and never hold a Mat across <code>await</code>. Leaks accumulate across a whole document.
+            </p>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>Verification</h4>
+            <p>
+              The moment you drop, paste or save the file, it is compiled with sucrase
+              (in-browser TypeScript) and run once on a tiny 8×8 synthetic page. Errors — syntax,
+              bad imports, runtime crashes, a wrong return shape — show immediately, before any PDF.
+              A "Works" result does not promise correct detections, only that the code runs and
+              speaks the contract. If the 8×8 page is too small for your algorithm, use
+              <i> Run anyway</i> — it may still work on a real PDF.
+            </p>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>Sample to get started</h4>
+            <pre>{`import { newTracker, releaseMats, inRangeT, morphT, rectKernel, findContoursT, contourBoxes } from './opencv';\n\nexport function detectPage(page, rasterAt, options) {\n  return rasterAt(150).then((gray) => {\n    const t = newTracker();\n    try {\n      const mask = inRangeT(options.cv, t, gray, 110, 200);       // grey band\n      const k = rectKernel(options.cv, t, 3, 3);\n      const opened = morphT(options.cv, t, mask, options.cv.MORPH_OPEN, k);\n      const contours = findContoursT(options.cv, t, opened);\n      const boxes = contourBoxes(options.cv, contours);\n      return {\n        drawing_type: 'plan',\n        columns: boxes.map((b) => ({ ...b })),\n        walls: [],\n      };\n    } finally {\n      releaseMats(t);\n      gray.delete();\n    }\n  });\n}`}</pre>
+          </section>
+
+          <section className="dm-info-sec">
+            <h4>Storage</h4>
+            <p>
+              Signed in, saved algorithms live on your account (any device); signed out or offline,
+              they are kept on this device in localStorage. Saving under the same name overwrites.
+              Load them back from the saved list under the Custom card.
+            </p>
+          </section>
         </div>
       </div>
     </div>
