@@ -1922,7 +1922,6 @@ export default function DetectionPage() {
   const [bgMap, setBgMap] = useState<Map<string, PagesBg>>(new Map());
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgOpacity, setBgOpacity] = useState(0.35);
-  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false);
   const [aiGeneratePdf, setAiGeneratePdf] = useState<File | null>(null);
   const [aiGenerateContext, setAiGenerateContext] = useState('');
@@ -1930,19 +1929,6 @@ export default function DetectionPage() {
   const [aiGenerateProgress, setAiGenerateProgress] = useState('');
   const [aiGeneratedCode, setAiGeneratedCode] = useState<string | null>(null);
   const [aiGenerateError, setAiGenerateError] = useState<string | null>(null);
-  const [hasApiKey, setHasApiKey] = useState(() => !!localStorage.getItem('det-ai-api-key'));
-  const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('det-ai-provider') ?? 'openai');
-  const [aiModel, setAiModel] = useState(() => localStorage.getItem('det-ai-model') ?? '');
-  const [aiValidStatus, setAiValidStatus] = useState<'valid' | 'unverified' | 'invalid'>(() => {
-    const v = localStorage.getItem('det-ai-validated');
-    if (v === 'valid') return 'valid';
-    if (v === 'invalid') return 'invalid';
-    return 'unverified';
-  });
-  const aiDotClass = hasApiKey ? `det-ai-dot ${aiValidStatus}` : 'det-ai-dot no-key';
-  const aiTooltip = hasApiKey
-    ? `${PROVIDER_LABELS[aiProvider] ?? aiProvider} · ${aiModel || 'default model'} — ${aiValidStatus}`
-    : 'AI Settings — not configured';
 
   const active = useMemo(() => history.find((h) => h.id === selected) ?? null, [history, selected]);
 
@@ -2039,12 +2025,6 @@ export default function DetectionPage() {
         <div className="det-sidebar-content">
           <div className="det-sidebar-header">
             <div className="det-sidebar-header-btns">
-              <button className={`det-ai-btn ${hasApiKey ? 'configured' : ''}`} onClick={() => setAiSettingsOpen(true)} title={aiTooltip}>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 2l1.5 3.2 3.5.8-2.5 2.5.5 3.5L8 10l-3 2 .5-3.5L3 6l3.5-.8z" fill="currentColor" opacity="0.9" />
-                </svg>
-                <span className={aiDotClass} />
-              </button>
               <button className="det-sidebar-ai" onClick={() => setAiGenerateOpen(true)} title="Generate custom algorithm with AI">
                 AI
               </button>
@@ -2134,14 +2114,6 @@ export default function DetectionPage() {
 
       {/* AI Generate Modal */}
       {aiGenerateOpen && <AiGenerateModal onClose={() => setAiGenerateOpen(false)} />}
-
-      {/* AI Settings Modal */}
-      {aiSettingsOpen && (
-        <AiSettingsModal onClose={() => {
-          setAiSettingsOpen(false);
-          setHasApiKey(!!localStorage.getItem('det-ai-api-key'));
-          setAiProvider(localStorage.getItem('det-ai-provider') ?? 'openai');
-          setAiModel(localStorage.getItem('det-ai-model') ?? '');
           const v = localStorage.getItem('det-ai-validated');
           setAiValidStatus(v === 'valid' ? 'valid' : v === 'invalid' ? 'invalid' : 'unverified');
         }} />
