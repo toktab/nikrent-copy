@@ -34,7 +34,7 @@ export interface CustomAlgorithmSource {
   fileName: string;
   source: string;
 }
-export type AlgorithmChoice = 'auto' | AlgorithmName;
+export type AlgorithmChoice = 'auto' | AlgorithmName | 'ai-generate';
 export type DrawingType = 'auto' | 'plan' | 'section';
 export type PlanMode = 'auto' | 'vector' | 'raster';
 

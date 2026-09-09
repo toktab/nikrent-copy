@@ -5,6 +5,11 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # maxDuration = 26  # Uncomment for Netlify Pro (default 10s on free tier)
+
 # Single page app: every path has to return index.html, or a refresh on a
 # recovery link lands on the host's 404 instead of the app.
 [[redirects]]

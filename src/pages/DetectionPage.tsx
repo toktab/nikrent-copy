@@ -20,6 +20,35 @@ import {
 import type { Piece, SketchPath } from '../types';
 import '../styles/detection.css';
 
+/** Convert ArrayBuffer to base64 string. */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/** Call Netlify function to generate algorithm via Gemini API (server-side proxy). */
+async function callNetlifyGenerate(pdfBase64: string, userContext: string): Promise<string> {
+  const response = await fetch('/.netlify/functions/generate-algorithm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfBase64, userContext })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    // User-friendly error from function
+    throw new Error(data.error || `Server error (${response.status})`);
+  }
+
+  return data.code;
+}
+
 /* ── Constants ── */
 
 const HISTORY_KEY = 'detect-history';
@@ -419,9 +448,10 @@ const ALGO_OPTIONS: { value: AlgorithmChoice; label: string; icon: string; desc:
   { value: 'britania',   label: 'Britania',     icon: '🏛️', desc: 'Structural columns & walls',      color: '#e8c840' },
   { value: 'glassworks', label: 'GlassWorks',   icon: '🪟', desc: 'Glass façade detection',          color: '#5ad4a8' },
   { value: 'super',      label: 'SUPER',        icon: '🚀', desc: 'Advanced multi-pass detection',   color: '#f0786c' },
+  { value: 'ai-generate', label: 'AI Generate', icon: '✨', desc: 'Generate custom algorithm from PDF', color: '#8b5cf6' },
 ];
 
-function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (entry: HistoryEntry, backgrounds?: PagesBg, pdfBuffer?: ArrayBuffer) => void }) {
+function DetectionWizard({ onClose, onDone, onOpenAiGenerate }: { onClose: () => void; onDone: (entry: HistoryEntry, backgrounds?: PagesBg, pdfBuffer?: ArrayBuffer) => void; onOpenAiGenerate: () => void }) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
@@ -625,6 +655,7 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
   /** Why a custom algorithm may not run, or null — gates the run button and
    * any start attempt identically. */
   const customRunBlock = (): string | null => {
+    if (algorithm === 'ai-generate') return 'AI Generate opens a modal to create a custom algorithm. Pick a detection algorithm to run.';
     if (algorithm === 'custom' && !customSource) return 'Pick a .ts algorithm first.';
     if (algorithm === 'custom' && verify === 'error' && !forceRunRef.current)
       return `Algorithm is not working: ${verifyError ?? 'check the code.'}`;
@@ -815,7 +846,13 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
                 key={a.value}
                 className={`dm-algo-card ${algorithm === a.value ? 'sel' : ''}`}
                 style={{ '--algo-color': a.color } as any}
-                onClick={() => setAlgorithm(a.value)}
+                onClick={() => {
+                  if (a.value === 'ai-generate') {
+                    onOpenAiGenerate();
+                  } else {
+                    setAlgorithm(a.value);
+                  }
+                }}
               >
                 <div className="dm-algo-icon">{a.icon}</div>
                 <div className="dm-algo-label">{a.label}</div>
@@ -1138,6 +1175,265 @@ function CustomInfoModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── AI Generate Modal ── */
+
+// System prompt for Gemini to generate custom detection algorithms
+const AI_GENERATE_SYSTEM_PROMPT =
+  'You are an expert TypeScript developer specializing in computer vision algorithms for architectural drawing analysis. Your task is to generate a custom detection algorithm for a specific architectural drawing style.\n\n' +
+  'CONTEXT: The user provides a PDF of an architectural drawing (plan or section). You must analyze it VISUALLY (the rendered image) and understand the drawing conventions, then write a TypeScript detector that finds structural elements (columns, walls, etc.).\n\n' +
+  'THE CONTRACT \u2014 Your code MUST export a function with this exact signature:\n\n' +
+  '```typescript\nexport function detectPage(\n  page: any,                    // pdf.js page object\n  rasterAt: (dpi: number) => Promise<any>,  // returns caller-owned cv.Mat (8UC1 grayscale)\n  options: {\n    cv: any;                    // opencv.js namespace\n    algorithm: string;\n    drawingType: \'auto\' | \'plan\' | \'section\';\n    mode: \'auto\' | \'vector\' | \'raster\';\n    scale: number;              // drawing scale 1:X\n    pagePtH: number;            // page height in PDF points (for y-flip)\n  }\n): Promise<PageResult>;\n```\n\n' +
+  'PageResult is ONE of:\n\n' +
+  '// Plan page (PDF page points, y-down, top-left origin)\n' +
+  '{\n' +
+  '  drawing_type: \'plan\',\n' +
+  '  columns: [{ x0, y0, x1, y1, cx, cy, w_mm?, h_mm? }],\n' +
+  '  walls:   [{ x0, y0, x1, y1, cx, cy, kind: \'wall\' }],\n' +
+  '}\n\n' +
+  '// Section page (world centimetres, y-up)\n' +
+  '{\n' +
+  '  drawing_type: \'section\',\n' +
+  '  scale,\n' +
+  '  detectedWalls:   [{ id, cx, cy, lengthCm, thicknessCm, rotation, confidence }],\n' +
+  '  detectedColumns: [{ id, cx, cy, widthCm, depthCm, rotation, confidence }],\n' +
+  '  foundations:     [{ id, cx, cy, ... }],\n' +
+  '}\n\n' +
+  'AVAILABLE IMPORTS (only these are allowed \u2014 ANY other import will fail):\n' +
+  '```typescript\n' +
+  "import * as cvMod from './opencv'              // opencv.js WASM helpers: newTracker, releaseMats, inRangeT, morphT, rectKernel, findContoursT, contourBoxes, thresholdT, blurT, dilateT, paintRectsWhite, bitwiseOrT, absdiffT, maskOutBoxes\n" +
+  "import { getPageDrawings, getPageText } from './pdf'  // vector drawings + text extraction\n" +
+  "import type { PageResult, PlanColumn, PlanWall } from './types'\n" +
+  "import { BRITANIA_PARAMS, detectBritaniaPage } from './britania_detector_pdf'\n" +
+  "import { analyzeUnifiedPage } from './unified_detector_v2_pdf'\n" +
+  "import { detectSuperPage } from './super_detector_pdf'\n" +
+  '```\n\n' +
+  'MEMORY RULES (NON-NEGOTIABLE):\n' +
+  '- Every cv.Mat you allocate MUST be freed. Use: const t = newTracker(); try { ... } finally { releaseMats(t); }\n' +
+  '- The Mat returned by rasterAt() is YOURS to free (call .delete() in finally).\n' +
+  '- NEVER hold a Mat across await. Allocate, use, free in the same synchronous block.\n\n' +
+  'DETECTION STRATEGY \u2014 Analyze the PDF visually and decide:\n' +
+  '1. Is it a PLAN (top-down) or SECTION (cross-section)? Look for: plan = grid, room labels, column grids; section = elevation lines, hatching, foundation shapes.\n' +
+  '2. What visual patterns indicate columns? (grey squares, dark circles, hatch patterns, specific colors, symbols)\n' +
+  '3. What visual patterns indicate walls? (parallel lines, thick strokes, grey fills, hatch bands)\n' +
+  '4. Are there color conventions? (e.g., red=structural, blue=MEP, green=landscape)\n' +
+  '5. Are there hatch patterns? (45\u00b0 lines = concrete, cross-hatch = foundations, etc.)\n' +
+  '6. What\'s the drawing scale? (look for scale bar, dimension text, or infer from known sizes)\n\n' +
+  'OVERDETECT > UNDERDETECT: It\'s better to have false positives (extra detected elements) than false negatives (missed structural elements). The user can filter later.\n\n' +
+  'EXISTING ALGORITHMS FOR REFERENCE:\n' +
+  '- Britania: Grey columns (inRange 130-210), dark walls (threshold <100), directional morphology, hatch bridges between columns\n' +
+  '- GlassWorks: Stroke pair detection (parallel lines), grey fill walls, corner clustering\n' +
+  '- SUPER: Multi-pass, combines vector + raster, adaptive thresholds\n' +
+  '- Unified v2: Vector-first (fills/strokes), raster fallback, section: hatch band analysis\n\n' +
+  'OUTPUT FORMAT: Return ONLY the TypeScript code block. No explanations, no markdown outside the code block.\n\n' +
+  '```typescript\n' +
+  '// Your generated algorithm here\n' +
+  '```';
+
+function AiGenerateModal({ onClose }: { onClose: () => void }) {
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [context, setContext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [activeTab, setActiveTab] = useState<'generate' | 'code'>('generate');
+
+  const canGenerate = pdfFile && !busy;
+
+  const handlePdfDrop = async (file: File) => {
+    if (!file || !/\.pdf$/i.test(file.name)) {
+      setError('Please upload a PDF file.');
+      return;
+    }
+    setPdfFile(file);
+    setError(null);
+    setGeneratedCode(null);
+    setActiveTab('generate');
+  };
+
+  const generateAlgorithm = async () => {
+    if (!pdfFile) return;
+    setBusy(true);
+    setError(null);
+    setProgress('Reading PDF...');
+    setGeneratedCode(null);
+
+    try {
+      // Convert PDF to base64
+      const arrayBuffer = await readFileAsArrayBuffer(pdfFile);
+      const base64 = arrayBufferToBase64(arrayBuffer);
+
+      setProgress('Analyzing with AI...');
+
+      // Call Netlify function (proxies to Gemini API)
+      const code = await callNetlifyGenerate(base64, context);
+      setGeneratedCode(code);
+      setActiveTab('code');
+      setProgress('Done! Review the code and save it.');
+    } catch (e) {
+      setError((e as Error).message || 'Generation failed');
+      setProgress('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveAlgorithm = async () => {
+    if (!generatedCode) return;
+    await navigator.clipboard.writeText(generatedCode);
+    setProgress('Code copied to clipboard! Switch to Custom tab and paste.');
+  };
+
+  const downloadAlgorithm = () => {
+    if (!generatedCode) return;
+    const blob = new Blob([generatedCode], { type: 'text/typescript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ai-generated-' + Date.now() + '.ts';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyAlgorithm = async () => {
+    if (!generatedCode) return;
+    await navigator.clipboard.writeText(generatedCode);
+    setProgress('Copied to clipboard!');
+  };
+
+  return (
+    <div className="dm-overlay" onClick={onClose}>
+      <div className="dm-modal dm-modal-wide dm-ai-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="dm-close" onClick={onClose}>✕</button>
+
+        <div className="dm-header">
+          <div className="dm-header-icon">✨</div>
+          <div>
+            <div className="dm-title">AI Generate Custom Algorithm</div>
+            <div className="dm-subtitle">
+              Upload a reference PDF, optionally add context, and let AI write a custom detector for that drawing style.
+            </div>
+          </div>
+        </div>
+
+        <>
+          {activeTab === 'generate' && (
+              <>
+                {/* PDF Upload */}
+                <div className="dm-section">
+                  <div className="dm-section-title">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none" /></svg>
+                    Reference PDF
+                  </div>
+                  {!pdfFile ? (
+                    <div
+                      className={'dm-drop ' + (dragOver ? 'over' : '')}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handlePdfDrop(f); }}
+                    >
+                      <div className="dm-drop-icon">
+                        <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+                          <rect x="8" y="4" width="40" height="48" rx="6" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" fill="none" opacity="0.4" />
+                          <path d="M28 20v16M20 28l8-8 8 8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                        </svg>
+                      </div>
+                      <div className="dm-drop-label">Drop a reference PDF here</div>
+                      <div className="dm-drop-sub">or</div>
+                      <button className="btn primary dm-drop-btn" onClick={() => pickFile('.pdf').then((f) => f && handlePdfDrop(f))}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                        Choose PDF
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="dm-file-loaded">
+                      <div className="dm-file-icon-wrap">
+                        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                          <rect x="3" y="1" width="22" height="26" rx="4" stroke="var(--ok)" strokeWidth="1.5" fill="none" />
+                          <path d="M8 14l4 4 8-8" stroke="var(--ok)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <div className="dm-file-info">
+                        <div className="dm-file-name">{pdfFile.name}</div>
+                        <div className="dm-file-meta">Ready for analysis</div>
+                      </div>
+                      <button className="btn ghost small" onClick={() => { setPdfFile(null); setGeneratedCode(null); }}>Change</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Optional Context */}
+                <div className="dm-section">
+                  <div className="dm-section-title">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none" /></svg>
+                    Additional Context (Optional)
+                  </div>
+                  <textarea
+                    className="dm-prompt-area"
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="e.g. 'This is a Georgian structural plan with red columns and blue walls. Columns are marked with ● symbol. Scale is 1:100.'"
+                    rows={3}
+                    disabled={busy}
+                  />
+                  <div className="dm-prompt-hint">Describe any drawing conventions, color coding, symbols, or scale info the AI should know.</div>
+                </div>
+
+                {/* Generate Button */}
+                <button
+                  className="btn primary full dm-action-btn"
+                  onClick={generateAlgorithm}
+                  disabled={!canGenerate}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3.2 3.5.8-2.5 2.5.5 3.5L8 10l-3 2 .5-3.5L3 6l3.5-.8z" fill="currentColor" /></svg>
+                  {busy ? 'Generating...' : 'Generate Algorithm'}
+                </button>
+
+                {error && (
+                  <div className="dm-key-msg invalid" style={{ marginTop: 12 }}>
+                    ✕ {error}
+                  </div>
+                )}
+
+                {busy && (
+                  <div className="dm-progress" style={{ marginTop: 12 }}>
+                    <div className="dm-progress-bar">
+                      <div className="dm-progress-fill" style={{ width: '100%' }} />
+                    </div>
+                    <div className="dm-progress-text">{progress}</div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'code' && generatedCode && (
+              <>
+                <div className="dm-section">
+                  <div className="dm-section-title">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none" /></svg>
+                    Generated Algorithm
+                    <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                      <button className="btn small" onClick={copyAlgorithm}>Copy</button>
+                      <button className="btn small" onClick={downloadAlgorithm}>Download .ts</button>
+                      <button className="btn small primary" onClick={saveAlgorithm}>Save as Custom</button>
+                    </div>
+                  </div>
+                  <pre className="dm-code-display"><code>{generatedCode}</code></pre>
+                </div>
+                <div className="dm-section">
+                  <button className="btn ghost" onClick={() => { setActiveTab('generate'); setGeneratedCode(null); setPdfFile(null); }}>
+                    ← Generate Another
+                  </button>
+                </div>
+              </>
+            )}
+</>
+      </div>
+      </div>
   );
 }
 
@@ -1627,6 +1923,13 @@ export default function DetectionPage() {
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgOpacity, setBgOpacity] = useState(0.35);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [aiGenerateOpen, setAiGenerateOpen] = useState(false);
+  const [aiGeneratePdf, setAiGeneratePdf] = useState<File | null>(null);
+  const [aiGenerateContext, setAiGenerateContext] = useState('');
+  const [aiGenerateBusy, setAiGenerateBusy] = useState(false);
+  const [aiGenerateProgress, setAiGenerateProgress] = useState('');
+  const [aiGeneratedCode, setAiGeneratedCode] = useState<string | null>(null);
+  const [aiGenerateError, setAiGenerateError] = useState<string | null>(null);
   const [hasApiKey, setHasApiKey] = useState(() => !!localStorage.getItem('det-ai-api-key'));
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('det-ai-provider') ?? 'openai');
   const [aiModel, setAiModel] = useState(() => localStorage.getItem('det-ai-model') ?? '');
@@ -1742,6 +2045,9 @@ export default function DetectionPage() {
                 </svg>
                 <span className={aiDotClass} />
               </button>
+              <button className="det-sidebar-ai" onClick={() => setAiGenerateOpen(true)} title="Generate custom algorithm with AI">
+                AI
+              </button>
               <button className="det-sidebar-add" onClick={() => setModalOpen(true)}>
                 +
                 <span className="det-add-shimmer" />
@@ -1824,7 +2130,10 @@ export default function DetectionPage() {
       </div>
 
       {/* Wizard Modal */}
-      {modalOpen && <DetectionWizard onClose={() => setModalOpen(false)} onDone={handleNewDetection} />}
+      {modalOpen && <DetectionWizard onClose={() => setModalOpen(false)} onDone={handleNewDetection} onOpenAiGenerate={() => setAiGenerateOpen(true)} />}
+
+      {/* AI Generate Modal */}
+      {aiGenerateOpen && <AiGenerateModal onClose={() => setAiGenerateOpen(false)} />}
 
       {/* AI Settings Modal */}
       {aiSettingsOpen && (

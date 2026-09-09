@@ -178,7 +178,26 @@ export async function detectPage(
       gray?.delete?.();
     }
   } else {
-    algo = options.algorithm;
+    // Validate algorithm — if unknown (e.g., 'ai-generate' which is UI-only),
+    // fall back to auto-probe. This should not happen in practice since the UI
+    // blocks invalid choices, but TypeScript requires the narrowing.
+    const alg = options.algorithm;
+    if (alg === 'britania' || alg === 'glassworks' || alg === 'super' || alg === 'custom') {
+      algo = alg;
+    } else {
+      // Unknown algorithm — probe to decide
+      text = await getPageText(page);
+      const gray = await rasterAt(PROBE_DPI);
+      try {
+        const v = probeBritaniaVectorSignals(drawings, text);
+        const s5 = probeGreyColumns(options.cv, gray) >= 5;
+        algo = v.score + (s5 ? 1 : 0) >= BRITANIA_MIN_SCORE ? BRITANIA : GLASSWORKS;
+      } catch {
+        algo = GLASSWORKS;
+      } finally {
+        gray?.delete?.();
+      }
+    }
   }
 
   if (algo === BRITANIA) {
