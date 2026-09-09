@@ -84,6 +84,11 @@ EXISTING ALGORITHMS FOR REFERENCE:
 
 OUTPUT FORMAT: Return ONLY the TypeScript code block. No explanations, no markdown outside the code block.
 
+IMPORTANT \u2014 the output will be compiled and a truncated file is useless:
+- The full detector must be well under 400 lines. Be terse: no comments, no blank lines, compact helpers.
+- It MUST end syntactically complete (\`detectPage\` fully closed); never leave code incomplete.
+- Prioritize one or two robust detection passes over exhaustive techniques.
+
 \`\`\`typescript
 // Your generated algorithm here
 \`\`\``;
@@ -147,7 +152,7 @@ export default async (req: Request, context: Context) => {
           temperature: 0.2,
           topK: 32,
           topP: 0.95,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
         }
       })
     });
