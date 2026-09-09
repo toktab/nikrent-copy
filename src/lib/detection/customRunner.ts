@@ -36,6 +36,7 @@ import * as pdfNs from './pdf';
 import * as typesNs from './types';
 import * as britaniaNs from './britania_detector_pdf';
 import * as unifiedNs from './unified_detector_v2_pdf';
+import * as superNs from './super_detector_pdf';
 import * as detectorNs from './detector_pdf';
 
 type AnyNs = Record<string, unknown>;
@@ -51,6 +52,7 @@ const BUILTINS: Record<string, AnyNs> = {
   types: { default: typesNs, ...typesNs },
   britania_detector_pdf: { default: britaniaNs, ...britaniaNs },
   unified_detector_v2_pdf: { default: unifiedNs, ...unifiedNs },
+  super_detector_pdf: { default: superNs, ...superNs },
   detector_pdf: { default: detectorNs, ...detectorNs },
 };
 
@@ -60,7 +62,7 @@ function resolveSpecifier(spec: string): AnyNs {
   const mod = BUILTINS[base];
   if (!mod) {
     throw new Error(
-      `იმპორტი არ არის ხელმისაწვდომი: "${spec}". ნებადართულია მხოლოდ ჩაშენებული დამხმარეები: opencv, pdf, types, britania_detector_pdf, unified_detector_v2_pdf, detector_pdf.`,
+      `იმპორტი არ არის ხელმისაწვდომი: "${spec}". ნებადართულია მხოლოდ ჩაშენებული დამხმარეები: opencv, pdf, types, britania_detector_pdf, unified_detector_v2_pdf, super_detector_pdf, detector_pdf.`,
     );
   }
   return mod;
