@@ -1,0 +1,470 @@
+================================================================================
+BRITANIA DETECTION ALGORITHM — Complete Technical Reference
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Overview & Purpose
+2. Origin & History
+3. How It Works (Pipeline)
+4. Key Parameters & Thresholds
+5. Why Each Parameter Was Chosen
+6. What PDFs It Works Best On
+7. Known Limitations
+8. Example PDFs
+9. The Three Wall Pipelines Explained
+10. Column Detection Details
+11. Coordinate System & Output Format
+12. TypeScript Port Fidelity Notes
+13. Comparison with Other Algorithms
+
+================================================================================
+1. OVERVIEW & PURPOSE
+================================================================================
+
+Britania is a RASTER-ONLY detection algorithm designed for a specific style of
+structural engineering PDF drawings — those produced by Britania (a Georgian
+construction company) or similar firms that export plans as hatched, text-free,
+dark-filled drawings.
+
+It detects:
+  - COLUMNS (solid grey squares)
+  - WALLS (dark-filled regions, parallel line pairs, and hatched bridges)
+
+It does NOT detect:
+  - Foundations
+  - Section/elevation elements
+  - Physical sizes (no scale detection)
+
+Output type: Always "plan" (top-down view)
+Coordinate system: Raw PDF page points, y-down, top-left origin
+
+================================================================================
+2. ORIGIN & HISTORY
+================================================================================
+
+The Britania detector was the FIRST algorithm built for the kubi project. It was
+originally written in Python (britania_detector.py) and later ported to
+TypeScript (britania_detector_pdf.ts) for in-browser detection.
+
+The Python original lives at:
+  kubi-f12-bridge/py/britania_detector.py
+
+The TypeScript port lives at:
+  src/lib/detection/britania_detector_pdf.ts
+
+The port is INTENTIONALLY a 1:1 copy — same thresholds, same pipeline steps,
+same coordinate conventions. This was done to guarantee identical results between
+the Python CLI and the browser version.
+
+Historical note: Before Britania, there was no automated detection. Users had
+to manually trace every column and wall from PDF drawings. Britania was created
+to eliminate that manual work for the most common drawing style in the project.
+
+================================================================================
+3. HOW IT WORKS (PIPELINE)
+================================================================================
+
+The Britania algorithm runs entirely on rasterized (pixel) data at 300 DPI.
+Here is the complete pipeline:
+
+STEP 1: RASTERIZATION
+  - The PDF page is rendered to a grayscale image at 300 DPI
+  - 300 DPI was chosen because:
+    * It provides enough resolution to see thin hatch lines (1-2 px)
+    * It keeps file sizes manageable for browser-based processing
+    * It matches the original Python implementation
+  - Higher DPI = more detail but more memory/slower
+  - Lower DPI = faster but misses thin wall lines
+
+STEP 2: COLUMN DETECTION (solid grey squares)
+  a) Create a grey mask: pixels with intensity 130-210
+     - Why 130-210? Columns in Britania drawings are filled with a specific
+       grey hatching that falls in this intensity band
+     - Below 130 = too dark (wall hatches)
+     - Above 210 = too light (background)
+  b) Morphological OPEN with 5x5 kernel
+     - Removes small noise specks
+     - Keeps only solid grey regions
+  c) Find contours with RETR_EXTERNAL (no hierarchy)
+  d) Filter by:
+     - Area > 400 px² (eliminates tiny dots/marks)
+     - Aspect ratio < 2.5 (rejects long thin rectangles = walls)
+  e) Output: list of column bounding boxes in pixel space
+
+STEP 3: MASK OUT COLUMNS
+  - Before detecting walls, columns are painted white on the grayscale image
+  - This prevents column areas from being counted as wall material
+  - 2px padding around columns prevents edge bleed
+
+STEP 4: CREATE BLACK MASK
+  - Threshold at 100: pixels < 100 become "black" (potential wall material)
+  - This captures:
+    * Solid dark fills (primary walls)
+    * Hatched wall patterns (diagonal lines)
+    * Wall outlines (dark stroked lines)
+  - Why 100? Britania wall hatches are very dark (near-black). 100 captures
+    essentially all dark ink while excluding lighter grey columns
+
+STEP 5: MORPHOLOGICAL CLOSE (25x25 kernel)
+  - Bridges gaps within hatched walls
+  - Connects the two sides of outline-only walls
+  - Why 25x25? This is ~19pt at 300 DPI, large enough to bridge typical
+    wall outline gaps but not so large that it merges separate walls
+
+STEP 6: MORPHOLOGICAL OPEN (8x8 kernel)
+  - Removes small noise blobs left after closing
+  - Why 8x8? Small enough to keep real wall features, large enough to
+    eliminate speckle noise
+
+STEP 7: DIRECTIONAL OPENING (two passes)
+  - Horizontal kernel (5x40): extracts horizontal wall segments
+  - Vertical kernel (40x5): extracts vertical wall segments
+  - Why directional? Britania walls are axis-aligned. This separates
+    horizontal from vertical walls and rejects diagonal noise (text,
+    dimension lines, etc.)
+
+STEP 8: PRIMARY WALL FILTERING
+  For each contour found in the directional masks:
+  - Area > 2000 px² (minimum wall size)
+  - Short side > 25 px (prevents accepting lines that are too thin)
+  - Aspect ratio > 2.5 (must be clearly elongated = wall, not square = column)
+  - Output: primary wall rectangles
+
+================================================================================
+4. KEY PARAMETERS & THRESHOLDS
+================================================================================
+
+All values below are for 300 DPI rasterization.
+
+DPI:
+  Value: 300
+  Why: Standard resolution for structural drawings. Captures 1px hatch lines
+       at 0.085pt line width. Trade-off between detail and memory.
+
+COLUMN GREY RANGE:
+  Low:  130
+  High: 210
+  Why:  Columns in Britania drawings are filled with medium-grey hatching.
+        This range captures that specific grey while excluding darker wall
+        hatches (below 130) and lighter background (above 210).
+
+COLUMN KERNEL:
+  Size: 5x5
+  Type: MORPH_OPEN
+  Why:  Removes small noise while preserving the solid grey column fills.
+        5x5 is small enough to keep column details but removes 1-2px noise.
+
+COLUMN MIN AREA:
+  Value: 400 px² (~20x20 px)
+  Why:  At 300 DPI, this is ~1.7mm real-world. Anything smaller is noise
+        (text marks, dots, dimension ticks).
+
+COLUMN MAX ASPECT:
+  Value: 2.5
+  Why:  Columns are roughly square. An aspect ratio > 2.5 means it's more
+        than 2.5x longer in one direction — that's a wall, not a column.
+
+WALL BLACK THRESHOLD:
+  Value: 100
+  Why:  Britania wall hatches are near-black (intensity ~0-80). Setting the
+        threshold at 100 captures all dark wall material while excluding the
+        lighter grey column fills (130+).
+
+WALL CLOSE KERNEL:
+  Size: 25x25
+  Type: MORPH_CLOSE
+  Why:  Bridges gaps in hatched walls. At 300 DPI, 25px ≈ 2.1mm. This is
+        large enough to connect hatch lines that are spaced apart, but not
+        so large that it merges separate walls that happen to be close.
+
+WALL OPEN KERNEL:
+  Size: 8x8
+  Type: MORPH_OPEN
+  Why:  Removes small noise after closing. 8px ≈ 0.67mm. Eliminates tiny
+        dark spots (text fragments, dimension tick marks).
+
+DIRECTIONAL OPEN KERNELS:
+  Horizontal: 5x40 (5 tall, 40 wide)
+  Vertical:   40x5 (40 tall, 5 wide)
+  Why:  These extract long, thin features in each direction. The 40px length
+        (≈3.4mm) ensures we only keep genuine wall segments, not short noise.
+        The 5px width (≈0.4mm) is the minimum wall thickness we accept.
+
+WALL MIN AREA:
+  Value: 2000 px²
+  Why:  At 300 DPI, this is ~2.3mm x 2.3mm minimum. Filters out anything
+        too small to be a real wall segment.
+
+WALL MIN SHORT SIDE:
+  Value: 25 px
+  Why:  25px ≈ 2.1mm at 300 DPI. Walls thinner than this are likely noise
+        or dimension lines.
+
+WALL MIN ASPECT:
+  Value: 2.5
+  Why:  Walls must be at least 2.5x longer than wide. This distinguishes
+        wall segments from square blobs (which would be columns).
+
+IOU THRESHOLD (deduplication):
+  Value: 0.25
+  Why:  When a supplemental/hatch-bridge wall overlaps an existing primary
+        wall by more than 25% IoU, it's considered a duplicate and skipped.
+        25% is permissive enough to catch near-duplicates while allowing
+        genuinely different walls that happen to be close together.
+
+================================================================================
+5. WHY EACH PARAMETER WAS CHOSEN
+================================================================================
+
+The parameters were tuned empirically on the reference PDF "britania.pdf":
+
+- 300 DPI: The original Python implementation used 300 DPI. Changing this
+  would break parity with the reference.
+
+- Grey range 130-210: Visually inspected the column fills in britania.pdf.
+  They consistently fall in this band. Below 130 captures wall hatches;
+  above 210 captures background.
+
+- Threshold 100: Wall hatches in britania.pdf are very dark (intensity 0-80).
+  Setting at 100 gives a comfortable margin. If set lower (e.g., 80), some
+  wall segments would be missed. If set higher (e.g., 130), column fills
+  would be included in the wall mask.
+
+- Close 25x25: Tested with 15x15 (too small — didn't bridge all gaps) and
+  35x35 (too large — merged adjacent walls). 25x25 was the sweet spot.
+
+- Open 8x8: Tested with 5x5 (too small — left noise) and 12x12 (too large —
+  ate into thin walls). 8x8 cleaned noise without harming walls.
+
+- Directional 5x40/40x5: The 40px length ensures only long features survive.
+  Short noise (text characters are ~10-15px) gets eliminated. The 5px width
+  accepts walls as thin as 0.4mm at 300 DPI.
+
+================================================================================
+6. WHAT PDFs IT WORKS BEST ON
+================================================================================
+
+Britania works BEST on:
+  ✅ Hatched plans (walls filled with diagonal lines)
+  ✅ Dark-filled plans (walls as solid dark rectangles)
+  ✅ Text-free exports (no text layer in the PDF)
+  ✅ Axis-aligned walls (horizontal and vertical only)
+  ✅ Uniform grey columns (solid grey squares/rectangles)
+  ✅ AutoCAD exports from Britania-style firms
+  ✅ Plans where walls are drawn as filled regions, not outlines
+
+Britania works POORLY on:
+  ❌ Plans with text annotations (dimension labels, room names)
+  ❌ Plans with large filled regions (floors, slabs)
+  ❌ Plans where walls are drawn as outline-only (two parallel lines, no fill)
+  ❌ Section/elevation views
+  ❌ Plans with mixed fill palettes (some grey, some colored)
+  ❌ Plans from GlassWorks-style firms (different conventions)
+
+Example PDFs:
+  - britania.pdf (reference) — 3 pages, ~53/37/14 walls, 22/1/0 columns
+  - Any AutoCAD export from a Georgian construction company using hatched plans
+
+================================================================================
+7. KNOWN LIMITATIONS
+================================================================================
+
+WALL COUNT VARIANCE (±3):
+  - Thin hatch lines at 1-2 px width are right at the detection threshold
+  - Different PDF renderers (pdf.js vs PyMuPDF) anti-alias differently
+  - This flips individual contours near the MIN/MAX thresholds
+  - NOT a bug — it's rasterizer noise
+  - Could be fixed by rasterizing at higher DPI for the wall pass only
+
+NO SCALE DETECTION:
+  - Britania outputs raw PDF page points, not real-world centimeters
+  - The output includes w_mm/h_mm fields, but they require a known scale
+  - The browser import path renders in page-point space (k=1)
+
+SUPPLEMENTAL PIPELINE LIMITATIONS:
+  - The supplemental detector catches hatched-wall border lines
+  - It uses a fixed 80px bridge width — if two walls are closer than 80px,
+    they may be merged into one blob
+  - MAX_SHORT_SIDE = 160px prevents accepting over-merged blobs
+
+HATCH-BRIDGE LIMITATIONS:
+  - Only detects hatched walls that connect two already-detected columns
+  - Isolated hatched walls (not between columns) are missed
+  - The density threshold (200) is permissive but can miss very sparse hatches
+
+================================================================================
+8. EXAMPLE PDFs
+================================================================================
+
+Reference PDF: britania.pdf
+  Location: public/samples/britania.pdf (browser) / kubi-f12-bridge/ (CLI)
+  
+  Page 1: 53 walls, 22 columns (dense plan, many columns)
+  Page 2: 37 walls, 1 column (sparser plan)
+  Page 3: 14 walls, 0 columns (minimal plan)
+  
+  Expected algorithm assignment: All 3 pages → "britania"
+
+The auto-probe (detector.py) uses 5 signals to identify Britania-style pages:
+  S1: >80% of vector fills are dark (< 0.25 normFill)
+  S2: >150 dark fills total
+  S3: < 20 words in text layer
+  S4: No vector fill larger than 3000 pt²
+  S5: ≥ 5 grey square columns on a 150-DPI raster probe
+
+If ≥ 3 of 5 signals are true, the page is routed to Britania.
+
+================================================================================
+9. THE THREE WALL PIPELINES EXPLAINED
+================================================================================
+
+Britania has THREE wall detection pipelines, run in sequence:
+
+PIPELINE 1: PRIMARY (solid/dark-outline walls)
+  What it catches: Thick dark-filled wall regions, dark outlines
+  How: Threshold at 100 → close 25x25 → open 8x8 → directional open → filter
+  Example: A wall drawn as a solid black rectangle 300px × 20px
+
+PIPELINE 2: SUPPLEMENTAL (parallel line pair walls)
+  What it catches: Walls drawn as two thin parallel lines (hatched walls whose
+  borders are long, thin, sparse)
+  How:
+    1. Find long line segments (min 200px) using 1px directional morphological open
+    2. Dilate perpendicular (80px) to bridge the gap between the two lines
+    3. Heal tiny breaks with a directional close (20px)
+    4. Find contours and filter
+  Example: A wall drawn as two 1px black lines 20px apart, 500px long
+  Why separate from primary? The 25x25 close in primary merges these with
+  adjacent features, causing the bounding box to fail aspect tests.
+
+PIPELINE 3: HATCH-BRIDGE (diagonal crosshatch walls between columns)
+  What it catches: Walls filled with diagonal crosshatch that connect two
+  already-detected columns on the same row or column line
+  How:
+    1. Cluster columns into rows (by cy, tolerance 45px) and column-lines (by cx)
+    2. For each pair of adjacent columns in a cluster, examine the strip between them
+    3. Threshold the strip at 200, blur to smear hatch into solid, threshold at 20
+    4. Find contours and filter
+  Critical design decision: ONLY examines the narrow strip between two known
+  columns. This prevents dimension lines, text, and other noise from being
+  falsely detected as walls. A real door/window opening shows very little ink
+  in the strip, so it's naturally rejected by the density threshold.
+
+Pipeline execution order matters:
+  - Each subsequent pipeline checks against ALL previously detected walls
+  - IoU > 0.25 means "already covered" → skip
+  - IoU > 0.5 against any column → skip (it's a column, not a wall)
+
+================================================================================
+10. COLUMN DETECTION DETAILS
+================================================================================
+
+Column detection is simple because Britania columns have a very consistent style:
+
+  - They are SOLID GREY FILLS (not outlines, not hatched)
+  - The grey intensity is 130-210 (medium grey)
+  - They are roughly SQUARE (aspect < 2.5)
+  - They are at least 400 px² (≈20x20 px at 300 DPI)
+
+The detection:
+  1. inRange(gray, 130, 210) → grey_mask
+  2. morphological OPEN 5x5 → remove noise
+  3. findContours → filter by area and aspect ratio
+
+Column detection is VERY reliable because:
+  - Columns are always solid grey fills (consistent across all Britania drawings)
+  - The grey band is distinct from wall hatches (much darker) and background
+  - Square shape constraint eliminates false positives from wall segments
+
+Column detection matching: EXACT match with Python reference across all test PDFs.
+
+================================================================================
+11. COORDINATE SYSTEM & OUTPUT FORMAT
+================================================================================
+
+Britania output is in RAW PDF PAGE POINTS:
+  - Origin: top-left corner of the page
+  - Y increases downward (screen convention)
+  - Units: PDF points (1 pt = 1/72 inch)
+  - Conversion: px * 72 / DPI = pt (at 300 DPI: px * 0.24)
+
+Output format:
+{
+  "drawing_type": "plan",
+  "columns": [
+    {
+      "id": 1,
+      "x0": 1077.3,   // left edge in page points
+      "y0": 542.64,   // top edge
+      "x1": 1099.92,  // right edge
+      "y1": 550.2,    // bottom edge
+      "cx": 1088.61,  // center x
+      "cy": 546.42    // center y
+    }
+  ],
+  "walls": [
+    {
+      "id": 1,
+      "x0": 0, "y0": 100, "x1": 200, "y1": 105,
+      "cx": 100, "cy": 102.5,
+      "kind": "wall"        // or "wall_hatched" for hatch-bridge walls
+    }
+  ]
+}
+
+Note: Britania does NOT compute physical sizes (w_mm/h_mm) because it has
+no scale information. The import path renders in page-point space.
+
+================================================================================
+12. TYPESCRIPT PORT FIDELITY NOTES
+================================================================================
+
+The TypeScript port (britania_detector_pdf.ts) was designed to be EXACTLY
+faithful to the Python original. Key decisions:
+
+1. CONSTANTS COPIED VERBATIM
+   Every threshold, kernel size, and filter value matches the Python to the digit.
+   If you tune Python, re-port the number.
+
+2. SAME COORDINATE CONVENTIONS
+   Plan output is raw PDF page points, y-down, top-left origin.
+   This matches what the operator-list walker in pdf.ts emits.
+
+3. SAME MERGE/ORDERING SEMANTICS
+   Python iterates sorted tuples. The TS port sorts with full lexicographic
+   tuple order. Sorting by x0 alone fabricated phantom walls.
+
+4. MEMORY MANAGEMENT
+   Every cv.Mat is tracked and freed in a finally block via MatTracker.
+   No WASM memory leaks across page processing.
+
+5. VALIDATED PARITY
+   | PDF         | Python     | Browser   |
+   |-------------|------------|-----------|
+   | Britania p1 | 53W / 22C  | 51W / 22C |  (±2 wall variance)
+   | Britania p2 | 37W / 1C   | 40W / 1C  |  (±3 wall variance)
+   | Britania p3 | 14W / 0C   | 17W / 0C  |  (±3 wall variance)
+
+   Columns match EXACTLY. Wall variance is rasterizer anti-aliasing noise.
+
+================================================================================
+13. COMPARISON WITH OTHER ALGORITHMS
+================================================================================
+
+| Aspect           | Britania           | GlassWorks         | SUPER              |
+|------------------|--------------------|--------------------|--------------------|
+| Target style     | Hatched plans      | Mixed plans+sects  | Any style          |
+| Detection method | Raster only        | Vector + Raster    | Adaptive hybrid    |
+| Thresholds       | Fixed (300 DPI)    | Fixed (200/300)    | Adaptive (Otsu)    |
+| Routing          | Always plan        | Text keyword sniff | Ink density sniff  |
+| Columns          | Grey range 130-210 | Grey/dark fills    | Dark/grey squares  |
+| Walls            | 3-pipeline hatch   | Hough + hatch-dens | Directional close  |
+| Foundations       | No                 | Yes                | Yes (crosshatch)   |
+| Scale detection  | No                 | Auto from text     | Placeholder (broken)|
+| Confidence scores| No                 | No                 | 0-1 per element    |
+| Best for         | Britania PDFs      | GlassWorks PDFs    | Unknown PDFs       |
+
+================================================================================
+END OF DOCUMENT
+================================================================================

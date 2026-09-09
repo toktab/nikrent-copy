@@ -53,7 +53,7 @@
 }
 
 .det-sidebar-add {
-  width: 100%;
+  flex: 1;
   height: 48px;
   border: none;
   border-radius: 12px;
@@ -329,6 +329,8 @@
   gap: 8px;
   z-index: 20;
 }
+
+
 
 .det-action-btn {
   height: 36px;
@@ -1288,6 +1290,747 @@
   .dm-algo-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ── AI Button ── */
+
+.det-sidebar-header-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.det-ai-btn {
+  height: 48px;
+  width: 48px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.det-ai-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.det-ai-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(112, 91, 245, 0.06);
+}
+
+.det-ai-btn.configured {
+  border-color: rgba(112, 91, 245, 0.3);
+  color: var(--accent);
+}
+
+.det-ai-btn:not(.configured) {
+  animation: det-ai-setup-pulse 3s ease-in-out infinite;
+}
+
+.det-ai-btn:not(.configured):hover {
+  animation-play-state: paused;
+}
+
+@keyframes det-ai-setup-pulse {
+  0%, 100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  50% {
+    border-color: rgba(240, 98, 146, 0.5);
+    box-shadow: 0 0 12px rgba(240, 98, 146, 0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .det-ai-btn:not(.configured) {
+    animation: none;
+  }
+}
+
+
+
+
+
+
+
+.det-ai-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--surface);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.det-ai-dot.valid {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+
+.det-ai-dot.unverified {
+  background: #e8c840;
+  box-shadow: 0 0 6px rgba(232, 200, 64, 0.5);
+}
+
+.det-ai-dot.invalid {
+  background: var(--bad);
+  box-shadow: 0 0 6px rgba(246, 109, 103, 0.5);
+}
+
+.det-ai-dot.no-key {
+  display: none;
+}
+
+/* ── AI Settings Modal Extras ── */
+
+.dm-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dm-key-input-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.dm-field-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 40px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.dm-field-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(112, 91, 245, 0.15);
+}
+
+.dm-key-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.dm-key-toggle:hover {
+  background: var(--panel2);
+  color: var(--text);
+}
+
+.dm-key-validate {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  font-family: inherit;
+}
+
+.dm-key-validate:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(112, 91, 245, 0.08);
+}
+
+.dm-key-validate:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dm-key-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: dm-spin 0.6s linear infinite;
+}
+
+@keyframes dm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dm-key-msg {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  animation: dm-file-in 0.2s ease;
+}
+
+.dm-key-msg.valid {
+  background: rgba(113, 197, 117, 0.12);
+  color: var(--ok);
+  border: 1px solid rgba(113, 197, 117, 0.25);
+}
+
+.dm-key-msg.invalid {
+  background: rgba(246, 109, 103, 0.12);
+  color: var(--bad);
+  border: 1px solid rgba(246, 109, 103, 0.25);
+}
+
+.dm-prompt-area {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.dm-prompt-area:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(112, 91, 245, 0.15);
+}
+
+.dm-prompt-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.dm-section-compact {
+  margin-bottom: 0;
+}
+
+/* ── Prompt History ── */
+
+.dm-prompt-history {
+  margin-top: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  animation: dm-file-in 0.2s ease;
+}
+
+.dm-prompt-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dm-prompt-history-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dm-prompt-history-clear {
+  background: none;
+  border: none;
+  color: var(--bad);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.dm-prompt-history-clear:hover {
+  background: rgba(246, 109, 103, 0.12);
+}
+
+.dm-prompt-history-empty {
+  text-align: center;
+  padding: 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.dm-prompt-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.dm-prompt-history-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dm-prompt-history-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.dm-prompt-history-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.dm-prompt-history-item:hover {
+  background: var(--well);
+}
+
+.dm-prompt-history-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.dm-prompt-history-text:hover {
+  background: rgba(112, 91, 245, 0.1);
+}
+
+.dm-prompt-history-delete {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.dm-prompt-history-item:hover .dm-prompt-history-delete {
+  opacity: 1;
+}
+
+.dm-prompt-history-delete:hover {
+  background: rgba(246, 109, 103, 0.15);
+  color: var(--bad);
+}
+
+/* ── Current Prompt Display ── */
+
+.dm-current-prompt {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  animation: dm-file-in 0.2s ease;
+}
+
+.dm-current-prompt-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.dm-current-prompt-preview {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+}
+
+.dm-current-prompt-edit {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.dm-current-prompt-edit:hover {
+  background: rgba(112, 91, 245, 0.08);
+  border-color: var(--accent);
+}
+
+/* ── Active Badge ── */
+
+.dm-active-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(113, 197, 117, 0.15);
+  color: var(--ok);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(113, 197, 117, 0.25);
+  animation: dm-badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dm-badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ── Prompts Panel ── */
+
+.dm-prompts-panel {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  animation: dm-file-in 0.2s ease;
+}
+
+.dm-prompts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.dm-prompts-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dm-prompts-add {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.dm-prompts-add:hover {
+  background: rgba(112, 91, 245, 0.12);
+}
+
+/* ── New Prompt Form ── */
+
+.dm-new-prompt-form {
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  animation: dm-file-in 0.2s ease;
+}
+
+.dm-new-prompt-name {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  font-family: inherit;
+}
+
+.dm-new-prompt-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dm-new-prompt-text {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.dm-new-prompt-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dm-new-prompt-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ── Prompts List ── */
+
+.dm-prompts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.dm-prompts-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dm-prompts-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.dm-prompts-empty {
+  text-align: center;
+  padding: 16px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.dm-prompt-item {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface);
+  position: relative;
+}
+
+.dm-prompt-item:hover {
+  border-color: var(--accent);
+  background: rgba(112, 91, 245, 0.06);
+  transform: translateX(4px);
+}
+
+.dm-prompt-item.active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(112, 166, 245, 0.1) 0%, rgba(112, 166, 245, 0.05) 100%);
+  box-shadow: 0 0 0 1px var(--accent) inset, 0 4px 12px rgba(112, 166, 245, 0.15);
+}
+
+.dm-prompt-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
+
+.dm-prompt-item-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.dm-prompt-item-preview {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* ── Prompt Detail ── */
+
+.dm-prompt-detail {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  animation: dm-file-in 0.2s ease;
+}
+
+.dm-prompt-detail-back {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 10px;
+  display: block;
+  font-family: inherit;
+}
+
+.dm-prompt-detail-back:hover {
+  text-decoration: underline;
+}
+
+.dm-prompt-detail-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.dm-prompt-detail-text {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px;
+  background: var(--well);
+  border-radius: 8px;
+}
+
+.dm-prompt-detail-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ── Prompt Detail Edit Mode ── */
+
+.dm-prompt-detail-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dm-prompt-detail-edit-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dm-edit-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes dm-edit-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.dm-prompt-detail-edit-name {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dm-prompt-detail-edit-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(112, 91, 245, 0.15);
+}
+
+.dm-prompt-detail-edit-text {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--well);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dm-prompt-detail-edit-text:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(112, 91, 245, 0.15);
+}
+
+.dm-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 
 /* ── Touch Targets ── */

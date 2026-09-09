@@ -1,0 +1,540 @@
+================================================================================
+GLASSWORKS DETECTION ALGORITHM — Complete Technical Reference
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Overview & Purpose
+2. Origin & History
+3. How It Works — PLAN Pipeline
+4. How It Works — SECTION Pipeline
+5. Key Parameters & Thresholds
+6. Why Each Parameter Was Chosen
+7. What PDFs It Works Best On
+8. Known Limitations
+9. Example PDFs
+10. Drawing Type Sniffing
+11. Scale Auto-Detection
+12. Coordinate Systems
+13. The Seven v2 Fixes (F1-F7)
+14. Comparison with Other Algorithms
+
+================================================================================
+1. OVERVIEW & PURPOSE
+================================================================================
+
+GlassWorks (internally called "unified_detector_v2") is a DUAL-PIPELINE
+detection algorithm that handles BOTH plan (top-down) and section (cross-section)
+structural drawings. It was designed for PDFs from GlassWorks-style firms that
+produce drawings with:
+  - A text layer (annotations, dimensions, room names)
+  - Mixed fill palettes (grey, black, colored fills)
+  - Both solid fills and outline-only elements
+  - Both plan and section views in the same PDF
+
+It detects:
+  - COLUMNS (solid grey and dark filled squares)
+  - WALLS (grey-filled runs, parallel stroke-line pairs, hatch bands)
+  - FOUNDATIONS (cross-hatched regions in section views)
+  - CORNERS (wall/column intersection points)
+
+It does NOT detect:
+  - Physical dimensions without scale information
+  - Annotations or text content
+  - 3D geometry
+
+Output types: "plan" (page points) or "section" (world centimeters)
+
+================================================================================
+2. ORIGIN & HISTORY
+================================================================================
+
+GlassWorks evolved through three versions:
+
+v1 (unified_detector.py):
+  - First attempt at a "universal" detector
+  - Only looked at mid-grey fills (140-220) for section walls → missed black hatches
+  - Only looked at grey fills (0.50-0.80) for plan columns → missed dark columns
+  - No scale auto-detection → wrong cm values
+  - No text keyword sniffing → wrong pipeline selection
+
+v2 (unified_detector_v2.py):
+  - Seven critical fixes (F1-F7) that made it production-ready
+  - Added dark ink detection for sections (F1)
+  - Added dark column detection for plans (F2)
+  - Added auto scale detection from text layer (F3)
+  - Added text keyword sniffing (F4)
+  - Added wall merging across column gaps (F5)
+  - Added foundation false positive filtering (F6)
+  - Added stroke-pair wall detection (F7)
+
+v2 TypeScript Port (unified_detector_v2_pdf.ts):
+  - Faithful port of the Python v2
+  - Runs entirely in-browser using pdf.js + opencv.js (WASM)
+  - No Python, no server, no terminal required
+
+Python original: kubi-f12-bridge/py/unified_detector_v2.py
+TypeScript port: src/lib/detection/unified_detector_v2_pdf.ts
+
+================================================================================
+3. HOW IT WORKS — PLAN PIPELINE
+================================================================================
+
+The PLAN pipeline handles floor plans (top-down views). It is VECTOR-FIRST
+with a raster fallback.
+
+STEP 1: VECTOR PASS (analyze_page_vector)
+  Extracts drawings from the PDF's vector layer (PyMuPDF get_drawings /
+  pdf.js operator-list walker). Each drawing item has a fill color, stroke
+  color, and bounding rectangle.
+
+  a) COLUMN DETECTION — TWO PASSES:
+  
+     Medium-grey pass (original):
+       - Fill color: normFill 0.50-0.80
+       - Why this range? GlassWorks columns are filled with medium grey
+       - Below 0.50 = too dark (walls), above 0.80 = too light (background)
+       - Filter: min area 50 pt², aspect < 3, min side 5pt
+
+     Dark-fill pass (F2 fix):
+       - Fill color: normFill < 0.25
+       - Why added? Real columns are sometimes near-black squares
+       - Filter: side 3-80 pt, area ≥ 15 pt², aspect < 4
+       - This catches columns that the grey pass misses
+
+     Both passes deduplicate by center proximity (< 2pt).
+
+  b) WALL DETECTION — SOLID GREY RUNS:
+       - Fill color: normFill 0.50-0.65
+       - Why this range? Walls are slightly darker than columns
+       - Below 0.50 = too dark (dimension lines), above 0.65 = too light
+       - Filter: min side 30pt long, min thickness 3pt, area ≥ 200 pt²
+       - Each wall gets a "kind" label: "wall" if longer, "beam" if wider
+
+  c) WALL DETECTION — STROKE PAIRS (F7):
+       - Catches walls drawn as two parallel lines with NO fill
+       - How: extract all line segments with dark strokes (< 0.35 normStroke)
+       - Group into horizontal and vertical
+       - Find parallel pairs with:
+         * Gap between 0.5-40 pt (wall thickness)
+         * Overlap ≥ 50% of shorter line
+       - Merge overlapping pairs into wall rectangles
+       - Why important? Many AutoCAD walls are outline-only, no fill
+
+  d) MARKER DETECTION:
+       - Unfilled circles/rectangles with dark strokes
+       - Used for corner detection, not structural elements
+
+  e) CORNER DETECTION:
+       - Cluster wall endpoints and marker centers
+       - Within 25pt tolerance = same corner
+       - Average the cluster coordinates
+
+STEP 2: RASTER FALLBACK (analyze_page_raster_fallback)
+  - Only runs if the vector pass found ZERO columns
+  - Rasterizes at 200 DPI
+  - Creates a binary mask: dark (< 64) OR mid-grey (128-204)
+  - Morphological close 5x5, find contours
+  - Filters: area ≥ 2500 px², min side ≥ 5pt
+  - Returns columns only (no walls from raster in plan mode)
+  - Why 200 DPI? Lighter than section (300) because plan walls come from vectors
+
+================================================================================
+4. HOW IT WORKS — SECTION PIPELINE
+================================================================================
+
+The SECTION pipeline handles cross-section and elevation views. It is
+RASTER-ONLY (no vector analysis for walls/foundations).
+
+STEP 1: RASTERIZATION
+  - 300 DPI (higher than plan's 200 DPI)
+  - Why 300? Section drawings have finer hatch patterns that need more
+    resolution to distinguish wall hatches from foundation hatches
+
+STEP 2: INK MASK CREATION (F1 fix)
+  The ink mask identifies ALL dark/inked pixels in the drawing:
+  
+  a) Dark ink: pixel intensity < 128 (THRESH_BINARY_INV)
+     - Captures near-black CAD hatches (the most common case)
+     - v1 only looked at mid-grey 140-220 and MISSED these entirely
+  
+  b) Mid-grey band: pixel intensity 140-205
+     - Captures lighter grey hatches and column fills
+     - Still needed for some drawing styles
+  
+  c) Combine: bitwise_or(dark, grey)
+     - Both types of ink are included
+
+  Why this matters: In real structural drawings, hatches are often BLACK
+  (intensity 0-50), not mid-grey. v1's narrow grey band found NOTHING on
+  real GlassWorks PDFs. The F1 fix was the single most impactful change.
+
+STEP 3: COLUMN DETECTION (vector)
+  - Same as plan: solid fills in the 0.15-0.97 normFill range
+  - Converts to world centimeters using detected scale
+  - Deduplicates by center proximity (< 2cm)
+
+STEP 4: ERASE COLUMNS FROM INK MASK
+  - Paints column regions white on the ink mask (25px padding)
+  - Prevents columns from being counted as hatch material
+
+STEP 5: DIRECTIONAL CLOSING DIFFERENCE
+  This is the key insight for section wall detection:
+  
+  a) Close ink vertically (1x15 kernel) → close_v
+     - Vertical hatch lines merge into solid bands
+     - Horizontal lines (dimension lines) close the same in both directions
+  
+  b) Close horizontally (15x1 kernel) → close_h
+     - Horizontal hatch lines merge into solid bands
+  
+  c) Difference: absdiff(close_v, close_h)
+     - Features that close the same in both directions (dimension lines,
+       outlines) CANCEL OUT → zero in the difference
+     - Features that close differently (hatch bands) SURVIVE
+  
+  d) Threshold at 30, morphological close 3x3 → final candidates
+
+  Why this works: Parallel hatch lines (wall fills) merge into bands when
+  closed in one direction but not the other. Single lines (dimension lines,
+  outlines) close equally in both directions and disappear from the difference.
+
+STEP 6: HATCH BLOB CLASSIFICATION
+  For each candidate blob, determine if it's a WALL or FOUNDATION:
+  
+  a) Extract the original ink inside the blob
+  b) Run Hough line detection (probabilistic)
+  c) Bin angles into 15-degree bins over 180°
+  d) Count angle groups:
+     - 1 strong group (single direction) → WALL
+     - 2+ groups separated by ≥60° → FOUNDATION (cross-hatch)
+  e) Solid band (density > 0.5, large area, aspect ≥ 1.5) → WALL (low confidence)
+
+  Why Hough lines? They directly measure the hatch direction. Walls have
+  diagonal hatches in ONE direction. Foundations have cross-hatching (two
+  directions perpendicular to each other).
+
+STEP 7: WALL MERGING (F5 fix)
+  - Walls split by column crossings are re-joined
+  - Tolerance: column width + 25px padding + 60px extra gap
+  - Same orientation check prevents merging perpendicular walls
+
+STEP 8: FOUNDATION FILTERING (F6 fix)
+  - Drop foundations overlapping a wall by > 50% IoU
+  - Drop foundations in the top 10% of the page (they're usually title blocks,
+    not structural elements)
+
+STEP 9: SCALE CONVERSION
+  - world_per_px = 2.54 / SEC_DPI * scale
+  - page_h_cm = page_height_pt * 2.54 / 72.0 * scale
+  - y is FLIPPED: world_y = page_h_cm - raster_y_cm
+  - Output is y-UP (CAD paper convention)
+
+================================================================================
+5. KEY PARAMETERS & THRESHOLDS
+================================================================================
+
+SECTION PIPELINE:
+  SEC_DPI = 300
+    Why: Fine hatch patterns need high resolution
+
+  SEC_INK_DARK = 128
+    Why: Captures near-black CAD hatches (intensity 0-128)
+
+  SEC_INK_GREY_LOW = 140, HIGH = 205
+    Why: Mid-grey band for lighter hatches and column fills
+
+  SEC_COL_FILL_MIN = 0.15, MAX = 0.97
+    Why: Very wide range — columns can be almost any grey level, just not white
+
+  WALL_CLOSE_KERNEL = 9 (morphological close for hatch→bands)
+    Why: Small enough to preserve wall boundaries, large enough to connect
+    hatch lines into solid bands
+
+  WALL_MIN_AREA_PX = 40×40 = 1600 px²
+    Why: Minimum wall blob size at 300 DPI (~1.35mm real world)
+
+  WALL_MIN_LEG_PX = 30
+    Why: Minimum longest side (~2.5mm at 300 DPI)
+
+  HOUGH_THRESHOLD = 25, MIN_LEN = 12, MAX_GAP = 4
+    Why: Conservative line detection — only strong, long lines count as
+    hatch indicators. Prevents noise from being classified as hatch.
+
+  HATCH_MIN_LINES = 5
+    Why: Need at least 5 detected lines to confidently classify hatch direction.
+    Fewer than 5 could be noise or a single dimension line.
+
+  FOUND_OVERLAP_REJECT = 0.5
+    Why: If a foundation candidate overlaps a wall by > 50%, it's likely
+    the same element, not a separate foundation.
+
+  FOUND_BOTTOM_FRAC = 0.90
+    Why: Foundations should be near the bottom of the drawing. Anything in
+    the top 10% is likely a title block or annotation.
+
+  SEC_WALL_THICK_MIN_CM = 10
+    Why: Minimum wall thickness in real-world centimeters. Thinner than 10cm
+    is likely a dimension line or annotation, not a structural wall.
+
+PLAN PIPELINE:
+  PLAN_DPI = 200
+    Why: Lighter than section because plan walls come from vectors, not raster
+
+  PLAN_COL_FILL_MIN = 0.50, MAX = 0.80
+    Why: Medium-grey columns (GlassWorks convention)
+
+  PLAN_COL_DARK_MAX = 0.25
+    Why: Near-black columns (F2 fix — catches dark fills the grey pass misses)
+
+  PLAN_WALL_FILL_MIN = 0.50, MAX = 0.65
+    Why: Walls are slightly darker than columns but not as dark as dimension lines
+
+  PLAN_STROKE_MAX = 0.35
+    Why: Stroke-pair walls use dark strokes (< 0.35 brightness)
+
+  PLAN_STROKE_GAP_MAX = 40 pt
+    Why: Maximum wall thickness from a stroke pair. At 1:150 scale, 40pt ≈ 17cm.
+    Thicker than this is likely a floor slab, not a wall.
+
+  PLAN_STROKE_OVERLAP = 0.5
+    Why: The two lines must overlap by at least 50% of the shorter line's length.
+    Prevents matching random parallel lines that aren't wall borders.
+
+SCALE DETECTION:
+  Regex: 1\s*[:/]\s*(\d{2,4})
+    Why: Matches "1:150", "1/100", "1: 50", etc. Captures 2-4 digit numbers.
+    Fallback: --scale flag (default 50)
+
+================================================================================
+6. WHY EACH PARAMETER WAS CHOSEN
+================================================================================
+
+The parameters were tuned through iterative testing on real GlassWorks PDFs:
+
+INK DARK THRESHOLD (128):
+  - Real CAD hatches are near-black (intensity 0-50)
+  - 128 gives a comfortable margin to capture all dark ink
+  - v1 used only 140-220 (mid-grey) and found NOTHING on real PDFs
+  - This was the single most impactful fix (F1)
+
+COLUMN FILL RANGE (0.15-0.97):
+  - Very wide because GlassWorks columns use various grey levels
+  - Some are medium grey (0.50-0.80), some are dark (0.15-0.25)
+  - 0.97 excludes pure white (background)
+  - This range catches 95%+ of real columns
+
+WALL FILL RANGE (0.50-0.65):
+  - Narrower than columns because walls have a consistent grey
+  - Below 0.50 = dimension lines (too dark)
+  - Above 0.65 = background (too light)
+
+DIRECTIONAL CLOSE KERNEL (15px):
+  - At 300 DPI, 15px ≈ 1.3mm
+  - Large enough to merge hatch lines (typically 2-5px apart)
+  - Small enough to preserve wall boundaries
+
+HOUGH PARAMETERS (25/12/4):
+  - threshold=25: Only strong lines count (prevents noise)
+  - minLineLength=12: Short lines are noise
+  - maxLineGap=4: Allows small breaks in hatch lines
+
+================================================================================
+7. WHAT PDFs IT WORKS BEST ON
+================================================================================
+
+GlassWorks works BEST on:
+  ✅ Drawings with a text layer (annotations, dimensions)
+  ✅ Mixed fill palettes (grey, black, colored)
+  ✅ Both plan and section views in one PDF
+  ✅ Outline-only walls (two parallel lines, no fill)
+  ✅ Solid-filled walls (grey runs)
+  ✅ Section views with hatch patterns
+  ✅ AutoCAD exports with standard conventions
+  ✅ Drawings from GlassWorks-style firms
+  ✅ PDFs with scale annotations (1:150, 1:100, etc.)
+
+GlassWorks works POORLY on:
+  ❌ Britania-style hatched plans (too dark, too many small fills)
+  ❌ Plans with no vector data (raster-only PDFs)
+  ❌ Hand-drawn sketches (too noisy)
+  ❌ Plans where walls are filled with patterns other than solid grey
+
+Example PDFs:
+  - GlassWorks.pdf (reference) — 1 page, 22 walls, 54 columns
+  - Any AutoCAD export with text layer and mixed fills
+
+================================================================================
+8. KNOWN LIMITATIONS
+================================================================================
+
+STROKE-PAIR WALLS (F7) ARE GATED OFF:
+  - In the TypeScript port, EMIT_STROKE_PAIR_WALLS = false
+  - Why? Under PyMuPDF 1.28, get_drawings() returns items as tuples
+  - Python's isinstance(i, dict) guard silently skips stroke items
+  - So the F7 pass contributes NOTHING in Python — all 22 GlassWorks walls
+    are grey-fill walls
+  - Emitting F7 in TypeScript would add ~22 phantom walls
+  - The fix: enable F7 alongside a Python fix that reads tuple items
+
+NO CONFIDENCE SCORES:
+  - Section outputs have confidence (0.9 for walls, 0.85 for foundations)
+  - Plan outputs have NO confidence scores
+  - All detections are treated equally
+
+SCALE DETECTION EDGE CASES:
+  - Regex matches "1:NNN" or "1/NNN" with 2-4 digit numbers
+  - Misses scales written as "SCALE: 150" or "M 1:150" (no "1:")
+  - Falls back to --scale (default 50) when no match found
+
+================================================================================
+9. EXAMPLE PDFs
+================================================================================
+
+Reference PDF: GlassWorks.pdf
+  Location: public/samples/GlassWorks.pdf (browser) / kubi-f12-bridge/ (CLI)
+  
+  Page 1: 22 walls, 54 columns, 0 foundations
+  
+  Expected algorithm assignment: "glassworks"
+  Expected drawing type: Depends on sniffing (text keywords or fill heuristic)
+  
+  Validated parity:
+    Python reference: 22 walls / 54 columns — EXACT
+    Browser port:     22 walls / 54 columns — EXACT
+
+The auto-probe uses 5 signals to IDENTIFY non-Britania pages:
+  If < 3 of 5 Britania signals are true → route to GlassWorks
+
+================================================================================
+10. DRAWING TYPE SNIFFING
+================================================================================
+
+GlassWorks auto-detects whether each page is a PLAN or SECTION:
+
+Step 1: Text keyword check
+  Plan keywords: "plan", "floor plan", "top view", "გეგმა", "план"
+  Section keywords: "section", "elevation", "cross section", "კვეთი",
+                    "განივი", "разрез"
+  
+  If a keyword is found, that pipeline is used.
+
+Step 2: Fill heuristic fallback (if no text keywords found)
+  - Count total vector fills with a color
+  - Count mid-grey fills (0.40-0.62 normFill)
+  - If ≥ 5 mid-grey fills → "plan"
+  - If no fills → "plan"
+  - Otherwise → "section"
+
+Why text first? Text keywords are definitive. A drawing labeled "section"
+is definitely a section, regardless of fill patterns. The fill heuristic is
+a backup for text-free PDFs.
+
+================================================================================
+11. SCALE AUTO-DETECTION
+================================================================================
+
+Scale is detected from the PDF's text layer using regex:
+  Pattern: 1\s*[:/]\s*(\d{2,4})
+  Matches: "1:150", "1/100", "1: 50", "1:1500"
+  
+  - Searches each page's text layer
+  - Returns the first match found
+  - Falls back to --scale (default 50) if none found
+
+Why 2-4 digits? Structural drawing scales are typically 1:50 to 1:500.
+A 2-digit minimum prevents matching "1:2" (unlikely scale). A 4-digit
+maximum prevents matching page numbers or other numeric text.
+
+Scale affects:
+  - Plan: w_mm/h_mm calculation (millimeters at drawing scale)
+  - Section: cm conversion (world centimeters)
+  - Highlight overlay rendering
+
+================================================================================
+12. COORDINATE SYSTEMS
+================================================================================
+
+PLAN output: Raw PDF page points, y-down, top-left origin
+  - x0/y0/x1/y1 = bounding box edges
+  - cx/cy = center point
+  - w_mm/h_mm = millimeters at drawing scale
+  - Conversion: mm = pt / 2.835 * scale
+
+SECTION output: World centimeters, y-UP, bottom-left origin
+  - cx/cy = center in world cm
+  - lengthCm/thicknessCm = physical dimensions
+  - widthCm/depthCm = column dimensions
+  - Conversion: world_cm = px * 2.54 / DPI * scale
+  - Y flip: world_y = page_h_cm - raster_y_cm
+
+================================================================================
+13. THE SEVEN v2 FIXES (F1-F7)
+================================================================================
+
+F1: SECTION INK MASK
+  Problem:  v1 only detected mid-grey hatches (140-220). Real CAD hatches
+            are BLACK (intensity 0-50). Found NOTHING on real PDFs.
+  Fix:      Added dark ink detection (< 128) ORed with mid-grey band.
+  Impact:   SINGLE MOST IMPORTANT FIX. Without it, section detection is
+            completely broken on real drawings.
+
+F2: PLAN DARK COLUMNS
+  Problem:  v1 only detected grey columns (0.50-0.80). Real columns are
+            sometimes near-black squares.
+  Fix:      Added dark-fill pass (normFill < 0.25) with size filters.
+  Impact:   Catches ~15% more columns that the grey pass misses.
+
+F3: SCALE AUTO-DETECTION
+  Problem:  v1 used a fixed scale or manual --scale flag. Most users
+            didn't know their drawing's scale, leading to wrong cm values.
+  Fix:      Regex search for "1:NNN" / "1/NNN" in the text layer.
+  Impact:   Eliminated the single largest source of wrong cm values.
+
+F4: TEXT KEYWORD SNIFFING
+  Problem:  v1 used only a fill heuristic for plan/section detection.
+            This often got it wrong on mixed drawings.
+  Fix:      Text keyword check first (plan/section/elevation in multiple
+            languages), fill heuristic as fallback.
+  Impact:   Much more reliable pipeline selection.
+
+F5: WALL MERGING ACROSS COLUMNS
+  Problem:  A wall passing through a column was split into two fragments.
+  Fix:      Re-join collinear wall fragments with gap tolerance based on
+            column width + padding + 60px.
+  Impact:   Fewer wall fragments, more complete wall detection.
+
+F6: FOUNDATION FALSE POSITIVES
+  Problem:  Foundations overlapped walls or appeared in title blocks.
+  Fix:      Drop foundations with > 50% IoU against walls, or in the top
+            10% of the page.
+  Impact:   Fewer false foundation detections.
+
+F7: STROKE-PAIR WALLS
+  Problem:  Walls drawn as two parallel lines (no fill) were completely
+            missed by the fill-based detector.
+  Fix:      Find parallel dark-stroke lines with appropriate gap and overlap.
+  Impact:   Catches outline-only AutoCAD walls. Currently GATED OFF in
+            the TypeScript port due to PyMuPDF tuple-item quirk.
+
+================================================================================
+14. COMPARISON WITH OTHER ALGORITHMS
+================================================================================
+
+| Aspect           | Britania           | GlassWorks         | SUPER              |
+|------------------|--------------------|--------------------|--------------------|
+| Target style     | Hatched plans      | Mixed plans+sects  | Any style          |
+| Detection method | Raster only        | Vector + Raster    | Adaptive hybrid    |
+| Thresholds       | Fixed (300 DPI)    | Fixed (200/300)    | Adaptive (Otsu)    |
+| Routing          | Always plan        | Text keyword sniff | Ink density sniff  |
+| Columns          | Grey range 130-210 | Grey/dark fills    | Dark/grey squares  |
+| Walls            | 3-pipeline hatch   | Hough + hatch-dens | Directional close  |
+| Foundations       | No                 | Yes                | Yes (crosshatch)   |
+| Scale detection  | No                 | Auto from text     | Placeholder        |
+| Confidence scores| No                 | Section only       | 0-1 per element    |
+| Stroke-pair walls| No                 | Yes (F7, gated)    | No                 |
+| Best for         | Britania PDFs      | GlassWorks PDFs    | Unknown PDFs       |
+
+================================================================================
+END OF DOCUMENT
+================================================================================

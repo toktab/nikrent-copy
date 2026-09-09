@@ -1,0 +1,406 @@
+================================================================================
+SUPER DETECTION ALGORITHM — Complete Technical Reference
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Overview & Purpose
+2. Origin & Design Philosophy
+3. How It Works (Pipeline)
+4. Drawing Type Routing (sniffDrawingType)
+5. Plan Pipeline (detectPlanPage)
+6. Section Delegation
+7. Confidence Scoring Model
+8. Key Parameters & Thresholds
+9. Why Each Parameter Was Chosen
+10. What PDFs It Works Best On
+11. Known Limitations & Bugs
+12. Example PDFs
+13. The Delegation Decision (Why SUPER Reuses Built-ins)
+14. Comparison with Other Algorithms
+
+================================================================================
+1. OVERVIEW & PURPOSE
+================================================================================
+
+SUPER (Style-agnostic Universal PDF Extraction Routine) is an ADAPTIVE
+detection algorithm designed to work on PDFs that are NEITHER Britania-
+nor GlassWorks-style. It uses:
+
+  - ADAPTIVE THRESHOLDS (Otsu's method) instead of fixed constants
+  - CONFIDENCE SCORING (0-1 per detection) for quality assessment
+  - HYBRID DETECTION (vector + raster)
+  - AUTOMATIC DRAWING TYPE ROUTING (plan vs section)
+
+Goal: Reasonable results on unknown PDF styles with no per-style tuning.
+
+It detects:
+  - COLUMNS (dark/grey squares from vector fills or raster contours)
+  - WALLS (grey runs, hatch-bridge fallback)
+  - FOUNDATIONS (cross-hatched regions in section — delegated)
+  - CONFIDENCE SCORES (0-1 per element)
+
+================================================================================
+2. ORIGIN & DESIGN PHILOSOPHY
+================================================================================
+
+SUPER was designed after observing that Britania and GlassWorks both have
+hardcoded thresholds tuned for specific drawing styles. When a PDF doesn't
+match either style, both algorithms produce poor results.
+
+SUPER's design principles:
+  1. ADAPTIVE THRESHOLDS — Use Otsu's method to find optimal thresholds
+     per page, rather than fixed constants
+  2. CONFIDENCE SCORING — Every detection gets a 0-1 score so uncertain
+     hits can be filtered or highlighted
+  3. STYLE FINGERPRINTING — Analyze the PDF's characteristics to suggest
+     the best detection strategy
+  4. DEGRADATION GRACEFUL — If SUPER's own pipeline fails, delegate to
+     the proven built-in algorithms
+
+Design document: SUPER_ALGORITHM_DESIGN.md
+Spec document: SPEC.md
+Python draft: kubi-f12-bridge/py/super_detector.py (never completed)
+TypeScript port: src/lib/detection/super_detector_pdf.ts
+
+================================================================================
+3. HOW IT WORKS (PIPELINE)
+================================================================================
+
+SUPER's pipeline has three phases:
+
+PHASE 1: AUTO-PROBE (Drawing Type Routing)
+  - Analyze vector fills and raster ink density
+  - Decide: is this page a PLAN or SECTION?
+  - Route to the appropriate pipeline
+
+PHASE 2: ADAPTIVE DETECTION
+  Plan pages:
+    - Vector pass: dark/grey square fills → columns, grey runs → walls
+    - Raster fallback: Otsu threshold → contours → filter
+    - If walls.length === 0: fallback to Britania's hatch-bridge walls
+  
+  Section pages:
+    - Delegate to the unified (GlassWorks) pipeline
+    - SUPER's own section pass was removed after browser validation
+
+PHASE 3: CONFIDENCE SCORING
+  - Each detection gets a 0-1 score based on shape, fill, and size
+  - Scores below 0.5 are filtered out
+
+================================================================================
+4. DRAWING TYPE ROUTING (sniffDrawingType)
+================================================================================
+
+SUPER routes pages based on two signals:
+
+SIGNAL 1: Vector Fill Ratio
+  - Count fills with normFill < 0.25 (dark) vs > 0.7 (light)
+  - High dark-fill ratio → likely a plan
+
+SIGNAL 2: Raster Ink Density
+  - Render at 200 DPI
+  - Compute: cv.mean(gray)[0] / 255
+  - Low density (< 0.1) + high dark-fill ratio (> 0.7) → PLAN
+  - High density (>= 0.1) → SECTION
+  - Otherwise → PLAN (fallback)
+
+Why this works:
+  - Plans have many small dark fills (walls, columns) but lots of white space
+  - Sections have continuous hatch bands covering more of the page
+  - Ink density directly measures how much of the page is "inked"
+
+DPI constants:
+  PLAN_DPI = 200 (lighter, faster)
+  SECTION_DPI = 300 (finer detail for hatch patterns)
+
+================================================================================
+5. PLAN PIPELINE (detectPlanPage)
+================================================================================
+
+STEP 1: VECTOR PASS
+  Iterate over all vector drawings:
+  
+  a) COLUMN DETECTION:
+     - Dark fills: normFill < 0.25
+     - Grey fills: normFill 0.4-0.7
+     - Square-ish: |w - h| < 5 pt
+     - Filter: area, aspect ratio
+     - Assign confidence based on shape and fill darkness
+  
+  b) WALL DETECTION:
+     - Grey fills: normFill 0.4-0.7
+     - Thin runs: aspect ≥ 2.5
+     - Assign confidence based on elongation and fill
+
+STEP 2: RASTER FALLBACK (only if vector pass found nothing)
+  a) Adaptive Otsu threshold:
+     - cv.threshold(gray, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
+     - Otsu automatically finds the optimal threshold for the page
+     - This is SUPER's key advantage over fixed thresholds
+  
+  b) Morphological open 3x3:
+     - Removes noise
+  
+  c) Find contours (RETR_EXTERNAL):
+     - Extract bounding boxes
+  
+  d) Filter:
+     - Square boxes → columns
+     - Aspect ≥ 2.5 → walls
+     - Confidence > 0.5 required
+
+STEP 3: HATCH-BRIDGE FALLBACK
+  If walls.length === 0 after steps 1-2:
+  - Call detectBritaniaPage(cv, gray) at BRITANIA_PARAMS.DPI
+  - This recovers hatched walls that SUPER's own pipeline misses
+  - The caller frees the gray Mat after use
+
+Why hatch-bridge fallback?
+  - SUPER's own wall pass (directional closing) was too weak
+  - Britania's 3-pipeline approach is proven and robust
+  - Browser validation showed SUPER found 0 walls on britania.pdf without this
+
+================================================================================
+6. SECTION DELEGATION
+================================================================================
+
+SUPER's own section pipeline (directional closing) was REMOVED after browser
+validation showed it found 0/0/0 on real GlassWorks PDFs.
+
+Instead, SUPER delegates to the unified (GlassWorks) pipeline:
+
+  analyzeUnifiedPage({..., drawingType: 'auto', ...})
+
+Why 'auto' instead of forcing 'section'?
+  - SUPER's ink-density sniff can disagree with the unified sniff
+  - Browser-validated: GlassWorks.pdf — SUPER says 'section' by density,
+    but the unified sniff says 'plan'
+  - Forcing 'section' suppressed the plan branch and lost all 22 walls
+  - Passing 'auto' makes this the exact same call the built-in GlassWorks
+    path makes, so results match by construction
+
+This is the SPEC §6 delegation decision:
+  "Reuse the built-in wall strategies per routed style instead of the
+   draft's close-only pass."
+
+================================================================================
+7. CONFIDENCE SCORING MODEL
+================================================================================
+
+Each detection gets a confidence score from 0 to 1:
+
+SHAPE SCORES:
+  - Square (aspect 0.8-1.2): +0.4 (strong column indicator)
+  - Thin run (aspect ≥ 2.5): +0.3 (strong wall indicator)
+
+FILL SCORES:
+  - Dark fill (normFill < 0.25): +0.3 (strong structural indicator)
+  - Grey fill (normFill 0.4-0.7): +0.2 (moderate indicator)
+
+SIZE SCORES:
+  - Area > 1000 px: +0.3 (large enough to be real)
+
+Total capped at 1.0.
+
+Filter gate: Only detections with confidence > 0.5 are accepted.
+
+Score interpretation:
+  0.8-1.0: HIGH confidence — clear match (e.g., perfect square = column)
+  0.5-0.8: MEDIUM confidence — likely correct (e.g., elongated grey fill)
+  0.0-0.5: LOW confidence — filtered out (e.g., dimension line)
+
+Note: Confidence scores are computed but currently have NO home in the
+result shape (PlanColumn/PlanWall lack confidence fields). The score is
+used only as a filter gate in the raster fallback.
+
+================================================================================
+8. KEY PARAMETERS & THRESHOLDS
+================================================================================
+
+ADAPTIVE (Otsu):
+  - No fixed threshold value — Otsu computes it per page
+  - This is SUPER's main advantage over fixed-threshold algorithms
+
+ROUTING:
+  PLAN_DPI = 200
+    Why: Lighter than section, plan walls come from vectors
+  
+  SECTION_DPI = 300
+    Why: Finer detail for hatch patterns in sections
+
+  Dark fill threshold: normFill < 0.25
+    Why: "Dark" in normalized RGB space
+
+  Light fill threshold: normFill > 0.7
+    Why: "Light" in normalized RGB space
+
+  Ink density threshold: 0.1
+    Why: Pages with < 10% ink coverage are likely plans (lots of white space)
+
+PLAN:
+  Column fill ranges:
+    - Dark: normFill < 0.25
+    - Grey: normFill 0.4-0.7
+  
+  Column shape: |w - h| < 5 pt
+    Why: Columns are roughly square
+  
+  Wall aspect: ≥ 2.5
+    Why: Walls are elongated
+
+RASTER FALLBACK:
+  Morphological open: 3x3
+    Why: Small noise removal
+
+  Confidence gate: > 0.5
+    Why: Only accept detections we're reasonably sure about
+
+CONFIDENCE:
+  Square bonus: +0.4
+  Thin run bonus: +0.3
+  Dark fill bonus: +0.3
+  Grey fill bonus: +0.2
+  Large size bonus: +0.3
+
+================================================================================
+9. WHY EACH PARAMETER WAS CHOSEN
+================================================================================
+
+OTSU THRESHOLD:
+  - Chosen because it's ADAPTIVE — works on any page without tuning
+  - Otsu finds the bimodal threshold that separates foreground/background
+  - Works well on structural drawings where ink and background are distinct
+  - Limitation: can fail on pages with complex fill patterns
+
+ROUTING THRESHOLDS:
+  - Ink density 0.1: Empirically determined. Plans typically have 5-15%
+    ink coverage; sections have 20-40%. 0.1 is a conservative boundary.
+  - Dark-fill ratio 0.7: Plans have > 70% dark fills in their vector data.
+    Sections have a more mixed palette.
+
+CONFIDENCE WEIGHTS:
+  - Shape is weighted highest (0.4 for square) because geometry is the
+    strongest indicator of structural elements
+  - Fill darkness is secondary (0.3) because colors vary across styles
+  - Size is a tiebreaker (0.3) — large elements are more likely real
+
+================================================================================
+10. WHAT PDFs IT WORKS BEST ON
+================================================================================
+
+SUPER works BEST on:
+  ✅ PDFs that don't match Britania or GlassWorks conventions
+  ✅ Drawings with mixed or unusual fill palettes
+  ✅ Plans with dark-filled columns (catches via dark pass)
+  ✅ PDFs where neither built-in algorithm works well
+  ✅ Unknown drawing styles (adaptive thresholds help)
+
+SUPER works POORLY on:
+  ❌ Britania-style hatched plans (its wall pass finds 0 walls)
+  ❌ GlassWorks-style sections (delegates to GlassWorks anyway)
+  ❌ PDFs with very complex fill patterns (Otsu can't separate them)
+  ❌ PDFs with no clear ink/background distinction
+
+In practice: SUPER is a "better than nothing" detector for unknown styles,
+but for known styles, the dedicated algorithms (Britania/GlassWorks) are
+more reliable.
+
+================================================================================
+11. KNOWN LIMITATIONS & BUGS
+================================================================================
+
+WALL PIPELINE IS THE WEAKEST PART:
+  - SUPER's own wall pass (directional closing) finds fewer walls than
+    either built-in algorithm
+  - Browser validation: SUPER found 0 walls on britania.pdf (hatched walls
+    are not grey runs)
+  - Fix: fallback to Britania's hatch-bridge walls when walls.length === 0
+
+SECTION PIPELINE WAS REMOVED:
+  - The draft directional-close section pass found 0/0/0 on real sheets
+  - Fix: delegate to the unified (GlassWorks) pipeline entirely
+
+CONFIDENCE SCORES HAVE NO RESULT HOME:
+  - PlanColumn/PlanWall types lack confidence/thickness fields
+  - Scores are computed but only used as filter gates
+  - Would need schema changes to propagate confidence to the UI
+
+SCALE DETECTION IS A PLACEHOLDER:
+  - The port has a "/10 per cm" placeholder that's flagged as broken
+  - Real scale detection would need regex search like GlassWorks
+  - Currently not implemented
+
+DEFAULT-BLACK FILL ISSUE (TS port):
+  - pdf.js v6 bundles paths into constructPath ops with packed bytecode
+  - The walker initializes fill/stroke to [0,0,0] to match PyMuPDF
+  - Without this, null default dropped fills and starved the probe
+
+EMIT_STROKE_PAIR_WALLS = false:
+  - Same issue as GlassWorks — PyMuPDF tuple-item quirk
+  - Enabling this would add phantom walls the Python never produces
+
+================================================================================
+12. EXAMPLE PDFs
+================================================================================
+
+SUPER is designed for PDFs where neither Britania nor GlassWorks works well.
+In practice, it falls back to the built-in algorithms for known styles:
+
+  - britania.pdf: Routes to PLAN → SUPER's vector pass finds columns,
+    walls.length === 0 → fallback to Britania hatch-bridge → walls found
+    Result: comparable to running Britania directly
+
+  - GlassWorks.pdf: Routes to SECTION → delegates to unified pipeline
+    Result: identical to running GlassWorks directly
+
+  - Unknown PDF: SUPER's adaptive thresholds provide a reasonable first
+    attempt, better than either built-in on unfamiliar styles
+
+================================================================================
+13. THE DELEGATION DECISION (Why SUPER Reuses Built-ins)
+================================================================================
+
+Browser validation of the TypeScript port revealed that SUPER's OWN pipelines
+are weaker than the built-ins:
+
+  - Plan walls: SUPER's vector pass + Otsu raster finds columns well, but
+    walls come from grey fills which may not exist. Britania's hatch-bridge
+    is far more robust for hatched walls.
+
+  - Section: SUPER's directional-close pass found 0/0/0 on real sheets.
+    The unified pipeline's Hough + hatch-density approach is much stronger.
+
+The SPEC §6 recommended option was adopted:
+  "Reuse the built-in wall strategies per routed style instead of the
+   draft's close-only pass."
+
+Final architecture:
+  - Plan: SUPER's own pipeline + Britania hatch-bridge fallback
+  - Section: Delegate to unified (GlassWorks) pipeline with drawingType='auto'
+
+This means SUPER is essentially a ROUTER that decides which built-in to use,
+with its own adaptive threshold as a first attempt.
+
+================================================================================
+14. COMPARISON WITH OTHER ALGORITHMS
+================================================================================
+
+| Aspect           | Britania           | GlassWorks         | SUPER              |
+|------------------|--------------------|--------------------|--------------------|
+| Target style     | Hatched plans      | Mixed plans+sects  | Any style          |
+| Detection method | Raster only        | Vector + Raster    | Adaptive hybrid    |
+| Thresholds       | Fixed (300 DPI)    | Fixed (200/300)    | Adaptive (Otsu)    |
+| Routing          | Always plan        | Text keyword sniff | Ink density sniff  |
+| Columns          | Grey range 130-210 | Grey/dark fills    | Dark/grey squares  |
+| Walls            | 3-pipeline hatch   | Hough + hatch-dens | Directional close  |
+| Foundations       | No                 | Yes                | Yes (delegated)    |
+| Scale detection  | No                 | Auto from text     | Placeholder        |
+| Confidence scores| No                 | Section only       | 0-1 per element    |
+| Wall robustness  | ★★★★★              | ★★★★               | ★★ (fallback needed)|
+| Column robustness| ★★★★★              | ★★★★               | ★★★★               |
+| Best for         | Britania PDFs      | GlassWorks PDFs    | Unknown PDFs       |
+
+================================================================================
+END OF DOCUMENT
+================================================================================
