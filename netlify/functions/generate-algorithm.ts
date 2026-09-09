@@ -108,8 +108,8 @@ export default async (req: Request, context: Context) => {
     });
   }
 
-  if (!body.pdfBase64 || !body.userContext) {
-    return new Response(JSON.stringify({ error: 'Missing pdfBase64 or userContext' }), {
+  if (!body.pdfBase64) {
+    return new Response(JSON.stringify({ error: 'Missing pdfBase64' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' }
     });
