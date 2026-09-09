@@ -2114,10 +2114,6 @@ export default function DetectionPage() {
 
       {/* AI Generate Modal */}
       {aiGenerateOpen && <AiGenerateModal onClose={() => setAiGenerateOpen(false)} />}
-          const v = localStorage.getItem('det-ai-validated');
-          setAiValidStatus(v === 'valid' ? 'valid' : v === 'invalid' ? 'invalid' : 'unverified');
-        }} />
-      )}
 
       {/* Confirm Dialogs */}
       {confirmDelete && deleteTarget && (
