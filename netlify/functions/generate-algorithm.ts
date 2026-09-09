@@ -147,7 +147,7 @@ export default async (req: Request, context: Context) => {
           temperature: 0.2,
           topK: 32,
           topP: 0.95,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 4096,
         }
       })
     });
