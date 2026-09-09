@@ -2368,3 +2368,84 @@
   line-height: 1.55;
   color: #d7e3f4;
 }
+
+/* ── PDF background ──────────────────────────────────────────────
+   The rendered page sits in world coordinates (page points), so it lives
+   inside .world and receives the same zoom/pan as the walls. It is an
+   underlay: the sketch draws over it, then the pieces. */
+
+/* Controls pinned to the stage's top-left, mirroring the .det-actions pill in
+   the opposite corner. The stage owns pointer events for panning, so the
+   bar stops propagation on itself (handled in JSX) — a grab on the checker
+   must never start a drag. */
+.det-bg-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(20, 24, 29, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  color: var(--text);
+}
+.det-bg-controls.disabled {
+  opacity: 0.55;
+}
+.det-bg-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text);
+  user-select: none;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.det-bg-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.det-bg-toggle:hover {
+  color: var(--accent);
+}
+/* Slider tracks the brightness of the <div> it sits next to. */
+.det-bg-opacity {
+  width: 90px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.det-bg-opacity:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.det-bg-val {
+  font-size: 11px;
+  min-width: 28px;
+  text-align: right;
+  color: var(--text-muted, #93a1b3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rendered page itself. Sized in page points (the wall model's unit), so
+   it grows and shrinks in lockstep with the detector's boxes. */
+.det-stage-bg {
+  position: absolute;
+  transform-origin: 0 0;
+  pointer-events: none;
+  overflow: hidden;
+  border: 1px solid rgba(74, 141, 225, 0.35);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.det-stage-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}

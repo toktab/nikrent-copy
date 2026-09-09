@@ -36,6 +36,16 @@ interface HistoryEntry {
   totalWalls: number;
 }
 
+/**
+ * Rendered page-background images for one detection (PNG data URLs of the
+ * original PDF pages). Session-only by design — the data URLs are far too
+ * large for localStorage, so they live in memory and are re-rendered the next
+ * time the PDF is run through the wizard.
+ */
+interface PagesBg {
+  [pageKey: string]: { dataUrl: string; pagePtW: number; pagePtH: number };
+}
+
 function loadHistory(): HistoryEntry[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
@@ -95,7 +105,15 @@ function ReadOnlySketchLayer({ sketch, zoom }: { sketch: SketchPath[]; zoom: num
 
 /* ── Canvas ── */
 
-function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
+function DetectionCanvas({ doc, backgrounds, bgEnabled, bgOpacity, onToggleBg, onSetBgOpacity }: {
+  doc: LegacyDetectedDoc;
+  /** PNG render of each detected page, keyed by `page_N`. */
+  backgrounds?: PagesBg;
+  bgEnabled: boolean;
+  bgOpacity: number;
+  onToggleBg: (on: boolean) => void;
+  onSetBgOpacity: (o: number) => void;
+}) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(40);
@@ -103,10 +121,15 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   const [grabbing, setGrabbing] = useState(false);
   const panning = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
 
-  const { pieces, sketch, dimsById } = useMemo(() => {
+  const { pieces, sketch, dimsById, pageWorld } = useMemo(() => {
     const materialByPage: Piece[] = [];
     const sketchByPage: SketchPath[] = [];
     const dimsMap = new Map<string, { w: number; h: number }>();
+    // Page-point origin of each plan page in world coordinates — the same
+    // normalization the boxes get (xOff + x0 - left, y0 - top). The rendered
+    // PDF page is placed on this origin, so the image lines up exactly with
+    // the detected walls/columns.
+    const pageWorld: Record<string, { xOff: number; left: number; top: number }> = {};
     let xOff = 0;
     const GAP = 100;
     const MARGIN = 40;
@@ -123,6 +146,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
         const ys = allBoxes.flatMap((b: any) => [b.y0, b.y1]);
         const left = xs.length ? Math.min(...xs) - MARGIN : 0;
         const top = ys.length ? Math.min(...ys) - MARGIN : 0;
+        pageWorld[key] = { xOff, left, top };
 
         for (const col of columns) {
           const id = `det-col-${pageIdx}-${col.id ?? Math.random().toString(36).slice(2)}`;
@@ -183,7 +207,7 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
       }
     }
 
-    return { pieces: materialByPage, sketch: sketchByPage, dimsById: dimsMap };
+    return { pieces: materialByPage, sketch: sketchByPage, dimsById: dimsMap, pageWorld };
   }, [doc]);
 
   useEffect(() => {
@@ -233,11 +257,68 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
+      {/* PDF background toggle + opacity. Always shown for an open detection
+          so the control can never silently vanish: without rendered images
+          (older detections, or a rasterise failure) the toggle sits disabled
+          with an explanatory tip instead. */}
+      <div
+        className={`det-bg-controls${backgrounds ? '' : ' disabled'}`}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <label
+          className="det-bg-toggle"
+          title={backgrounds
+            ? 'Show the original PDF page behind the detected elements'
+            : 'PDF Background is added automatically when you detect a PDF — re-run an old detection, or detect a new PDF, to enable it here.'}
+        >
+          <input
+            type="checkbox"
+            checked={bgEnabled && !!backgrounds}
+            disabled={!backgrounds}
+            onChange={(e) => onToggleBg(e.target.checked)}
+          />
+          PDF Background
+        </label>
+        <input
+          className="det-bg-opacity"
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={Math.round(bgOpacity * 100)}
+          disabled={!bgEnabled || !backgrounds}
+          title="Background transparency"
+          onChange={(e) => onSetBgOpacity(Number(e.target.value) / 100)}
+        />
+        <span className="det-bg-val">{Math.round(bgOpacity * 100)}%</span>
+      </div>
       <div
         className="world"
         style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})`, '--z': zoom } as any}
       >
         <div className="grid" style={{ width: WORLD_W, height: WORLD_H, '--gw': `${1 / zoom}px`, '--gf': `${gridStep}px`, '--gm': '100px' } as any} />
+        {backgrounds && bgEnabled && Object.entries(backgrounds).map(([key, bg]) => {
+          const place = pageWorld[key];
+          // Only plan pages have an exact page-point alignment — section pages
+          // carry world-cm coordinates and would land off-register.
+          if (!place) return null;
+          return (
+            <div
+              key={`det-bg-${key}`}
+              className="det-stage-bg"
+              style={{
+                left: place.xOff - place.left,
+                top: -place.top,
+                width: bg.pagePtW,
+                height: bg.pagePtH,
+                opacity: bgOpacity,
+              }}
+            >
+              <img src={bg.dataUrl} alt="" draggable={false} decoding="async" />
+            </div>
+          );
+        })}
         <ReadOnlySketchLayer sketch={sketch} zoom={zoom} />
         {pieces.map((piece) => {
           const dim = dimsById.get(piece.materialId);
@@ -258,6 +339,79 @@ function DetectionCanvas({ doc }: { doc: LegacyDetectedDoc }) {
   );
 }
 
+/** Render PNG backgrounds for a list of pages by re-opening the PDF in a
+ *  throwaway worker (the job worker terminates on `done`, and renderBg needs
+ *  an open PDF). The renderBg messages are sent in page order and the worker
+ *  processes them in post order, so bgImage replies map 1:1 to the queue. */
+function renderBackgrounds(
+  pdf: ArrayBuffer,
+  fileName: string,
+  pages: number[],
+): Promise<PagesBg> {
+  return new Promise((resolve, reject) => {
+    const id = `det-bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const worker = new Worker(new URL('../lib/detection/detectionWorker.ts', import.meta.url), { type: 'module' });
+    const queue = [...pages];
+    const out: PagesBg = {};
+    const settle = (ok: boolean, err?: string) => {
+      worker.terminate();
+      if (ok) resolve(out);
+      else reject(new Error(err ?? 'Background render failed.'));
+    };
+    worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
+      const msg = ev.data;
+      if (!('id' in msg) || msg.id !== id) return; // 'ready' has no id — ignore
+      if (msg.type === 'pages') {
+        for (const pageNo of pages) {
+          worker.postMessage({ type: 'renderBg', id, pageNo, pxWidth: 1600, pxHeight: 1600 });
+        }
+      } else if (msg.type === 'bgImage') {
+        const pageNo = queue.shift();
+        if (pageNo) out[`page_${pageNo}`] = { dataUrl: msg.dataUrl, pagePtW: msg.pagePtW, pagePtH: msg.pagePtH };
+        if (queue.length === 0) settle(true);
+      } else if (msg.type === 'error') {
+        settle(false, msg.message);
+      }
+    };
+    worker.onerror = (e) => settle(false, e.message || 'Background render failed.');
+    worker.postMessage({ type: 'detect', id, pdf, fileName, algorithm: 'auto', drawingType: 'auto', mode: 'auto', scale: 50 });
+  });
+}
+
+/* ── IndexedDB: persist PDFs per detection so backgrounds survive reloads ── */
+
+const PDF_DB_NAME = 'nikrent-det-pdfs';
+const PDF_STORE = 'pdfs';
+
+function pdfDbOpen(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(PDF_DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(PDF_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function pdfStorePut(id: string, buf: ArrayBuffer): Promise<void> {
+  const db = await pdfDbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PDF_STORE, 'readwrite');
+    tx.objectStore(PDF_STORE).put(buf, id);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function pdfStoreGet(id: string): Promise<ArrayBuffer | null> {
+  const db = await pdfDbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PDF_STORE, 'readonly');
+    const req = tx.objectStore(PDF_STORE).get(id);
+    req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+    req.onerror = () => { db.close(); reject(req.error); };
+  });
+}
+
 /* ── Single-page Detection Wizard ── */
 
 const ALGO_OPTIONS: { value: AlgorithmChoice; label: string; icon: string; desc: string; color: string }[] = [
@@ -267,7 +421,7 @@ const ALGO_OPTIONS: { value: AlgorithmChoice; label: string; icon: string; desc:
   { value: 'super',      label: 'SUPER',        icon: '🚀', desc: 'Advanced multi-pass detection',   color: '#f0786c' },
 ];
 
-function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (entry: HistoryEntry) => void }) {
+function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (entry: HistoryEntry, backgrounds?: PagesBg, pdfBuffer?: ArrayBuffer) => void }) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
@@ -280,6 +434,10 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
   const [dragOver, setDragOver] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  /** The raw PDF bytes of the current job, kept so the page background can be
+   *  re-rendered after detection. Nullable because custom-source runs replace
+   *  the worker but keep the same PDF. */
+  const pdfBufferRef = useRef<ArrayBuffer | null>(null);
   const [nextNum] = useState(() => loadHistory().length + 1);
 
   /** Info panel for the custom-algorithm contract. */
@@ -481,6 +639,7 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
     const id = `det-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     jobIdRef.current = id;
     const buffer = await readFileAsArrayBuffer(file);
+    pdfBufferRef.current = buffer;
     const worker = new Worker(new URL('../lib/detection/detectionWorker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
     worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
@@ -510,7 +669,7 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
     setBusy(true);
     setProgress('Detecting…');
     setProgressPct(null);
-    worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
+    worker.onmessage = async (ev: MessageEvent<WorkerMessage>) => {
       const msg = ev.data;
       if (msg.type === 'page') {
         const r = msg.result;
@@ -530,7 +689,7 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
         };
         const totalCols = msg.counts.reduce((s, c) => s + c.columns, 0);
         const totalWalls = msg.counts.reduce((s, c) => s + c.walls, 0);
-        onDone({
+        const entry: HistoryEntry = {
           id: `det-${Date.now()}`,
           name: name || `Detection ${nextNum}`,
           description,
@@ -540,7 +699,20 @@ function DetectionWizard({ onClose, onDone }: { onClose: () => void; onDone: (en
           pageCount: msg.pages.length,
           totalColumns: totalCols,
           totalWalls: totalWalls,
-        });
+        };
+        // The PDF page images, shown as an optional background under the
+        // detected elements. Rendered AFTER detection so a background failure
+        // (or a page the rasteriser cannot handle) never discards a result.
+        let backgrounds: PagesBg | undefined;
+        if (pdfBufferRef.current) {
+          setProgress('Rendering background…');
+          try {
+            backgrounds = await renderBackgrounds(pdfBufferRef.current, pdfFile.name, selectedPages);
+          } catch {
+            backgrounds = undefined; // cosmetic only — ignore
+          }
+        }
+        onDone(entry, backgrounds, pdfBufferRef.current ?? undefined);
         setBusy(false);
         setProgress('');
         setProgressPct(null);
@@ -1449,6 +1621,11 @@ export default function DetectionPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmSwitch, setConfirmSwitch] = useState<HistoryEntry | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  /** PDF-background images per detection id, alive only for this session —
+   *  never persisted to localStorage (data URLs are far too big). */
+  const [bgMap, setBgMap] = useState<Map<string, PagesBg>>(new Map());
+  const [bgEnabled, setBgEnabled] = useState(true);
+  const [bgOpacity, setBgOpacity] = useState(0.35);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(() => !!localStorage.getItem('det-ai-api-key'));
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('det-ai-provider') ?? 'openai');
@@ -1466,10 +1643,45 @@ export default function DetectionPage() {
 
   const active = useMemo(() => history.find((h) => h.id === selected) ?? null, [history, selected]);
 
-  const handleNewDetection = useCallback((entry: HistoryEntry) => {
+  // When a detection has no backgrounds in memory (switched to an older
+  // detection, or after a page reload), re-render them from the PDF that was
+  // saved for it in IndexedDB. Renders all pages — the canvas only shows plan
+  // pages anyway, so the full set is the safe choice.
+  useEffect(() => {
+    if (!active || bgMap.has(active.id)) return;
+    let cancelled = false;
+    const id = active.id;
+    const pageCount = active.pageCount;
+    const fileName = active.fileName;
+    (async () => {
+      const buf = await pdfStoreGet(id).catch(() => null);
+      if (!buf || cancelled) return;
+      const allPages = Array.from({ length: pageCount }, (_, i) => i + 1);
+      try {
+        const bgs = await renderBackgrounds(buf, fileName, allPages);
+        if (!cancelled) setBgMap((prev) => new Map(prev).set(id, bgs));
+      } catch {
+        // cosmetic — the control bar simply stays disabled
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [active, bgMap]);
+
+  const handleNewDetection = useCallback((entry: HistoryEntry, backgrounds?: PagesBg, pdfBuffer?: ArrayBuffer) => {
     const updated = [entry, ...history];
     setHistory(updated);
     saveHistory(updated);
+    // Page-background images are session-only: kept per detection id in
+    // memory, never persisted, and dropped when the tab closes.
+    setBgMap((prev) => {
+      const next = new Map(prev);
+      if (backgrounds) next.set(entry.id, backgrounds);
+      else next.delete(entry.id);
+      return next;
+    });
+    // Persist the PDF so the background can be re-rendered when the user
+    // switches back to this detection — even after a page reload.
+    if (pdfBuffer) pdfStorePut(entry.id, pdfBuffer).catch(() => {});
     setSelected(entry.id);
     setModalOpen(false);
   }, [history]);
@@ -1573,7 +1785,14 @@ export default function DetectionPage() {
             <DetectionInfoPanel entry={active} onClose={() => setShowInfo(false)} onExport={exportToFile} onImport={exportToEditor} />
           )}
           {active ? (
-            <DetectionCanvas doc={active.doc} />
+            <DetectionCanvas
+              doc={active.doc}
+              backgrounds={bgMap.get(active.id)}
+              bgEnabled={bgEnabled}
+              bgOpacity={bgOpacity}
+              onToggleBg={setBgEnabled}
+              onSetBgOpacity={setBgOpacity}
+            />
           ) : (
             <div className="det-empty-state">
               <div className="det-empty-anim">
