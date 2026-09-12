@@ -38,7 +38,11 @@ export function TemplatesDialog() {
   const [name, setName] = useState('');
 
   const byId = new Map(materials.map((m) => [m.id, m]));
-  const selection = pieces.filter((p) => selectedIds.includes(p.id));
+  // With nothing selected, the whole drawing: a finished job is the template
+  // most worth keeping for the next building like it.
+  const picked = pieces.filter((p) => selectedIds.includes(p.id));
+  const wholeDrawing = picked.length === 0;
+  const selection = wholeDrawing ? pieces : picked;
 
   const refresh = useCallback(async () => {
     // Templates are shared company-wide, so they only exist with a server.
@@ -180,11 +184,9 @@ export function TemplatesDialog() {
         </table>
       )}
 
-      <h4 className="section-title">მონიშნულის შენახვა</h4>
+      <h4 className="section-title">{wholeDrawing ? 'მთლიანი ნახაზის შენახვა' : 'მონიშნულის შენახვა'}</h4>
       {selection.length === 0 ? (
-        <p className="field-hint">
-          ჯერ მონიშნე ელემენტები ზედაპირზე - შაბლონად შეინახება მხოლოდ მონიშნული.
-        </p>
+        <p className="field-hint">ნახაზზე ელემენტი ჯერ არ არის.</p>
       ) : (
         <div className="user-add">
           <label className="field">

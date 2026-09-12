@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { withCompanyWeights } from '../data/companyWeights';
+import { normalizeWallThickness, wallPartner } from '../lib/wallPen';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -139,6 +140,9 @@ const PREF_KEYS = [
   'inspectorOpen',
   'inspectorTab',
   'simpleMode',
+  'fillDefaults',
+  'wallThickness',
+  'tourSeen',
 ] as const;
 
 /**
@@ -250,6 +254,12 @@ export interface EditorState {
    * when it is switched off.
    */
   simpleMode: boolean;
+  /** the pour height and corner setting fills open with - see `lib/fillDefaults` */
+  fillDefaults: { height: number; includeCorners: boolean };
+  /** the pen draws both faces of a wall this thick apart; null draws single lines */
+  wallThickness: number | null;
+  /** the first-visit tour has been seen (or closed) */
+  tourSeen: boolean;
   /**
    * Show the drawn layout.
    *
@@ -473,6 +483,10 @@ export interface EditorState {
   setShowGaps: (on: boolean) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
+  setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
+  /** a wall thickness for the pen to draw both faces with, or null for single lines */
+  setWallThickness: (thickness: number | null) => void;
+  setTourSeen: (seen: boolean) => void;
   setShowSketch: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   /** Switch the surface between plan, front and side, reframing as it goes. */
@@ -811,6 +825,9 @@ export const useEditorStore = create<EditorState>()(
         inspectorTab: 'bom',
         showGaps: false,
         simpleMode: false,
+        fillDefaults: { height: 300, includeCorners: true },
+        wallThickness: null,
+        tourSeen: false,
         showSketch: true,
         measureStyle: { ...DEFAULT_MEASURE_STYLE },
 
@@ -1773,6 +1790,10 @@ export const useEditorStore = create<EditorState>()(
           if (s.viewMode !== '2d') s.setViewMode('2d');
           if (s.surfaceView !== 'plan') s.setSurfaceView('plan');
         },
+        // Preferences, so plain sets: remembered, never undo steps.
+        setFillDefaults: (defaults) => set({ fillDefaults: { ...defaults } }),
+        setWallThickness: (thickness) => set({ wallThickness: thickness }),
+        setTourSeen: (seen) => set({ tourSeen: seen }),
         setShowSketch: (on) =>
           set((s) => ({
             showSketch: on,
@@ -1964,7 +1985,11 @@ export const useEditorStore = create<EditorState>()(
               ...(closed ? { closed: true } : {}),
               perimeter: s.penPerimeter,
             };
-            return { sketch: [...s.sketch, path], penPoints: [] };
+            // With a wall thickness set, the pen draws a wall: the other face of
+            // the pour goes in with the line, as one undo step - see `wallPartner`.
+            const thickness = normalizeWallThickness(s.wallThickness);
+            const added = thickness === null ? [path] : [path, wallPartner(path, thickness)];
+            return { sketch: [...s.sketch, ...added], penPoints: [] };
           }),
 
         dragSketch: (hit, dx, dy, baseline, whole = false) =>

@@ -266,6 +266,9 @@ export type DialogState =
   | { kind: 'password' }
   | { kind: 'display-settings' }
   | { kind: 'remaining' }
+  | { kind: 'shortcuts' }
+  | { kind: 'command' }
+  | { kind: 'tour' }
   | {
       kind: 'confirm';
       title: string;

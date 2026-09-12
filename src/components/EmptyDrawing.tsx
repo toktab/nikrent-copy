@@ -8,10 +8,9 @@ import { Icon } from './Icon';
  *
  * It used to say "the surface is empty — drag a material from the left panel",
  * which is a description plus one instruction, and the least likely way anyone
- * actually starts. The two wizards build a whole column or a whole wall from a
- * few numbers; they are the reason to use this app rather than graph paper,
- * and they were reachable only from a toolbar button with no label explaining
- * what it does. So the empty drawing offers them first.
+ * actually starts. Drawing the building's lines and filling them is how a job
+ * is done, so that comes first; the two wizards, which build a column or a wall
+ * from a few numbers, are right beside it.
  *
  * A brand-new company hits four empty states at once — no catalog, no stock,
  * no drawings, no templates — so this also has to work as a first screen, not
@@ -19,6 +18,7 @@ import { Icon } from './Icon';
  */
 export function EmptyDrawing() {
   const openDialog = useEditorStore((s) => s.openDialog);
+  const setTool = useEditorStore((s) => s.setTool);
   const materialCount = useEditorStore((s) => s.materials.length);
   const canManage = useCanManageCatalog();
 
@@ -58,13 +58,13 @@ export function EmptyDrawing() {
           <>
             <div className="empty-title">ნახაზი ცარიელია</div>
             <div className="empty-sub">
-              დაიწყე ოსტატით - ის თვითონ ითვლის რამდენი პანელი და ვოლერი დასჭირდება.
+              დახაზე ბეტონის ხაზები და შეავსე - ან ოსტატი თვითონ ააწყობს კოლონას ან კედელს.
             </div>
             <div className="empty-actions">
-              <button
-                className="btn primary lg"
-                onClick={() => openDialog({ kind: 'column-wizard' })}
-              >
+              <button className="btn primary lg" onClick={() => setTool('pen')}>
+                <Icon name="pen" size={16} /> ხაზვა
+              </button>
+              <button className="btn raised lg" onClick={() => openDialog({ kind: 'column-wizard' })}>
                 <Icon name="column" size={16} /> კოლონა
               </button>
               <button className="btn raised lg" onClick={() => openDialog({ kind: 'wall-wizard' })}>
@@ -72,10 +72,14 @@ export function EmptyDrawing() {
               </button>
             </div>
             <div className="empty-alt">
-              ან <button className="link-button" onClick={() => openDialog({ kind: 'templates' })}>
+              ხაზვის დროს სიგრძე აკრიფე: <kbd>490</kbd> + <kbd>Enter</kbd>. ან{' '}
+              <button className="link-button" onClick={() => openDialog({ kind: 'templates' })}>
                 ჩასვი შაბლონი
               </button>{' '}
-              - ან გადმოათრიე მასალა მარცხენა პანელიდან.
+              ·{' '}
+              <button className="link-button" onClick={() => openDialog({ kind: 'tour' })}>
+                როგორ მუშავს
+              </button>
             </div>
           </>
         )}

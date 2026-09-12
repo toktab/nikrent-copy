@@ -5104,3 +5104,170 @@ kbd {
 .line-bad .sketch-path:not(.chosen) line:not(.sketch-under):not(.sketch-side):not(.hot):not(.picked) {
   stroke: var(--bad);
 }
+
+/* ── Quick helpers: keys, search, tour, steps, typed lengths, wall pen ─────── */
+.keys-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 28px;
+}
+.keys-grid .section-title:first-child {
+  margin-top: 0;
+}
+.keys-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.keys-row kbd {
+  flex: 0 0 auto;
+  min-width: 96px;
+  text-align: center;
+}
+.command-input {
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+.command-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.command-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.command-item small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.command-item.on {
+  background: var(--panel2);
+}
+.tour-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px 4px;
+  text-align: center;
+}
+.tour-step h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+}
+.tour-step p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.tour-dots {
+  display: inline-flex;
+  gap: 6px;
+  margin-right: auto;
+}
+.tour-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.tour-dots span.on {
+  background: var(--accent);
+}
+.simple-steps {
+  display: flex;
+  gap: 6px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--panel);
+  overflow-x: auto;
+}
+.simple-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.simple-step:disabled {
+  cursor: default;
+}
+.simple-step b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--panel2);
+  font-size: 11px;
+}
+.simple-step.done {
+  color: var(--ok);
+}
+.simple-step.done b {
+  background: rgba(113, 197, 117, 0.18);
+}
+.simple-step.on {
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+.simple-step.on b {
+  background: var(--accent);
+  color: var(--ink);
+}
+.pen-typed {
+  position: fixed;
+  z-index: 70;
+  padding: 5px 10px;
+  border-radius: var(--r);
+  background: var(--warn);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6);
+}
+.pen-typed small {
+  margin-left: 6px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.wall-thickness {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wall-thickness input {
+  width: 52px;
+  height: 26px;
+  padding: 0 4px;
+  text-align: right;
+}

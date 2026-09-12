@@ -26,6 +26,11 @@ import { ErrorLogDialog } from './components/ErrorLogDialog';
 import { PasswordDialog } from './components/PasswordDialog';
 import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
 import { RemainingDialog } from './components/RemainingDialog';
+import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { CommandPalette } from './components/CommandPalette';
+import { TourDialog } from './components/TourDialog';
+import { GlobalShortcuts } from './components/GlobalShortcuts';
+import { PenTyping } from './components/PenTyping';
 import { Icon } from './components/Icon';
 
 export default function App() {
@@ -101,6 +106,13 @@ export default function App() {
 
       <StatusBar />
 
+      {/* App-wide keys (?, Ctrl+K), the first-visit tour, and typed leg lengths. */}
+      <GlobalShortcuts />
+      <PenTyping />
+
+      {dialog?.kind === 'shortcuts' && <ShortcutsDialog />}
+      {dialog?.kind === 'command' && <CommandPalette />}
+      {dialog?.kind === 'tour' && <TourDialog />}
       {dialog?.kind === 'material' && (
         <MaterialFormDialog key={dialog.materialId ?? 'new'} materialId={dialog.materialId} />
       )}

@@ -25,6 +25,8 @@ import { Icon } from './Icon';
 import { RemainingButton } from './RemainingButton';
 import { ProblemsButton } from './ProblemsButton';
 import { FillAllButton } from './FillAllButton';
+import { SimpleSteps } from './SimpleSteps';
+import { WallThicknessField } from './WallThicknessField';
 
 /**
  * Grid steps that match the catalog.
@@ -731,6 +733,8 @@ export function Header() {
                 {label}
               </button>
             ))}
+            {/* One line for a whole wall: its other face drawn for you. */}
+            <WallThicknessField />
           </span>
         )}
 
@@ -905,6 +909,9 @@ export function Header() {
           </button>
         </div>
       </div>
+
+      {/* Simple mode's four steps - draw, fill, check, send - with the current one lit. */}
+      {simple && <SimpleSteps />}
 
       {storageError && (
         <div className="storage-banner">
