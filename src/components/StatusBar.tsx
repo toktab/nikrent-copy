@@ -6,6 +6,8 @@ import { useSyncStore } from '../lib/syncEngine';
 import { useOnline } from '../lib/useOnline';
 import { combo, overrideLabel } from '../lib/platform';
 import { VIEW_LABEL } from '../lib/projection';
+import { fmtNum } from '../lib/bom';
+import { remainingRows } from '../lib/remaining';
 import { Icon } from './Icon';
 
 /**
@@ -47,6 +49,10 @@ export function StatusBar() {
     });
     return allGaps(rects).length;
   }, [showGaps, pieces, materials, surfaceView, viewMode]);
+
+  // What the drawing weighs, for the truck. Always on: a count and a sum per
+  // component, nothing like the gap check's cost.
+  const weight = useMemo(() => remainingRows(materials, pieces, { show: 'used' }), [materials, pieces]);
 
   const view = viewMode === '3d' ? '3D' : VIEW_LABEL[surfaceView];
 
@@ -96,6 +102,18 @@ export function StatusBar() {
       {selected > 0 && (
         <span className="status-sel">
           მონიშნული <b>{selected}</b>
+        </span>
+      )}
+      {total > 0 && (
+        <span
+          className="status-weight"
+          title={
+            weight.unweighed
+              ? `${weight.unweighed} კომპონენტს წონა არ აქვს - ჯამი არასრულია (მარაგი → „წონები (Excel-იდან)“)`
+              : 'ნახაზის სრული წონა'
+          }
+        >
+          {fmtNum(weight.weightKg)} კგ{weight.unweighed ? '*' : ''}
         </span>
       )}
       <span className="status-view">

@@ -3375,6 +3375,12 @@ input.stock-input.bad {
 .status-sel b {
   color: var(--accent);
 }
+/* What the drawing weighs - the number the truck is booked by. */
+.status-weight {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
 .status-offline {
   display: inline-flex;
   align-items: center;

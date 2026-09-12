@@ -24,6 +24,7 @@ import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 import { RemainingButton } from './RemainingButton';
 import { ProblemsButton } from './ProblemsButton';
+import { FillAllButton } from './FillAllButton';
 
 /**
  * Grid steps that match the catalog.
@@ -780,6 +781,10 @@ export function Header() {
             )}
           </span>
         )}
+
+        {/* Every still-empty line filled with its best recommendation at once -
+            in simple mode too: drawing and filling are the whole job there. */}
+        <FillAllButton />
 
         {/* The wizards and templates are shortcuts to a whole wall or column;
             simple mode draws the line and fills it instead. */}
