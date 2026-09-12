@@ -24,6 +24,7 @@ import { TitleBlockDialog } from './components/TitleBlockDialog';
 import { UsersDialog } from './components/UsersDialog';
 import { ErrorLogDialog } from './components/ErrorLogDialog';
 import { PasswordDialog } from './components/PasswordDialog';
+import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
 import { Icon } from './components/Icon';
 
 export default function App() {
@@ -54,13 +55,12 @@ export default function App() {
       const doc: LegacyDetectedDoc = JSON.parse(raw);
       const schema = legacyBritaniaToV1(doc, doc.source?.pdf);
       const paths = schemaToSketchPaths(schema);
-      if (paths.length) {
-        const prev = useEditorStore.getState().sketch;
-        useEditorStore.setState({ sketch: [...prev, ...paths] });
-      }
-      setToast(`Imported ${paths.length} detection shapes from /detection`);
+      // Through the store's own action, so the lines land in the drawing that
+      // is saved and synced, and one undo takes the whole import back out.
+      useEditorStore.getState().appendSketch(paths);
+      setToast(`დეტექციიდან ${paths.length} მონახაზი ჩაიტვირთა.`);
     } catch (e) {
-      setToast('Failed to import detection results');
+      setToast('დეტექციის შედეგების ჩატვირთვა ვერ მოხერხდა.');
     } finally {
       sessionStorage.removeItem('detect-import');
     }
@@ -115,6 +115,7 @@ export default function App() {
       {dialog?.kind === 'users' && <UsersDialog />}
       {dialog?.kind === 'errors' && <ErrorLogDialog />}
       {dialog?.kind === 'password' && <PasswordDialog />}
+      {dialog?.kind === 'display-settings' && <DisplaySettingsDialog />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}

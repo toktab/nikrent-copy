@@ -1794,53 +1794,232 @@ input.stock-input.bad {
 }
 
 /* ------------------------------------------------------ dimension labels */
-.label-layer {
+/* Measured lines and the measure tool's guides. Colours come from the user's
+   settings inline; only what is fixed lives here. */
+.measure-layer {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+.measure-layer text {
+  font-family: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: rgba(20, 23, 28, 0.85);
+  stroke-width: 0.3em;
+}
+.measure-layer .measure-live {
+  fill: var(--text);
+}
+.measure-offset-line line {
+  stroke: var(--warn);
+}
+.measure-offset-line text {
+  fill: var(--warn);
+}
+.measure-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.measure-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  padding: 0;
+  cursor: pointer;
+}
+.measure-swatch.on {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+/* Where measured lines meet: green, an end resting on a line; orange, two lines
+   running through each other. */
+.measure-contact {
+  fill: none;
+}
+.measure-contact.touch {
+  stroke: var(--ok);
+}
+.measure-contact.cross,
+.measure-contact.cross circle,
+.measure-contact.cross line {
+  stroke: var(--warn);
+  fill: none;
+}
+
+/* The display settings: which length shows when, on screen and on paper. */
+.vis-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.vis-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.vis-check input {
+  margin-top: 3px;
+}
+.vis-master {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.vis-scroll {
+  overflow-x: auto;
+}
+.vis-scroll.muted {
+  opacity: 0.45;
+}
+.vis-matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.vis-matrix th,
+.vis-matrix td {
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  padding: 6px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+.vis-matrix tr > :last-child {
+  border-right: none;
+}
+.vis-matrix tbody tr:last-child > * {
+  border-bottom: none;
+}
+.vis-matrix thead th {
+  font-weight: 600;
+  min-width: 96px;
+}
+.vis-matrix th span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.vis-matrix tbody th {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vis-cell {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  color: var(--ok);
+  cursor: pointer;
+}
+.vis-cell:hover {
+  border-color: var(--line-strong);
+}
+.vis-cell.on {
+  background: rgba(113, 197, 117, 0.12);
+  border: 1px solid rgba(113, 197, 117, 0.5);
+}
+.vis-section {
+  margin: 18px 0 8px;
+  font-size: 13px;
+}
+.vis-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Lengths. Where each one goes is lib/dimensions.ts; this is only how it looks.
+   The chip's padding and border are what that file's PAD_X / PAD_Y assume, so
+   change the two together or labels will think they fit where they do not. */
+.dim-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 40;
   overflow: hidden;
 }
-.plabel {
+.dim-lines {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+.dim-lines line,
+.dim-lines polyline {
+  fill: none;
+  stroke: rgba(230, 233, 238, 0.6);
+  stroke-width: 1;
+}
+/* Extension lines are the quietest thing on the drawing: they only say where. */
+.dim-lines .dim-ext {
+  stroke: rgba(230, 233, 238, 0.3);
+  stroke-dasharray: 3 3;
+}
+.dim-lines g.accent line,
+.dim-lines g.accent polyline {
+  stroke: var(--accent);
+}
+.dim-lines g.accent .dim-ext {
+  stroke: rgba(112, 166, 245, 0.55);
+}
+.dim-label {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
+  font-size: 11px;
   line-height: 1.28;
   white-space: nowrap;
   letter-spacing: 0.1px;
-}
-.plabel .nm {
-  font-size: 0.92em;
-  font-weight: 500;
-}
-.plabel .dim {
-  font-weight: 700;
-}
-/* on the piece: dark text on the light material fill */
-.plabel.inside {
-  color: #14181d;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
-}
-/* off the piece: light pill on the dark surface */
-.plabel.outside {
+  font-variant-numeric: tabular-nums;
+  /* off the piece: light pill on the dark surface, opaque enough to break the
+     dimension line it sits on */
   color: var(--text);
-  background: rgba(20, 24, 29, 0.86);
+  background: rgba(20, 24, 29, 0.9);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 5px;
 }
-.plabel.sel {
+.dim-label .nm {
+  font-size: 0.92em;
+  font-weight: 500;
+}
+.dim-label .dim {
+  font-weight: 700;
+}
+/* on the piece: dark text on the light material fill */
+.dim-label.inside {
+  color: #14181d;
+  background: none;
+  border-color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.dim-label.accent {
   color: #1c1c1c;
-}
-.plabel.sel.inside {
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-.plabel.sel.outside {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1c1c1c;
+}
+.dim-label.inside.accent {
+  background: none;
+  border-color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 /* --------------------------------------------------------------- inspector */

@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { useEditorStore } from '../store/useEditorStore';
-import { ConflictError, PermissionError, applyPlan, fetchAll, reloadDocument } from './repo';
+import {
+  ConflictError,
+  PermissionError,
+  applyPlan,
+  fetchAll,
+  measuresSaveUnsupported,
+  recheckMeasuresColumn,
+  reloadDocument,
+} from './repo';
 import { captureError } from './errorLog';
 import {
   diffSnapshots,
@@ -36,6 +44,12 @@ interface SyncState {
   deniedWhat: string | null;
   /** unsaved work is waiting to go up */
   pendingChanges: boolean;
+  /**
+   * Drawings are saving without their measured lines, because the server has
+   * no column for them yet. Kept up as a banner, not a passing toast: those
+   * lines look saved on this screen and are gone after a reload.
+   */
+  measuresUnsaved: boolean;
 }
 
 export const useSyncStore = create<SyncState>(() => ({
@@ -45,6 +59,7 @@ export const useSyncStore = create<SyncState>(() => ({
   conflictDocId: null,
   deniedWhat: null,
   pendingChanges: false,
+  measuresUnsaved: false,
 }));
 
 const DEBOUNCE_MS = 900;
@@ -54,6 +69,9 @@ let pending: SyncPlan = emptyPlan();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let flushing = false;
 let canWrite = true;
+/** when the server was last asked whether the measures column has arrived */
+let lastMeasuresProbe = 0;
+const MEASURES_PROBE_MS = 60_000;
 
 function snapshotOf(): DataSnapshot {
   const s = useEditorStore.getState();
@@ -115,6 +133,26 @@ export async function flush(): Promise<void> {
       deniedWhat: null,
       pendingChanges: !isEmptyPlan(pending),
     });
+    // The drawing saved, but without its measured lines - the server is one
+    // migration behind. Said for as long as it is true, not once.
+    if (measuresSaveUnsupported()) {
+      useSyncStore.setState({ measuresUnsaved: true });
+      // The column may arrive while this tab stays open, when an admin runs
+      // 0011. Asked at most once a minute rather than on every save.
+      if (Date.now() - lastMeasuresProbe > MEASURES_PROBE_MS) {
+        lastMeasuresProbe = Date.now();
+        if (await recheckMeasuresColumn()) {
+          useSyncStore.setState({ measuresUnsaved: false, pendingChanges: true });
+          // Every save made while it was missing went up without its lines,
+          // so every drawing goes up once more, with them this time.
+          pending = mergePlans(pending, {
+            ...emptyPlan(),
+            documentsUpsert: useEditorStore.getState().documents,
+          });
+          schedule();
+        }
+      }
+    }
   } catch (err) {
     // Put the unsent work back at the front of the queue so a transient
     // failure costs a retry rather than the change itself.
@@ -160,22 +198,8 @@ export async function flush(): Promise<void> {
  */
 export async function resolveConflictTakeServer(docId: string): Promise<void> {
   const fresh = await reloadDocument(docId);
-  const store = useEditorStore.getState();
-
-  const documents = fresh
-    ? store.documents.map((d) => (d.id === docId ? fresh : d))
-    : store.documents.filter((d) => d.id !== docId);
-
-  useEditorStore.setState({
-    documents,
-    pieces:
-      store.activeDocId === docId
-        ? (fresh?.pieces ?? [])
-        : store.pieces,
-    past: [],
-    future: [],
-    selectedIds: [],
-  });
+  // Through the store, so the sketch and measure mirrors move with the pieces.
+  useEditorStore.getState().adoptServerDocument(docId, fresh);
 
   // Drop the queued write for that drawing; it described the old version.
   pending = {

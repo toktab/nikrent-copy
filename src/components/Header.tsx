@@ -10,6 +10,8 @@ import {
 import { isLegacyBritania, legacyBritaniaToV1, schemaToSketchPaths } from '../lib/detectImport';
 import type { LegacyDetectedDoc } from '../lib/detection/types';
 import { pickFile, readFileAsText } from '../lib/files';
+import { isConfigured } from '../lib/supabase';
+import { materialIdsOnServer } from '../lib/repo';
 import { combo, overrideLabel } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
@@ -41,7 +43,6 @@ const SNAP_STEPS = [5, 15, 30];
  * one job only, setting the first pieces out on the building's axes.
  */
 type SnapMode = 'edge' | 'grid' | 'off';
-
 const SNAP_LABEL: Record<SnapMode, string> = {
   edge: 'კიდეზე',
   grid: 'ბადეზე',
@@ -58,7 +59,10 @@ export function Header() {
   const snap = useEditorStore((s) => s.snap);
   const snapStep = useEditorStore((s) => s.snapStep);
   const zoom = useEditorStore((s) => s.zoom);
-  const showDims = useEditorStore((s) => s.showDims);
+  const showLengths = useEditorStore((s) => s.showLengths);
+  const pdfVisibility = useEditorStore((s) => s.pdfVisibility);
+  const measureHelper = useEditorStore((s) => s.measureStyle.helper);
+  const setMeasureStyle = useEditorStore((s) => s.setMeasureStyle);
   const showNames = useEditorStore((s) => s.showNames);
   const forceLabels = useEditorStore((s) => s.forceLabels);
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
@@ -70,6 +74,8 @@ export function Header() {
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
+  const sketch = useEditorStore((s) => s.sketch);
+  const measures = useEditorStore((s) => s.measures);
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const canUndo = useEditorStore((s) => s.past.length > 0);
   const canRedo = useEditorStore((s) => s.future.length > 0);
@@ -80,7 +86,6 @@ export function Header() {
 
   const setSnap = useEditorStore((s) => s.setSnap);
   const setSnapStep = useEditorStore((s) => s.setSnapStep);
-  const setShowDims = useEditorStore((s) => s.setShowDims);
   const setShowNames = useEditorStore((s) => s.setShowNames);
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
@@ -135,6 +140,7 @@ export function Header() {
         doc: { ...doc, pieces, sketch: showSketch ? doc.sketch : [] },
         materials,
         showSketch,
+        visibility: pdfVisibility,
       });
       if (!result) setToast('ნახაზი ცარიელია.');
       else if (result.rescaled) {
@@ -193,8 +199,7 @@ export function Header() {
           return;
         }
         const apply = () => {
-          const prev = useEditorStore.getState().sketch;
-          useEditorStore.setState({ sketch: [...prev, ...sketchPaths] });
+          useEditorStore.getState().appendSketch(sketchPaths);
           useEditorStore.getState().fitToContent();
           setToast(`დეტექციიდან ${sketchPaths.length} მონახაზი ჩაიტვირთა.`);
         };
@@ -212,41 +217,56 @@ export function Header() {
         return;
       }
 
-      // Otherwise, try as a layout file.
-      const incoming = parseLayoutFile(text);
-      const known = new Set(materials.map((m) => m.id));
-      const usable = incoming.filter((p) => known.has(p.materialId));
-      const dropped = incoming.length - usable.length;
+      // Otherwise, a drawing file. It opens as a drawing of its own, so there
+      // is nothing on screen to overwrite and nothing to confirm.
+      const parsed = parseLayoutFile(text);
 
-      if (!usable.length) {
+      // With a server, a material this screen lacks may already be there -
+      // created by someone else since this tab loaded. Adding the file's older
+      // copy would overwrite theirs, so the import waits for a reload instead.
+      if (isConfigured) {
+        const local = new Set(materials.map((m) => m.id));
+        const missing = [...new Set(parsed.pieces.map((p) => p.materialId))].filter(
+          (id) => !local.has(id),
+        );
+        const onServer = await materialIdsOnServer(missing);
+        if (onServer.size) {
+          setToast(
+            `ფაილის ${onServer.size} მასალა სერვერზე უკვე არსებობს, ეს ეკრანი ძველია - გადატვირთე გვერდი და ისევ შემოიტანე.`,
+          );
+          return;
+        }
+      }
+
+      const result = useEditorStore.getState().importDrawing(parsed, {
+        // Without a server there is no one else's catalog to protect.
+        addMissingMaterials: canManage || !isConfigured,
+      });
+
+      if (!result.created) {
         setToast(
           'ნახაზი ვერ ჩაიტვირთა - ფაილის მასალები ამ კატალოგში არ არის. ჯერ კატალოგი დააიმპორტე.',
         );
         return;
       }
+      useEditorStore.getState().fitToContent();
 
-      const apply = () => {
-        useEditorStore.getState().replaceLayout(usable);
-        useEditorStore.getState().fitToContent();
-        setToast(
-          dropped > 0
-            ? `ნახაზი ჩაიტვირთა (${usable.length}). ${dropped} ელემენტი გამოტოვდა - მასალა კატალოგში არ არის.`
-            : `ნახაზი ჩაიტვირთა (${usable.length} ელემენტი).`,
-        );
-      };
-
-      // Never silently overwrite a drawing that is already on the surface.
-      if (pieces.length) {
-        openDialog({
-          kind: 'confirm',
-          title: 'ნახაზის იმპორტი',
-          message: `მიმდინარე ნახაზი (${pieces.length} ელემენტი) ჩანაცვლდება ფაილის ${usable.length} ელემენტით. გავაგრძელო?`,
-          confirmLabel: 'ჩანაცვლება',
-          onConfirm: apply,
-        });
-      } else {
-        apply();
+      const name = parsed.meta.name || file.name;
+      const report = [
+        `„${name}“ ჩაიტვირთა ახალ ნახაზად: ${result.added} ელემენტი, ${parsed.sketch.length} ხაზი, ${parsed.measures.length} ზომა.`,
+      ];
+      if (result.addedMaterials) {
+        report.push(`კატალოგს დაემატა ${result.addedMaterials} მასალა.`);
       }
+      if (result.droppedPieces) {
+        report.push(
+          `${result.droppedPieces} ელემენტი გამოტოვდა - მასალა კატალოგში არ არის, ადმინისტრატორმა დაამატოს.`,
+        );
+      }
+      if (result.mismatched) {
+        report.push(`${result.mismatched} მასალის ზომა ამ კატალოგში განსხვავდება - დარჩა ადგილობრივი.`);
+      }
+      setToast(report.join(' '));
     } catch (e) {
       setToast(`ნახაზის წაკითხვა ვერ მოხერხდა: ${(e as Error).message}`);
     }
@@ -393,9 +413,14 @@ export function Header() {
                 </MenuItem>
                 <MenuItem
                   icon="download"
-                  disabled={!pieces.length}
+                  // A drawing of lines alone is still a drawing worth taking along.
+                  disabled={!pieces.length && !sketch.length && !measures.length}
                   onClick={() => {
-                    exportLayoutFile(pieces);
+                    // The live mirrors, not the stored copy, so the file holds
+                    // exactly what is on screen this instant.
+                    if (activeDoc) {
+                      exportLayoutFile({ ...activeDoc, pieces, sketch, measures }, materials);
+                    }
                     close();
                   }}
                 >
@@ -542,10 +567,15 @@ export function Header() {
           )}
         >
           <>
-            <MenuLabel>წარწერები</MenuLabel>
-            <MenuItem on={showDims} onClick={() => setShowDims(!showDims)}>
-              ზომები
+            <MenuItem
+              icon="eye"
+              onClick={() => openDialog({ kind: 'display-settings' })}
+              title="რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში"
+            >
+              ზომების ჩვენება…
             </MenuItem>
+            <MenuSep />
+            <MenuLabel>წარწერები</MenuLabel>
             <MenuItem on={showNames} onClick={() => setShowNames(!showNames)}>
               სახელები
             </MenuItem>
@@ -585,6 +615,21 @@ export function Header() {
             </MenuItem>
           </>
         </Menu>
+
+        {/* Which lengths show, on screen and on paper - its own menu, because it
+            is a table of choices rather than a switch. */}
+        <Tooltip
+          label="ზომების ჩვენება"
+          reason={`რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში · D - ${showLengths ? 'ყველა ზომის დამალვა' : 'ზომების ჩვენება'}`}
+        >
+          <button
+            className={`btn icon${showLengths ? '' : ' engaged'}`}
+            onClick={() => openDialog({ kind: 'display-settings' })}
+            aria-label="ზომების ჩვენება"
+          >
+            <Icon name="eye" size={16} />
+          </button>
+        </Tooltip>
 
         <span className="sep" />
 
@@ -631,6 +676,52 @@ export function Header() {
                 {label}
               </button>
             ))}
+          </span>
+        )}
+
+        {/* Measuring sits beside drawing because it is the same kind of act:
+            setting a line out against what is already there. */}
+        <Tooltip
+          label="გაზომვა - ზომის ხაზი"
+          reason={
+            surfaceView === 'plan'
+              ? 'M - გაზომვა · მიიტანე კედელთან ან პანელთან, დააჭირე, მერე მეორე წერტილზე · Shift - 15° კუთხეები · Esc - გაუქმება'
+              : 'მხოლოდ გეგმაზე'
+          }
+        >
+          <button
+            className={`btn${tool === 'measure' ? ' engaged' : ''}`}
+            onClick={() => setTool(tool === 'measure' ? 'select' : 'measure')}
+            disabled={viewMode === '3d' || surfaceView !== 'plan'}
+            aria-pressed={tool === 'measure'}
+          >
+            <Icon name="ruler" /> <span className="btn-label">გაზომვა</span>
+          </button>
+        </Tooltip>
+        {tool === 'measure' && (
+          <span className="pen-face" role="group" aria-label="გაზომვის დამხმარე">
+            {/* The helper can be wrong about one particular line; this is the
+                way to place that one by hand. */}
+            <button
+              className={`btn small${measureHelper ? ' engaged' : ''}`}
+              onClick={() => setMeasureStyle({ helper: !measureHelper })}
+              aria-pressed={measureHelper}
+              title={
+                measureHelper
+                  ? 'დამხმარე ჩართულია: კედლის/პანელის აღმოჩენა, შეთავაზება, მაგნიტი. H - გამორთვა · Alt - დროებით'
+                  : 'დამხმარე გამორთულია: თავისუფალი ხაზი. H - ჩართვა'
+              }
+            >
+              <Icon name="magnet" size={14} /> {measureHelper ? 'დამხმარე' : 'თავისუფალი'}
+            </button>
+            <button
+              className="btn icon small"
+              onClick={() => openDialog({ kind: 'display-settings' })}
+              title="ზომების ჩვენება და ზომის ხაზის პარამეტრები"
+              aria-label="ზომების ჩვენება და ზომის ხაზის პარამეტრები"
+            >
+              <Icon name="sliders" size={14} />
+            </button>
           </span>
         )}
 

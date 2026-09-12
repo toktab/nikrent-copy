@@ -39,6 +39,9 @@ saved drawing.
 | the drawn layout itself - legs, vertices, snapping | `src/lib/sketch.ts` |
 | plan geometry, grid, zoom | `src/lib/geometry.ts` |
 | open-gap detection between placed pieces | `src/lib/gap.ts` |
+| lengths on the drawing - which show, where, stacking | `src/lib/dimensions.ts`, `src/components/DimensionLayer.tsx` |
+| measure tool (გაზომვა) - snapping helper, saved lines | `src/lib/measure.ts`, `src/components/MeasureLayer.tsx` |
+| drawing export / import file | `src/lib/catalogFile.ts` |
 | all state, undo, persistence, sync | `src/store/useEditorStore.ts` |
 | the canvas | `src/components/StageCanvas.tsx`, `SketchLayer.tsx` |
 

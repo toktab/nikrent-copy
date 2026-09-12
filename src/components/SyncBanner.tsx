@@ -25,6 +25,7 @@ export function SyncBanner() {
     (s) => s.documents.find((d) => d.id === conflictDocId)?.name ?? '',
   );
   const openDialog = useEditorStore((s) => s.openDialog);
+  const measuresUnsaved = useSyncStore((s) => s.measuresUnsaved);
 
   if (!isConfigured) return null;
 
@@ -106,6 +107,26 @@ export function SyncBanner() {
           <button className="btn small" onClick={() => openDialog({ kind: 'errors' })}>
             დეტალები
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Everything else is saving; the measured lines are not, and they look as
+  // if they are. Up for as long as that stays true.
+  if (measuresUnsaved) {
+    return (
+      <div className="sync-banner bad" role="alert">
+        <Icon name="warning" size={16} />
+        <div className="sync-banner-text">
+          <b>ზომის ხაზები სერვერზე არ ინახება</b>
+          <span>
+            სერვერზე მიგრაცია 0011 არ გაუშვია. ნახაზი ინახება, მაგრამ ზომის ხაზები მხოლოდ ამ
+            ეკრანზე ჩანს და გვერდის გადატვირთვისას დაიკარგება.
+          </span>
+          <span className="sync-banner-note">
+            ადმინისტრატორმა გაუშვოს supabase/migrations/0011_measures.sql (DEPLOY.md).
+          </span>
         </div>
       </div>
     );

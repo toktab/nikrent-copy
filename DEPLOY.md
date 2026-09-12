@@ -18,6 +18,9 @@ Supabase → SQL Editor → paste each file whole, in order, and run it:
 | `0006_error_log.sql` | the `error_log` table | crash reporting, silently |
 | `0007_templates.sql` | the `templates` table | saved assemblies |
 | `0008_keepalive.sql` | `public.keepalive()` | the keepalive job below |
+| `0009_sketch.sql` | `documents.sketch` - the drawn layout | ხაზვა lines do not reach the server |
+| `0010_custom_algorithms.sql` | the `custom_algorithms` table | saved detection algorithms stay on one device |
+| `0011_measures.sql` | `documents.measures` - measured check lines | measured lines stay on this screen; the app warns once and still saves the rest |
 
 All of them are safe to re-run. `0005` is the only destructive one, and only
 of prices, which nothing reads any more.
@@ -30,9 +33,13 @@ where table_schema = 'public' and table_name = 'profiles' and column_name = 'ava
 
 select to_regclass('public.error_log'), to_regclass('public.templates');
 select public.keepalive();
+
+select column_name from information_schema.columns
+where table_schema = 'public' and table_name = 'documents' and column_name in ('sketch', 'measures');
 ```
 
-Four non-null answers and a timestamp means all five are in.
+Non-null answers, a timestamp, and both `sketch` and `measures` listed means
+they are all in.
 
 ---
 

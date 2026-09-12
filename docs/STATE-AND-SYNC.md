@@ -24,12 +24,18 @@ drawing, nothing about the drawing.
 
 ## The active document is a mirror
 
-`state.pieces` and `state.sketch` are the *active* drawing, and the real copy
-lives in `documents[activeDocId]`. `syncDoc` keeps them in step: any patch that
-touches `pieces` or `sketch` also writes them back into the active document and
-stamps `updatedAt`.
+`state.pieces`, `state.sketch` and `state.measures` are the *active* drawing,
+and the real copy lives in `documents[activeDocId]`. `syncDoc` keeps them in
+step: any patch that touches `pieces`, `sketch` or `measures` also writes them
+back into the active document and stamps `updatedAt`.
 
-**So never call `set()` directly for anything that changes pieces or sketch.**
+Every place that switches, creates, duplicates, restores or loads a drawing
+has to set all three mirrors. A new drawing that set only `pieces` once kept
+showing the previous drawing's lines, and the first edit wrote them into it.
+
+**So never call `set()` directly for anything that changes pieces, sketch or
+measures.** Detection imports go through `appendSketch`, a drawing file through
+`importDrawing`.
 Use one of these two, both defined inside `create()`:
 
 - **`commit(fn)`** - a real edit. Runs through `syncDoc`, pushes the previous
@@ -42,7 +48,7 @@ the step, then `apply` on every move.
 
 ## What undo actually restores
 
-`snap()` captures four things: `materials`, `pieces`, `sketch`,
+`snap()` captures five things: `materials`, `pieces`, `sketch`, `measures`,
 `removedBuiltins`. The catalog is in there deliberately - deleting a material
 and undoing has to bring it back - which also means an undo taken after a
 catalog edit rolls that edit back too.
@@ -65,9 +71,14 @@ autosave over the wreckage.
 
 ## Migrations
 
-`version: 4`, with `migrate` handling old preference values rather than old
-document shapes - grid steps of 1, 10 and 25 cm that no longer exist are moved
-to the nearest step the catalog divides into. `merge` normalises the two
+`version: 6`, with `migrate` (`migratePersisted`, exported so it is tested
+directly) handling old preference values rather than old document shapes:
+grid steps of 1, 10 and 25 cm that no longer exist are moved to the nearest
+step the catalog divides into, and the old lengths settings (v4's `showDims`
+switch, v5's `dimMode`) become the `showLengths` master switch plus the
+per-kind `lengthVisibility` table (off stays off, "all" stays all, everyone
+else gets the default table). `merge` repairs `measureStyle`,
+`lengthVisibility` and `pdfVisibility` field by field. `merge` normalises the two
 historical shapes (a top-level `pieces` array from v2, versus named documents).
 
 Stored materials always beat the seed, which is what makes a user's catalog

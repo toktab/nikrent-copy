@@ -96,6 +96,7 @@ interface DocumentRow {
   scale: number;
   pieces: Piece[];
   sketch?: unknown;
+  measures?: unknown;
   version: number;
   updated_at: string;
 }
@@ -136,8 +137,68 @@ function rowToMaterial(row: MaterialRow, stock: StockByWarehouse): Material {
   };
 }
 
+/**
+ * Set once the server has said it has no `measures` column - migration 0011
+ * has not been run yet.
+ *
+ * Every drawing save would otherwise fail on that one column and take the
+ * pieces and the layout down with it. So the drawing is saved without its
+ * measured lines instead, and the sync engine tells the user why they are not
+ * reaching the server. An older app that does not send the column at all
+ * leaves it alone on update: PostgREST only writes the columns it is given.
+ */
+let measuresUnsupported = false;
+
+export function measuresSaveUnsupported(): boolean {
+  return measuresUnsupported;
+}
+
+/**
+ * The server's two ways of saying the column is not there: PostgREST's schema
+ * cache ("Could not find the 'measures' column of 'documents'") and Postgres
+ * itself (`column "measures" of relation "documents" does not exist`). Narrow on
+ * purpose - anything looser would switch measured lines off for the session on
+ * an unrelated error that happened to mention them.
+ */
+export function isMissingMeasuresColumn(error: PostgrestLikeError): boolean {
+  const text = error.message ?? '';
+  return (
+    (error.code === 'PGRST204' && text.includes("'measures'")) ||
+    /column "measures"( of relation "documents")? does not exist/i.test(text)
+  );
+}
+
+/**
+ * Ask whether the column has arrived. True means it has, and measured lines are
+ * saved again from here on. Never throws: a failed check is just "not yet".
+ */
+export async function recheckMeasuresColumn(): Promise<boolean> {
+  try {
+    const { error } = await requireSupabase().from('documents').select('measures').limit(1);
+    if (error) return false;
+    measuresUnsupported = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Which of these material ids the server already has.
+ *
+ * A drawing file can carry a material this screen lacks only because the tab
+ * is out of date - someone created it after the catalog loaded. Adding the
+ * file's copy would overwrite theirs on the server, so the import asks first.
+ */
+export async function materialIdsOnServer(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const { data, error } = await requireSupabase().from('materials').select('id').in('id', ids);
+  if (error) throw wrapError('მასალები', error);
+  return new Set((data ?? []).map((row) => (row as { id: string }).id));
+}
+
 function documentToRow(d: DrawingDoc) {
-  return {
+  const row = {
     id: d.id,
     name: d.name,
     project_name: d.projectName,
@@ -146,6 +207,7 @@ function documentToRow(d: DrawingDoc) {
     pieces: d.pieces,
     sketch: d.sketch ?? [],
   };
+  return measuresUnsupported ? row : { ...row, measures: d.measures ?? [] };
 }
 
 function rowToDocument(row: DocumentRow): DrawingDoc {
@@ -158,6 +220,8 @@ function rowToDocument(row: DocumentRow): DrawingDoc {
     pieces: Array.isArray(row.pieces) ? row.pieces : [],
     // A drawing saved before the pen existed has no sketch column value.
     sketch: Array.isArray(row.sketch) ? row.sketch : [],
+    // Nor any measured lines; the column arrives with migration 0011.
+    measures: Array.isArray(row.measures) ? (row.measures as DrawingDoc['measures']) : [],
     updatedAt: new Date(row.updated_at).getTime(),
   };
 }
@@ -287,6 +351,10 @@ export async function saveDocument(doc: DrawingDoc): Promise<number> {
       .insert(documentToRow(doc))
       .select('version')
       .single();
+    if (error && !measuresUnsupported && isMissingMeasuresColumn(error)) {
+      measuresUnsupported = true;
+      return saveDocument(doc);
+    }
     if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
     const version = (data as { version: number }).version;
     versions.set(doc.id, version);
@@ -300,6 +368,10 @@ export async function saveDocument(doc: DrawingDoc): Promise<number> {
     .eq('version', expected)
     .select('version');
 
+  if (error && !measuresUnsupported && isMissingMeasuresColumn(error)) {
+    measuresUnsupported = true;
+    return saveDocument(doc);
+  }
   if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
   if (!data || data.length === 0) throw new ConflictError(doc.id);
 

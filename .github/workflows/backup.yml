@@ -25,7 +25,7 @@
 # Order matters. The accounts have to exist before anything that references
 # them, or every insert fails on a foreign key:
 #
-#   1. create a project and run supabase/migrations/0001…0008 against it
+#   1. create a project and run supabase/migrations/0001…0011 against it
 #   2. gunzip -c auth.sql.gz   | psql "$TARGET_DB_URL"
 #   3. gunzip -c public.sql.gz | psql "$TARGET_DB_URL"
 #
