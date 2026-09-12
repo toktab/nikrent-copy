@@ -450,6 +450,27 @@ export function Header() {
                   >
                     ნახაზის ექსპორტი
                   </MenuItem>
+                  {/* His own workbook - კონსტრუქცია, ჯამი, ნაშთი, აწყობა, პრინტ -
+                      with the counts already in, so the office keeps its file. */}
+                  <MenuItem
+                    icon="sheet"
+                    disabled={!pieces.length && !sketch.length}
+                    onClick={() => {
+                      close();
+                      void import('../lib/excelExport')
+                        .then(({ exportArchitectWorkbook }) =>
+                          exportArchitectWorkbook({
+                            materials,
+                            pieces,
+                            sketch,
+                            drawingName: activeDoc?.name ?? '',
+                          }),
+                        )
+                        .catch((e) => setToast(`Excel ვერ შეიქმნა: ${(e as Error).message}`));
+                    }}
+                  >
+                    Excel - არქიტექტორის ფორმატი
+                  </MenuItem>
                   <MenuItem
                     icon="upload"
                     onClick={() => {
