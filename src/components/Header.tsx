@@ -23,6 +23,7 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 import { RemainingButton } from './RemainingButton';
+import { ProblemsButton } from './ProblemsButton';
 
 /**
  * Grid steps that match the catalog.
@@ -353,6 +354,7 @@ export function Header() {
           </Menu>
         </div>
 
+        <ProblemsButton />
         <RemainingButton />
 
         {/* Simple mode works in plan only, so the views go with it. */}

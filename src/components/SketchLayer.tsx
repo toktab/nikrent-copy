@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { lineStatuses } from '../lib/problems';
 import { isHorizontal, legLength, pathLength, segments, type SegmentHit } from '../lib/sketch';
 import type { Point } from '../lib/sketch';
 import { legDir, leftNormal, outwardSide, sidesFromNeighbours } from '../lib/sketchFill';
@@ -47,6 +48,18 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
     [sketch],
   );
 
+  /**
+   * Which lines are done, wrong, or still bare - coloured on the drawing, so
+   * what is left to do shows without opening anything. Deferred: a drag moves
+   * pieces every frame, and the colours can follow a beat behind it.
+   */
+  const pieces = useDeferredValue(useEditorStore((s) => s.pieces));
+  const materials = useEditorStore((s) => s.materials);
+  const status = useMemo(
+    () => lineStatuses(sketch, pieces, new Map(materials.map((m) => [m.id, m]))),
+    [sketch, pieces, materials],
+  );
+
   // The pen's target is drawn even on an empty surface: the first vertex is
   // the one that most needs to land on a square, and with nothing else on the
   // drawing there was nothing to render and so nothing to aim with.
@@ -68,15 +81,16 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
       pointerEvents="none"
     >
       {sketch.map((path, i) => (
-        <PathShape
-          key={path.id}
-          path={path}
-          side={sides[i] ?? outwardSide(path)}
-          chosen={chosen.has(path.id)}
-          hair={hair}
-          hover={hover?.pathId === path.id ? hover : null}
-          part={part?.pathId === path.id ? part : null}
-        />
+        <g key={path.id} className={`line-${status.get(path.id) ?? 'empty'}`}>
+          <PathShape
+            path={path}
+            side={sides[i] ?? outwardSide(path)}
+            chosen={chosen.has(path.id)}
+            hair={hair}
+            hover={hover?.pathId === path.id ? hover : null}
+            part={part?.pathId === path.id ? part : null}
+          />
+        </g>
       ))}
 
       {/* Where the pen is, which is never quite where the pointer is.
