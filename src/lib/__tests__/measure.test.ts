@@ -194,6 +194,49 @@ describe('aiming at the start of a wall from well clear of it', () => {
   });
 });
 
+describe('measuring from lines already measured', () => {
+  const old = { id: 'm', a: { x: 100, y: 300 }, b: { x: 500, y: 300 } };
+  const edges = referenceEdges([], [], new Map(), [old]);
+  const ctx = { edges, measures: [old], zoom: 1, step: 5, helper: true };
+
+  it('lines up straight out from the end of a measured line, from far away', () => {
+    const r = firstPoint({ x: 102, y: 150 }, ctx);
+    expect(r.via).toBe('track');
+    expectPoint(r.point, 100, 150);
+    expect(r.helper!.edgeKey).toBe('ms:m');
+  });
+
+  it('carries a measured line on past its end, level with it', () => {
+    // Beside the old line but 40 cm short of its start: stays where it is
+    // aimed, just level with the line - it does not jump to the line's end.
+    const r = firstPoint({ x: 60, y: 303 }, ctx);
+    expect(r.via).toBe('track');
+    expectPoint(r.point, 60, 300);
+    expectPoint(r.helper!.foot!, 100, 300);
+  });
+
+  it('pulls onto the end of a measured line when close', () => {
+    const r = firstPoint({ x: 93, y: 305 }, ctx);
+    expect(r.via).toBe('magnet');
+    expectPoint(r.point, 100, 300);
+  });
+
+  it('suggests a parallel copy of a measured line when the first point is held off it', () => {
+    const first = firstPoint({ x: 102, y: 150 }, ctx).helper!;
+    const edge = edges.find((e) => e.key === first.edgeKey)!;
+    expectPoint(suggestEnd(collinearRun(edge, edges), first).point, 500, 150);
+  });
+
+  it('joins measured lines with measured lines only', () => {
+    const next = { id: 'n', a: { x: 500, y: 300 }, b: { x: 700, y: 300 } };
+    const wallOnTheSameLine: RefEdge = { a: { x: 700, y: 300 }, b: { x: 900, y: 300 }, key: 'sk:w:0' };
+    const all = [...referenceEdges([], [], new Map(), [old, next]), wallOnTheSameLine];
+    const run = collinearRun(all.find((e) => e.key === 'ms:m')!, all);
+    expectPoint(run.a, 100, 300);
+    expectPoint(run.b, 700, 300);
+  });
+});
+
 describe('the magnet between measured lines', () => {
   const other = { id: 'o', a: { x: 0, y: 50 }, b: { x: 100, y: 50 } };
 

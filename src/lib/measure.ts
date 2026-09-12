@@ -143,10 +143,20 @@ export function nearestEdge(
   edges: RefEdge[],
   at: Point,
   tolCm: number,
+  /**
+   * How far past either end the pointer may be and still count as beside the
+   * edge. Past that it is beyond the edge, not beside it - held to the edge it
+   * would jump back to the end, which is `trackEnds`' job to handle properly.
+   */
+  slackCm = Infinity,
 ): { edge: RefEdge; foot: Point; dist: number } | null {
   let best: { edge: RefEdge; foot: Point; dist: number } | null = null;
   for (const edge of edges) {
-    if (legLength(edge.a, edge.b) === 0) continue;
+    const len = legLength(edge.a, edge.b);
+    if (len === 0) continue;
+    const t =
+      ((at.x - edge.a.x) * (edge.b.x - edge.a.x) + (at.y - edge.a.y) * (edge.b.y - edge.a.y)) / len;
+    if (t < -slackCm || t > len + slackCm) continue;
     const foot = closestOnLeg(edge.a, edge.b, at);
     const dist = Math.hypot(at.x - foot.x, at.y - foot.y);
     if (dist <= tolCm && (!best || dist < best.dist)) best = { edge, foot, dist };
@@ -265,7 +275,9 @@ const END_SNAP = { px: 12, cm: 3 };
 const SUGGESTION = { px: 24, cm: 10 };
 const VERTEX = { px: 10, cm: 2 };
 const PARALLEL = { px: 14, cm: 5 };
-const MAGNET = { px: 18, cm: 5 };
+// Two check lines meant to meet should meet: the magnet reaches a little
+// further than the other snaps.
+const MAGNET = { px: 24, cm: 8 };
 /**
  * Lining up with an end from further away: how far off the end's own
  * perpendicular the pointer may be, and how far out along it the end still
@@ -371,8 +383,16 @@ export function trackEnds(
   const tolerance = reach(TRACK.px, TRACK.cm, opts.zoom);
   const far = reach(TRACK_REACH.px, TRACK_REACH.cm, opts.zoom);
   let best: { anchor: MeasureAnchor; sideways: number; out: number } | null = null;
+  // Closest to its tracking line wins; between equals, the nearer end.
+  const beats = (sideways: number, distance: number) =>
+    !best ||
+    sideways < best.sideways - 0.01 ||
+    (Math.abs(sideways - best.sideways) <= 0.01 && distance < best.out);
+
+  // Measured lines count as much as walls: a new check line is as often set
+  // out level with an old one as with the panels.
   for (const edge of edges) {
-    if (edge.key.startsWith('ms:') || !legLength(edge.a, edge.b)) continue;
+    if (!legLength(edge.a, edge.b)) continue;
     const { u, n } = frame(edge);
     for (const [end, p] of [
       ['a', edge.a],
@@ -381,24 +401,47 @@ export function trackEnds(
       const rx = at.x - p.x;
       const ry = at.y - p.y;
       const out = rx * n.x + ry * n.y;
-      const sideways = Math.abs(rx * u.x + ry * u.y);
-      if (sideways > tolerance || Math.abs(out) < 0.5 || Math.abs(out) > far) continue;
-      if (best && (sideways > best.sideways + 0.01 || (Math.abs(sideways - best.sideways) <= 0.01 && Math.abs(out) >= best.out))) {
-        continue;
+      const along = rx * u.x + ry * u.y;
+
+      // Squared off the end: straight out from it, a whole number of steps.
+      if (Math.abs(along) <= tolerance && Math.abs(out) >= 0.5 && Math.abs(out) <= far) {
+        if (beats(Math.abs(along), Math.abs(out))) {
+          const offsetCm = roundTo(out, opts.step);
+          best = {
+            sideways: Math.abs(along),
+            out: Math.abs(out),
+            anchor: {
+              point: { x: p.x + n.x * offsetCm, y: p.y + n.y * offsetCm },
+              foot: { ...p },
+              offsetCm,
+              atEnd: end,
+              edgeKey: edge.key,
+              edge: { a: edge.a, b: edge.b },
+            },
+          };
+        }
       }
-      const offsetCm = roundTo(out, opts.step);
-      best = {
-        sideways,
-        out: Math.abs(out),
-        anchor: {
-          point: { x: p.x + n.x * offsetCm, y: p.y + n.y * offsetCm },
-          foot: { ...p },
-          offsetCm,
-          atEnd: end,
-          edgeKey: edge.key,
-          edge: { a: edge.a, b: edge.b },
-        },
-      };
+
+      // Carried on past the end, along the line's own direction: so a line
+      // can start or stop exactly level with where another one does.
+      const beyond = end === 'a' ? -along : along;
+      if (Math.abs(out) <= tolerance && beyond >= 0.5 && beyond <= far) {
+        if (beats(Math.abs(out), beyond)) {
+          const t = roundTo(along, opts.step);
+          best = {
+            sideways: Math.abs(out),
+            out: beyond,
+            anchor: {
+              point: { x: p.x + u.x * t, y: p.y + u.y * t },
+              foot: { ...p },
+              offsetCm: 0,
+              atEnd: end,
+              edgeKey: edge.key,
+              edge: { a: edge.a, b: edge.b },
+            },
+          };
+        }
+      }
     }
   }
   return best?.anchor ?? null;
@@ -418,9 +461,12 @@ export function collinearRun(edge: RefEdge, edges: RefEdge[]): RefEdge {
   const { u, n } = frame(edge);
   const across = (p: Point) => (p.x - edge.a.x) * n.x + (p.y - edge.a.y) * n.y;
   const along = (p: Point) => (p.x - edge.a.x) * u.x + (p.y - edge.a.y) * u.y;
+  // Measured lines join measured lines; walls and panels join each other. A
+  // check line lying along a wall is a note about it, not more of it.
+  const measured = edge.key.startsWith('ms:');
   const spans = edges
     .filter((e) => {
-      if (e.key.startsWith('ms:')) return false;
+      if (e.key.startsWith('ms:') !== measured) return false;
       const l = legLength(e.a, e.b);
       if (!l) return false;
       const ex = (e.b.x - e.a.x) / l;
@@ -476,12 +522,10 @@ export function firstPoint(
   const magnet = magnetToMeasures(at, ctx.measures, reach(MAGNET.px, MAGNET.cm, zoom));
   if (magnet) return { point: magnet.point, helper: magnet, via: 'magnet' };
 
-  const near = nearestEdge(ctx.edges, at, reach(EDGE_REACH.px, EDGE_REACH.cm, zoom));
+  const endSnap = reach(END_SNAP.px, END_SNAP.cm, zoom);
+  const near = nearestEdge(ctx.edges, at, reach(EDGE_REACH.px, EDGE_REACH.cm, zoom), endSnap);
   if (near) {
-    const helper = anchorFromEdge(near.edge, at, {
-      step,
-      endSnapCm: reach(END_SNAP.px, END_SNAP.cm, zoom),
-    });
+    const helper = anchorFromEdge(near.edge, at, { step, endSnapCm: endSnap });
     return { point: helper.point, helper, via: 'edge' };
   }
 
@@ -574,12 +618,10 @@ export function secondPoint(
     }
   }
 
-  const near = nearestEdge(edges, at, reach(EDGE_REACH.px, EDGE_REACH.cm, zoom));
+  const endSnap = reach(END_SNAP.px, END_SNAP.cm, zoom);
+  const near = nearestEdge(edges, at, reach(EDGE_REACH.px, EDGE_REACH.cm, zoom), endSnap);
   if (near) {
-    const helper = anchorFromEdge(near.edge, at, {
-      step,
-      endSnapCm: reach(END_SNAP.px, END_SNAP.cm, zoom),
-    });
+    const helper = anchorFromEdge(near.edge, at, { step, endSnapCm: endSnap });
     return { point: helper.point, via: 'edge', helper };
   }
 

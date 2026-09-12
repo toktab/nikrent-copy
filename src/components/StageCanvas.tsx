@@ -728,8 +728,11 @@ export function StageCanvas() {
   const onPiecePointerDown = useCallback((e: ReactPointerEvent, id: string) => {
     // space / middle-button gestures belong to the pan handler below
     if (e.button !== 0 || spaceRef.current) return;
-    e.stopPropagation();
     const s = useEditorStore.getState();
+    // The measure tool owns the surface: a click on a panel's end is where a
+    // check line starts, not a selection. Let it through to the stage.
+    if (s.tool === 'measure') return;
+    e.stopPropagation();
 
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       s.toggleSelect(id);
@@ -868,11 +871,12 @@ export function StageCanvas() {
         };
       }
       const edge = first.edgeKey ? edges.find((k) => k.key === first.edgeKey) : undefined;
-      // Offered off a wall or a panel, not off another measured line: its far
-      // end is just that line measured over again. And off the whole straight
-      // run the edge belongs to - the end of the wall, not of its first panel.
+      // Offered off the whole straight run the edge belongs to - the end of the
+      // wall, not of its first panel. Off a measured line too, when the first
+      // point is held some way off it: the suggestion is then a parallel copy.
+      // Standing ON a measured line, its far end would only measure it again.
       const suggestion =
-        helper && edge && !edge.key.startsWith('ms:')
+        helper && edge && (!edge.key.startsWith('ms:') || Math.abs(first.offsetCm) > 0.01)
           ? suggestEnd(collinearRun(edge, edges), first)
           : null;
       const r = secondPoint(at, {
