@@ -7,5 +7,19 @@ dist-ssr
 *.log
 .claude/settings.local.json
 
+# Local Claude Code setup - hooks, reviewers, skills, MCP servers. Personal to
+# this machine, never part of the project.
+.claude/agents/
+.claude/hooks/
+.claude/skills/
+.claude/settings.json
+.mcp.json
+
+# Personal working files: the architect's workbooks and sample exports, notes,
+# generated scratch code.
+files/
+problem.txt
+ai-generated-*.ts
+
 # Supabase CLI scratch (project link, temp build state)
 supabase/.temp/
