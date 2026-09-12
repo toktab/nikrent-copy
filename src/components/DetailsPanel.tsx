@@ -284,6 +284,26 @@ function RotationField({ rot }: { rot: number }) {
  * wall is 4.27 m" — and dragging cannot land on 427 however carefully it is
  * done. Reading them back is half the value; typing over one is the other half.
  */
+/**
+ * Opens the ranked ways to fill what is selected, beside the drawing. The
+ * selection stays as it is, so the recommendations are for exactly these lines.
+ */
+function RecommendButton() {
+  return (
+    <button
+      className="btn small"
+      title="საუკეთესო ვარიანტები - როგორ შეივსოს ეს ხაზი"
+      onClick={() => {
+        const s = useEditorStore.getState();
+        s.setInspectorOpen(true);
+        s.setInspectorTab('recommend');
+      }}
+    >
+      <Icon name="sliders" /> რეკომენდაცია
+    </button>
+  );
+}
+
 function SketchDetails({ path }: { path: SketchPath }) {
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
@@ -366,6 +386,7 @@ function SketchDetails({ path }: { path: SketchPath }) {
         >
           <Icon name="wall" /> შევსება ყალიბით
         </button>
+        <RecommendButton />
         {/* Joining the two ends after the fact. Drawing back onto the first
             point closes a run as it is drawn, but a run that was finished open
             had no way back to a loop short of redrawing it. */}
@@ -524,6 +545,7 @@ function SketchGroupDetails({ paths }: { paths: SketchPath[] }) {
         >
           <Icon name="wall" /> შევსება ყალიბით
         </button>
+        <RecommendButton />
         <button className="btn small danger" onClick={deleteSelected}>
           <Icon name="trash" /> წაშლა
         </button>

@@ -130,6 +130,18 @@ export interface DimItem {
   inside?: { along: number; across: number };
   /** selected or under the pointer */
   accent?: boolean;
+  /**
+   * The drawing it measures - `pc:<piece>`, `sk:<path>:<leg>`, `ms:<measure>` -
+   * whose own edges must not count as in the way of its label.
+   */
+  owners?: string[];
+}
+
+/** An edge on the drawing a label must not sit on, world cm, with what it belongs to. */
+export interface DimObstacle {
+  a: Point;
+  b: Point;
+  owner: string;
 }
 
 export interface PlacedDim {
@@ -158,6 +170,8 @@ export interface DimView {
   stageH: number;
   /** keep lengths on spans too small to normally be worth labelling */
   force?: boolean;
+  /** every edge on the drawing - panels, lines, measured lines - see `DimObstacle` */
+  obstacles?: DimObstacle[];
 }
 
 export const DIM_FONT_PX = 11;
@@ -177,6 +191,8 @@ const EXT_OVERSHOOT_PX = 3;
 const MIN_SPAN_PX = 12;
 const CULL_MARGIN_PX = 220;
 const COLLIDE_PAD_PX = 3;
+/** at least this far, on screen, a label looks for other work when picking a side */
+const LOOK_MIN_PX = 120;
 
 interface Box {
   x0: number;
@@ -244,12 +260,9 @@ export function readableAngle(u: Point): number {
 }
 
 /**
- * Which side of a span its length goes on: up the screen, or left for a span
- * that runs exactly vertically.
- *
- * One fixed rule rather than "the side with room", so the two faces of a wall
- * put their lengths on the same side and stack instead of splitting to either
- * side of the concrete where nobody can compare them.
+ * The side a span's length tries first when nothing else decides: up the
+ * screen, or left for a span that runs exactly vertically. What is around it
+ * can send it to the other side - see `layoutDimensions`.
  */
 export function outwardNormal(u: Point): Point {
   const n = { x: -u.y, y: u.x };
@@ -292,6 +305,14 @@ export function layoutDimensions(items: DimItem[], view: DimView): PlacedDim[] {
   const takenLabels: Box[] = [];
   const takenLines: Array<[Point, Point]> = [];
   const out: PlacedDim[] = [];
+  const obstacles = (view.obstacles ?? []).map((o) => ({
+    a: screen(o.a),
+    b: screen(o.b),
+    owner: o.owner,
+  }));
+  const onScreen = (box: Box) => box.x0 >= 0 && box.y0 >= 0 && box.x1 <= stageW && box.y1 <= stageH;
+  /** how far to look for other work when choosing a side: past the thickest wall */
+  const lookPx = Math.max(LOOK_MIN_PX, WALL_PAIR_MAX_CM * zoom);
 
   for (const { item, sa, sb, len } of prepared) {
     const u = { x: (sb.x - sa.x) / len, y: (sb.y - sa.y) / len };
@@ -300,65 +321,108 @@ export function layoutDimensions(items: DimItem[], view: DimView): PlacedDim[] {
     const { w, h } = textSize(item.text);
     const mid = { x: (sa.x + sb.x) / 2, y: (sa.y + sb.y) / 2 };
     const base = { id: item.id, accent: !!item.accent, lines: item.text, angle, w, h };
+    // A thing's own edges are not in the way of its own length.
+    const own = new Set(item.owners ?? [item.id]);
+    const foreign = obstacles.filter((o) => !own.has(o.owner));
+    // A piece is measured from its edge, not its middle, so the label never
+    // sits on the piece it names.
+    const clear = item.inside ? (item.inside.across * zoom) / 2 : 0;
 
-    const isFree = (box: Box, line?: [Point, Point]) =>
+    /**
+     * Which side to try first: away from the rest of the work.
+     *
+     * Everything nearby along this span votes by which side of it it lies on.
+     * The two faces of a wall each see the other, so each face's lengths go on
+     * its own outside instead of both climbing the same side; a run with
+     * nothing beside it keeps the usual up-or-left.
+     */
+    let lean = 0;
+    for (const o of foreign) {
+      const rx = (o.a.x + o.b.x) / 2 - mid.x;
+      const ry = (o.a.y + o.b.y) / 2 - mid.y;
+      const alongDist = Math.abs(rx * u.x + ry * u.y);
+      const acrossDist = rx * n.x + ry * n.y;
+      if (alongDist <= len / 2 + GAP_PX * 5 && Math.abs(acrossDist) > 0.5 && Math.abs(acrossDist) <= lookPx) {
+        lean += Math.sign(acrossDist);
+      }
+    }
+    const sides: Array<1 | -1> = lean > 0 ? [-1, 1] : [1, -1];
+
+    const labelsClear = (box: Box, line?: [Point, Point]) =>
       !takenLabels.some((l) => overlaps(l, box)) &&
       !takenLines.some(([p, q]) => segmentHitsBox(p, q, box)) &&
       !(line && takenLabels.some((l) => segmentHitsBox(line[0], line[1], l)));
+    const drawingClear = (box: Box) => !foreign.some((o) => segmentHitsBox(o.a, o.b, box));
 
-    let placed: PlacedDim | null = null;
-    let placedBox: Box | null = null;
+    interface Candidate {
+      placed: PlacedDim;
+      box: Box;
+      line?: [Point, Point];
+    }
+    const candidates: Candidate[] = [];
 
     // Inside the piece, when the text genuinely fits there - no leader, no
     // line, nothing to confuse with the neighbours.
     if (item.inside && w <= item.inside.along * zoom && h <= item.inside.across * zoom) {
-      const box = boxAround(mid.x, mid.y, u, n, w, h);
-      if (isFree(box)) {
-        placed = { ...base, tier: 0, inside: true, x: mid.x, y: mid.y };
-        placedBox = box;
-      }
+      candidates.push({
+        placed: { ...base, tier: 0, inside: true, x: mid.x, y: mid.y },
+        box: boxAround(mid.x, mid.y, u, n, w, h),
+      });
     }
 
-    for (let tier = 0; !placed && tier <= MAX_TIER; tier++) {
-      if (tier === 0) {
-        const c = along(mid, n, h / 2 + GAP_PX);
-        const box = boxAround(c.x, c.y, u, n, w, h);
-        if (isFree(box)) {
-          placed = { ...base, tier, inside: false, x: c.x, y: c.y };
-          placedBox = box;
+    // Both sides at each distance before going further out: the other side of
+    // a panel is nearer than a second dimension line on the crowded one.
+    for (let tier = 0; tier <= MAX_TIER; tier++) {
+      for (const side of sides) {
+        const ns = { x: n.x * side, y: n.y * side };
+        if (tier === 0) {
+          const c = along(mid, ns, clear + h / 2 + GAP_PX);
+          candidates.push({
+            placed: { ...base, tier, inside: false, x: c.x, y: c.y },
+            box: boxAround(c.x, c.y, u, n, w, h),
+          });
+          continue;
         }
-        continue;
-      }
-      // The first dimension line clears a tier-0 label; each after that clears
-      // the one before it.
-      const d = h + GAP_PX * 2 + (tier - 1) * TIER_GAP_PX;
-      const c = along(mid, n, d);
-      const box = boxAround(c.x, c.y, u, n, w, h);
-      const dimLine: [Point, Point] = [along(sa, n, d), along(sb, n, d)];
-      // Nowhere is free: the outermost tier is used anyway. A length that is
-      // crowded is still better than a length that has vanished.
-      if (isFree(box, dimLine) || tier === MAX_TIER) {
-        placed = {
-          ...base,
-          tier,
-          inside: false,
-          x: c.x,
-          y: c.y,
-          dimLine,
-          ext: [
-            [along(sa, n, 2), along(sa, n, d + EXT_OVERSHOOT_PX)],
-            [along(sb, n, 2), along(sb, n, d + EXT_OVERSHOOT_PX)],
-          ],
-        };
-        placedBox = box;
-        takenLines.push(dimLine);
+        // The first dimension line clears a tier-0 label; each after that
+        // clears the one before it.
+        const d = clear + h + GAP_PX * 2 + (tier - 1) * TIER_GAP_PX;
+        const c = along(mid, ns, d);
+        const line: [Point, Point] = [along(sa, ns, d), along(sb, ns, d)];
+        candidates.push({
+          placed: {
+            ...base,
+            tier,
+            inside: false,
+            x: c.x,
+            y: c.y,
+            dimLine: line,
+            ext: [
+              [along(sa, ns, clear + 2), along(sa, ns, d + EXT_OVERSHOOT_PX)],
+              [along(sb, ns, clear + 2), along(sb, ns, d + EXT_OVERSHOOT_PX)],
+            ],
+          },
+          box: boxAround(c.x, c.y, u, n, w, h),
+          line,
+        });
       }
     }
 
-    if (placed && placedBox) {
-      takenLabels.push(placedBox);
-      out.push(placed);
-    }
+    /**
+     * The first spot that is fully clear. Failing that, what matters most goes
+     * first: never on another length, then never off the screen, and only then
+     * over a line of the drawing. A crowded length is still better than one that
+     * has vanished or been cut off.
+     */
+    const chosen =
+      candidates.find((c) => onScreen(c.box) && labelsClear(c.box, c.line) && drawingClear(c.box)) ??
+      candidates.find((c) => onScreen(c.box) && labelsClear(c.box, c.line)) ??
+      candidates.find((c) => labelsClear(c.box, c.line)) ??
+      candidates.find((c) => onScreen(c.box)) ??
+      candidates[candidates.length - 1];
+    if (!chosen) continue;
+    takenLabels.push(chosen.box);
+    if (chosen.line) takenLines.push(chosen.line);
+    out.push(chosen.placed);
   }
   return out;
 }
@@ -367,6 +431,82 @@ export function layoutDimensions(items: DimItem[], view: DimView): PlacedDim[] {
 export function fmtLength(cm: number): string {
   const r = Math.round(cm * 10) / 10;
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+/** The widest pour read as one wall - the same limit the fill pairs faces by (FORMWORK.md). */
+const WALL_PAIR_MAX_CM = 120;
+const PARALLEL_SIN = Math.sin(Math.PI / 180);
+/** half a centimetre: the drawing is ruled in fives, so anything less is the same */
+const SAME_CM = 0.5;
+
+/**
+ * One length for the two faces of a wall, when they say the same thing.
+ *
+ * A wall is two drawn lines a pour's thickness apart, and when both show their
+ * length they are the same number twice - the second pushed up onto its own
+ * dimension line because the first took its place, which reads as two
+ * different measurements. So two legs that are parallel, the same length, level
+ * with each other end to end and no further apart than a wall is thick share
+ * one label, set on the outer line so it sits clear of the wall rather than
+ * squeezed between its faces. Where the lengths differ - a corner has shortened
+ * one face - both are kept, because then they are different measurements.
+ */
+export function mergeWallFaces(items: DimItem[]): DimItem[] {
+  const legs = items.filter((i) => i.id.startsWith('sk:'));
+  if (legs.length < 2) return items;
+  const gone = new Set<DimItem>();
+  const merged: DimItem[] = [];
+
+  for (let i = 0; i < legs.length; i++) {
+    const a = legs[i];
+    if (gone.has(a)) continue;
+    const len = legLength(a.a, a.b);
+    if (!len) continue;
+    const u = { x: (a.b.x - a.a.x) / len, y: (a.b.y - a.a.y) / len };
+    // Where a point sits relative to leg a: along it, and square across it.
+    const rel = (p: Point) => ({
+      along: (p.x - a.a.x) * u.x + (p.y - a.a.y) * u.y,
+      across: (p.x - a.a.x) * -u.y + (p.y - a.a.y) * u.x,
+    });
+
+    let partner: { item: DimItem; gap: number } | null = null;
+    for (let j = i + 1; j < legs.length; j++) {
+      const b = legs[j];
+      if (gone.has(b)) continue;
+      const blen = legLength(b.a, b.b);
+      if (Math.abs(blen - len) > SAME_CM) continue;
+      const v = { x: (b.b.x - b.a.x) / blen, y: (b.b.y - b.a.y) / blen };
+      if (Math.abs(u.x * v.y - u.y * v.x) > PARALLEL_SIN) continue;
+      const p = rel(b.a);
+      const q = rel(b.b);
+      const gap = Math.abs(p.across);
+      if (gap < SAME_CM || gap > WALL_PAIR_MAX_CM || Math.abs(p.across - q.across) > SAME_CM) continue;
+      // Level end to end, not merely overlapping: a shorter face beside a
+      // longer one is a different measurement even when it is parallel.
+      if (Math.abs(Math.min(p.along, q.along)) > SAME_CM) continue;
+      if (Math.abs(Math.max(p.along, q.along) - len) > SAME_CM) continue;
+      if (!partner || gap < partner.gap) partner = { item: b, gap };
+    }
+    if (!partner) continue;
+
+    const b = partner.item;
+    gone.add(a);
+    gone.add(b);
+    // The face further out along the side labels go, so the label clears both.
+    const n = outwardNormal(u);
+    const out = (it: DimItem) => ((it.a.x + it.b.x) / 2) * n.x + ((it.a.y + it.b.y) / 2) * n.y;
+    const outer = out(a) >= out(b) ? a : b;
+    merged.push({
+      ...outer,
+      id: `skw:${[a.id, b.id].sort().join('|')}`,
+      owners: [...(a.owners ?? [a.id]), ...(b.owners ?? [b.id])],
+      priority: Math.min(a.priority, b.priority),
+      accent: !!(a.accent || b.accent),
+    });
+  }
+
+  if (!gone.size) return items;
+  return [...items.filter((i) => !gone.has(i)), ...merged];
 }
 
 export interface DimSource {
@@ -409,6 +549,7 @@ export function collectDimItems(src: DimSource): DimItem[] {
       text: [`${fmtLength(legLength(m.a, m.b))} სმ`],
       priority: 0,
       accent: hovered || selected,
+      owners: [`ms:${m.id}`],
     });
   }
 
@@ -425,6 +566,7 @@ export function collectDimItems(src: DimSource): DimItem[] {
         a,
         b,
         text: [`${fmtLength(len)} სმ`],
+        owners: [`sk:${path.id}:${i}`],
         priority: chosen || hovered ? 1 : 2,
         accent: chosen || hovered,
       });
@@ -449,10 +591,20 @@ export function collectDimItems(src: DimSource): DimItem[] {
         a: legs[at][0],
         b: legs[at][1],
         text: [`სულ ${fmtLength(total)} სმ`],
+        owners: [`sk:${path.id}:${at}`],
         priority: 4,
         accent: true,
       });
     }
+  }
+
+  // Two faces of one wall measure the same: say it once. Nothing merged hands
+  // back this very array, so it is only replaced when there is a new one -
+  // emptying it first would empty the copy too.
+  const withWalls = mergeWallFaces(out);
+  if (withWalls !== out) {
+    out.length = 0;
+    out.push(...withWalls);
   }
 
   for (const p of src.pieces) {
@@ -476,6 +628,7 @@ export function collectDimItems(src: DimSource): DimItem[] {
       a: { x: cx - (ux * pw) / 2, y: cy - (uy * pw) / 2 },
       b: { x: cx + (ux * pw) / 2, y: cy + (uy * pw) / 2 },
       text: src.showNames ? [m.name, size] : [size],
+      owners: [`pc:${p.id}`],
       priority: chosen || hovered ? 1 : 3,
       inside: { along: pw, across: ph },
       accent: chosen || hovered,

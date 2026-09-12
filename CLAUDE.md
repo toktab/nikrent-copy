@@ -42,6 +42,7 @@ saved drawing.
 | lengths on the drawing - which show, where, stacking | `src/lib/dimensions.ts`, `src/components/DimensionLayer.tsx` |
 | measure tool (გაზომვა) - snapping helper, saved lines | `src/lib/measure.ts`, `src/components/MeasureLayer.tsx` |
 | drawing export / import file | `src/lib/catalogFile.ts` |
+| fill recommendations - ranked ways to fill a run; the ruleset | `src/lib/fillOptions.ts`, `docs/FILL-RULES.md` |
 | all state, undo, persistence, sync | `src/store/useEditorStore.ts` |
 | the canvas | `src/components/StageCanvas.tsx`, `SketchLayer.tsx` |
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchorFromEdge,
+  collinearRun,
+  suggestionCloseness,
   DEFAULT_MEASURE_STYLE,
   firstPoint,
   magnetToMeasures,
@@ -145,6 +147,50 @@ describe('the snaps while placing a line', () => {
     // Whole steps from the first point (45, -15): -40 across, +5 down.
     expectPoint(r.point, 5, -10);
     expect(firstPoint({ x: 44, y: -14 }, { ...base, helper: false }).via).toBe('free');
+  });
+});
+
+describe('aiming at the start of a wall from well clear of it', () => {
+  // A row of panel edges: 90, 90 and 60, touching end to end.
+  const row: RefEdge[] = [
+    { a: { x: 0, y: 0 }, b: { x: 90, y: 0 }, key: 'pc:1:2' },
+    { a: { x: 90, y: 0 }, b: { x: 180, y: 0 }, key: 'pc:2:2' },
+    { a: { x: 180, y: 0 }, b: { x: 240, y: 0 }, key: 'pc:3:2' },
+  ];
+  const aim = (at: Point) => firstPoint(at, { edges: row, measures: [], zoom: 1, step: 5, helper: true });
+
+  it('lines the point up under the start of the panels, past the ordinary edge reach', () => {
+    const r = aim({ x: 3, y: 102 });
+    expect(r.via).toBe('track');
+    expectPoint(r.point, 0, 100);
+    expectPoint(r.helper!.foot!, 0, 0);
+    expect(r.helper!.edge).toBeTruthy();
+  });
+
+  it('does not line up with an end the pointer is not under', () => {
+    expect(aim({ x: 40, y: 102 }).via).toBe('free');
+  });
+
+  it('joins the panel edges along one line into the whole run', () => {
+    const other: RefEdge = { a: { x: 0, y: 9 }, b: { x: 240, y: 9 }, key: 'pc:x:0' };
+    const run = collinearRun(row[1], [...row, other]);
+    expectPoint(run.a, 0, 0);
+    expectPoint(run.b, 240, 0);
+  });
+
+  it('suggests the far end of the whole wall, not of its first panel', () => {
+    const first = aim({ x: 3, y: 102 }).helper!;
+    const edge = row.find((e) => e.key === first.edgeKey)!;
+    expectPoint(suggestEnd(collinearRun(edge, row), first).point, 240, 100);
+  });
+
+  it('grows greener as the pointer closes in on the suggestion', () => {
+    const suggestion = { point: { x: 240, y: 100 }, foot: null, offsetCm: 0, atEnd: null, edgeKey: null };
+    expect(suggestionCloseness({ x: 240, y: 101 }, suggestion, 1)).toBe(1);
+    const halfway = suggestionCloseness({ x: 240, y: 180 }, suggestion, 1);
+    expect(halfway).toBeGreaterThan(0);
+    expect(halfway).toBeLessThan(1);
+    expect(suggestionCloseness({ x: 240, y: 500 }, suggestion, 1)).toBe(0);
   });
 });
 

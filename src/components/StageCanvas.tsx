@@ -58,6 +58,7 @@ import { ShapeSvg } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
 import { MeasureLayer } from './MeasureLayer';
 import {
+  collinearRun,
   firstPoint,
   freeAnchor,
   measureAt,
@@ -65,6 +66,7 @@ import {
   referenceEdges,
   secondPoint,
   suggestEnd,
+  suggestionCloseness,
   type MeasurePreview,
   type RefEdge,
 } from '../lib/measure';
@@ -197,6 +199,7 @@ export function StageCanvas() {
   const showGaps = useEditorStore((s) => s.showGaps);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const measures = useEditorStore((s) => s.measures);
+  const recommendPreview = useEditorStore((s) => s.recommendPreview);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -861,13 +864,17 @@ export function StageCanvas() {
           suggestion: null,
           onSuggestion: false,
           via: r.via,
+          closeness: 0,
         };
       }
       const edge = first.edgeKey ? edges.find((k) => k.key === first.edgeKey) : undefined;
       // Offered off a wall or a panel, not off another measured line: its far
-      // end is just that line measured over again.
+      // end is just that line measured over again. And off the whole straight
+      // run the edge belongs to - the end of the wall, not of its first panel.
       const suggestion =
-        helper && edge && !edge.key.startsWith('ms:') ? suggestEnd(edge, first) : null;
+        helper && edge && !edge.key.startsWith('ms:')
+          ? suggestEnd(collinearRun(edge, edges), first)
+          : null;
       const r = secondPoint(at, {
         first: first.point,
         firstEdge: edge ?? null,
@@ -885,6 +892,7 @@ export function StageCanvas() {
         suggestion,
         onSuggestion: r.via === 'suggestion',
         via: r.via,
+        closeness: suggestionCloseness(at, suggestion, s.zoom),
       };
     },
     [worldAt],
@@ -1297,6 +1305,34 @@ export function StageCanvas() {
             />
           );
         })}
+
+        {/* A recommendation being looked at, faint and untouchable: it is not
+            on the drawing until it is applied. */}
+        {!elevation &&
+          recommendPreview?.map((piece) => {
+            const material = byId.get(piece.materialId);
+            if (!material) return null;
+            return (
+              <div
+                key={`preview-${piece.id}`}
+                className="piece preview-piece"
+                style={{
+                  left: piece.x,
+                  top: piece.y,
+                  width: planW(material),
+                  height: planH(material),
+                  transform: `rotate(${piece.rot}deg)`,
+                }}
+              >
+                <ShapeSvg
+                  material={material}
+                  width={planW(material)}
+                  height={planH(material)}
+                  strokeWidth={1 / zoom}
+                />
+              </div>
+            );
+          })}
 
         {/* Measured lines over the work, not under it: a check dimension is
             read across the panels it measures. */}

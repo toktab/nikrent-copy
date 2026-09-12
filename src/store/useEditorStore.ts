@@ -52,6 +52,7 @@ import {
   type SketchFillSpec,
 } from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
+import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import {
   isElevation,
   projectPiece,
@@ -297,6 +298,11 @@ export interface EditorState {
   guideY: number | null;
   /** material being dragged in from the palette, for the drop preview */
   draggingMaterialId: string | null;
+  /**
+   * Pieces a recommendation would place, drawn faint on the surface while it is
+   * being looked at. Never part of the drawing, its history or what is saved.
+   */
+  recommendPreview: Piece[] | null;
 
   // ── actions: data ──
   /** Replace all company data with what the server holds. */
@@ -480,6 +486,7 @@ export interface EditorState {
   openDialog: (dialog: DialogState) => void;
   closeDialog: () => void;
   setToast: (message: string | null) => void;
+  setRecommendPreview: (pieces: Piece[] | null) => void;
 
   // ── actions: the drawn layout ──
   /** Pick up the pen. The second argument also sets which face it draws. */
@@ -555,6 +562,19 @@ export interface EditorState {
    * up by hand to know what to order.
    */
   fillSketch: (pathIds: string[], spec: SketchFillSpec) => { added: number; warnings: string[] };
+  /**
+   * Fill with recommendations picked per run (`FillPlan.runs[].key`), as one
+   * undo step.
+   *
+   * Every run in one fill stands the same courses, so the first pick's stack is
+   * the job's; a pick for a course height the job does not stand is ignored and
+   * that run is filled the usual way, as is any run with no pick at all.
+   */
+  applyFillVariants: (
+    pathIds: string[],
+    spec: SketchFillSpec,
+    picks: Array<{ runKey: string; variant: Variant }>,
+  ) => { added: number; warnings: string[] };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -771,6 +791,7 @@ export const useEditorStore = create<EditorState>()(
         guideX: null,
         guideY: null,
         draggingMaterialId: null,
+        recommendPreview: null,
 
         // ── data ──────────────────────────────────────────────────────────
         /**
@@ -1825,6 +1846,8 @@ export const useEditorStore = create<EditorState>()(
         openDialog: (dialog) => set({ dialog }),
         closeDialog: () => set({ dialog: null }),
         setToast: (message) => set({ toast: message }),
+        // Plain set: a preview is looked at, not drawn, so it takes no undo step.
+        setRecommendPreview: (pieces) => set({ recommendPreview: pieces }),
 
         // ── the drawn layout ────────────────────────────────────────────────
         setTool: (tool, perimeter) =>
@@ -1930,6 +1953,17 @@ export const useEditorStore = create<EditorState>()(
             }));
           }
           return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        applyFillVariants: (pathIds, spec, picks) => {
+          const choices: NonNullable<SketchFillSpec['choices']> = {};
+          let stack: number[] | undefined;
+          for (const { runKey, variant } of picks) {
+            const choice = choiceFromVariant(variant);
+            stack ??= choice.stack;
+            choices[runKey] = choice.sequences;
+          }
+          return get().fillSketch(pathIds, { ...spec, stack, choices });
         },
 
         dragSketchAll: (dx, dy, baselines) =>

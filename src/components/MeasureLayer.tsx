@@ -167,9 +167,40 @@ function Guides({
   const parts: ReactNode[] = [];
 
   if (!first) {
-    // First picture: how far off the edge the click would land, before it lands.
-    if (preview.helper) parts.push(<Perpendicular key="h" anchor={preview.helper} hair={hair} color={focusColor} dash={dash} />);
-    parts.push(<Cross key="x" at={preview.point} hair={hair} color={focusColor} />);
+    // First picture: what the helper has found - the edge lit up, a ring on
+    // the corner when it is lined up with one - and how far off it the click
+    // would land, before it lands.
+    const found = preview.helper;
+    if (found?.edge) {
+      parts.push(
+        <line
+          key="e"
+          x1={found.edge.a.x}
+          y1={found.edge.a.y}
+          x2={found.edge.b.x}
+          y2={found.edge.b.y}
+          stroke={SUGGEST}
+          strokeOpacity={0.55}
+          strokeWidth={hair * 4}
+          strokeLinecap="round"
+        />,
+      );
+    }
+    if (found?.foot && found.atEnd) {
+      parts.push(
+        <circle
+          key="r"
+          cx={found.foot.x}
+          cy={found.foot.y}
+          r={hair * 6}
+          fill="none"
+          stroke={SUGGEST}
+          strokeWidth={hair * 1.6}
+        />,
+      );
+    }
+    if (found) parts.push(<Perpendicular key="h" anchor={found} hair={hair} color={focusColor} dash={dash} />);
+    parts.push(<Cross key="x" at={preview.point} hair={hair} color={found ? SUGGEST : focusColor} />);
     return <g>{parts}</g>;
   }
 
@@ -177,28 +208,47 @@ function Guides({
   // line as it would be if the click came now.
   if (first.foot) parts.push(<Perpendicular key="f" anchor={first} hair={hair} color={SUGGEST} dash={dash} />);
 
+  // The suggested end, faint far away and greener the nearer the pointer gets:
+  // the hand can see it is homing in. Taken, it is solid, square filled.
   const s = preview.suggestion;
-  if (s && !preview.onSuggestion) {
+  if (s) {
+    const strength = preview.onSuggestion ? 1 : 0.3 + 0.7 * preview.closeness;
+    const size = hair * (5 + 3 * strength);
     parts.push(
-      <g key="s" opacity={0.45}>
-        <line
-          x1={first.point.x}
-          y1={first.point.y}
-          x2={s.point.x}
-          y2={s.point.y}
-          stroke={SUGGEST}
-          strokeWidth={hair}
-          strokeDasharray={dash}
-        />
+      <g key="s" opacity={strength}>
+        {s.edge && (
+          <line
+            x1={s.edge.a.x}
+            y1={s.edge.a.y}
+            x2={s.edge.b.x}
+            y2={s.edge.b.y}
+            stroke={SUGGEST}
+            strokeOpacity={0.35}
+            strokeWidth={hair * 3}
+            strokeLinecap="round"
+          />
+        )}
+        {!preview.onSuggestion && (
+          <line
+            x1={first.point.x}
+            y1={first.point.y}
+            x2={s.point.x}
+            y2={s.point.y}
+            stroke={SUGGEST}
+            strokeWidth={hair * (1 + strength)}
+            strokeDasharray={dash}
+          />
+        )}
         <Perpendicular anchor={s} hair={hair} color={SUGGEST} dash={dash} />
         <rect
-          x={s.point.x - hair * 2.5}
-          y={s.point.y - hair * 2.5}
-          width={hair * 5}
-          height={hair * 5}
-          fill="none"
+          x={s.point.x - size / 2}
+          y={s.point.y - size / 2}
+          width={size}
+          height={size}
+          fill={preview.onSuggestion ? SUGGEST : 'none'}
+          fillOpacity={0.6}
           stroke={SUGGEST}
-          strokeWidth={hair}
+          strokeWidth={hair * (1 + strength)}
         />
       </g>,
     );
@@ -225,8 +275,8 @@ function Guides({
       y1={first.point.y}
       x2={preview.point.x}
       y2={preview.point.y}
-      stroke={LIVE}
-      strokeWidth={hair * 1.3}
+      stroke={preview.onSuggestion ? SUGGEST : LIVE}
+      strokeWidth={hair * (preview.onSuggestion ? 2 : 1.3)}
     />,
   );
   if (len > 0) {
@@ -239,11 +289,11 @@ function Guides({
         fontSize={hair * 8}
         textAnchor="middle"
       >
-        {fmtLength(len)} სმ
+        {fmtLength(len)} სმ{preview.onSuggestion ? ' ✓' : ''}
       </text>,
     );
   }
-  parts.push(<Cross key="x" at={preview.point} hair={hair} color={LIVE} />);
+  parts.push(<Cross key="x" at={preview.point} hair={hair} color={preview.onSuggestion ? SUGGEST : LIVE} />);
   return <g>{parts}</g>;
 }
 

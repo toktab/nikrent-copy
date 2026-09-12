@@ -166,6 +166,8 @@ export interface MeasureAnchor {
   /** snapped onto one of the edge's own ends */
   atEnd: 'a' | 'b' | null;
   edgeKey: string | null;
+  /** the edge it was found off, to light it up while aiming */
+  edge?: { a: Point; b: Point } | null;
 }
 
 export const freeAnchor = (point: Point): MeasureAnchor => ({
@@ -219,6 +221,7 @@ export function anchorFromEdge(
     offsetCm,
     atEnd,
     edgeKey: edge.key,
+    edge: { a: edge.a, b: edge.b },
   };
 }
 
@@ -228,17 +231,14 @@ export function anchorFromEdge(
  */
 export function suggestEnd(edge: RefEdge, first: MeasureAnchor): MeasureAnchor {
   const { n } = frame(edge);
-  let end: 'a' | 'b';
-  if (first.atEnd === 'a') end = 'b';
-  else if (first.atEnd === 'b') end = 'a';
-  else {
-    const from = first.foot ?? first.point;
-    end =
-      Math.hypot(edge.a.x - from.x, edge.a.y - from.y) >
-      Math.hypot(edge.b.x - from.x, edge.b.y - from.y)
-        ? 'a'
-        : 'b';
-  }
+  // The end further from where the first point stands. Measured, not read off
+  // `atEnd`, because the edge offered here may be a whole run the first point's
+  // own short edge is only part of - see `collinearRun`.
+  const from = first.foot ?? first.point;
+  const toA = Math.hypot(edge.a.x - from.x, edge.a.y - from.y);
+  const toB = Math.hypot(edge.b.x - from.x, edge.b.y - from.y);
+  let end: 'a' | 'b' = toA > toB ? 'a' : 'b';
+  if (Math.abs(toA - toB) < 0.01 && first.atEnd) end = first.atEnd === 'a' ? 'b' : 'a';
   const foot = end === 'a' ? edge.a : edge.b;
   return {
     point: { x: foot.x + n.x * first.offsetCm, y: foot.y + n.y * first.offsetCm },
@@ -246,6 +246,7 @@ export function suggestEnd(edge: RefEdge, first: MeasureAnchor): MeasureAnchor {
     offsetCm: first.offsetCm,
     atEnd: end,
     edgeKey: edge.key,
+    edge: { a: edge.a, b: edge.b },
   };
 }
 
@@ -265,6 +266,14 @@ const SUGGESTION = { px: 24, cm: 10 };
 const VERTEX = { px: 10, cm: 2 };
 const PARALLEL = { px: 14, cm: 5 };
 const MAGNET = { px: 18, cm: 5 };
+/**
+ * Lining up with an end from further away: how far off the end's own
+ * perpendicular the pointer may be, and how far out along it the end still
+ * counts. The long reach is what lets a check line held a metre below a wall
+ * still start exactly under the wall's first corner.
+ */
+const TRACK = { px: 12, cm: 3 };
+const TRACK_REACH = { px: 300, cm: 300 };
 /** nearly level or nearly plumb is meant to be level or plumb */
 const AXIS_PX = 8;
 const ANGLE_LOCK_DEG = 15;
@@ -306,7 +315,14 @@ export function magnetToMeasures(
       const d = Math.hypot(at.x - p.x, at.y - p.y);
       if (d <= bestD) {
         bestD = d;
-        best = { point: { ...p }, foot: { ...p }, offsetCm: 0, atEnd: end, edgeKey: `ms:${m.id}` };
+        best = {
+          point: { ...p },
+          foot: { ...p },
+          offsetCm: 0,
+          atEnd: end,
+          edgeKey: `ms:${m.id}`,
+          edge: { a: m.a, b: m.b },
+        };
       }
     }
   }
@@ -316,13 +332,137 @@ export function magnetToMeasures(
     const d = Math.hypot(at.x - foot.x, at.y - foot.y);
     if (d <= bestD) {
       bestD = d;
-      best = { point: foot, foot, offsetCm: 0, atEnd: null, edgeKey: `ms:${m.id}` };
+      best = {
+        point: foot,
+        foot,
+        offsetCm: 0,
+        atEnd: null,
+        edgeKey: `ms:${m.id}`,
+        edge: { a: m.a, b: m.b },
+      };
     }
   }
   return best;
 }
 
-export type SnapVia = 'lock' | 'suggestion' | 'magnet' | 'vertex' | 'parallel' | 'edge' | 'free';
+export type SnapVia =
+  | 'lock'
+  | 'suggestion'
+  | 'magnet'
+  | 'vertex'
+  | 'parallel'
+  | 'edge'
+  | 'track'
+  | 'free';
+
+/**
+ * The pointer lined up with the end of an edge, however far out: the point
+ * squares up exactly under (or beside) that end, a whole number of steps off.
+ *
+ * The edge reach finds a wall when the pointer is near it. This finds the wall
+ * when the pointer is far from it but plainly aiming at where it starts - which
+ * is how a check line is usually held, well clear of the panels it measures.
+ */
+export function trackEnds(
+  edges: RefEdge[],
+  at: Point,
+  opts: { zoom: number; step: number },
+): MeasureAnchor | null {
+  const tolerance = reach(TRACK.px, TRACK.cm, opts.zoom);
+  const far = reach(TRACK_REACH.px, TRACK_REACH.cm, opts.zoom);
+  let best: { anchor: MeasureAnchor; sideways: number; out: number } | null = null;
+  for (const edge of edges) {
+    if (edge.key.startsWith('ms:') || !legLength(edge.a, edge.b)) continue;
+    const { u, n } = frame(edge);
+    for (const [end, p] of [
+      ['a', edge.a],
+      ['b', edge.b],
+    ] as const) {
+      const rx = at.x - p.x;
+      const ry = at.y - p.y;
+      const out = rx * n.x + ry * n.y;
+      const sideways = Math.abs(rx * u.x + ry * u.y);
+      if (sideways > tolerance || Math.abs(out) < 0.5 || Math.abs(out) > far) continue;
+      if (best && (sideways > best.sideways + 0.01 || (Math.abs(sideways - best.sideways) <= 0.01 && Math.abs(out) >= best.out))) {
+        continue;
+      }
+      const offsetCm = roundTo(out, opts.step);
+      best = {
+        sideways,
+        out: Math.abs(out),
+        anchor: {
+          point: { x: p.x + n.x * offsetCm, y: p.y + n.y * offsetCm },
+          foot: { ...p },
+          offsetCm,
+          atEnd: end,
+          edgeKey: edge.key,
+          edge: { a: edge.a, b: edge.b },
+        },
+      };
+    }
+  }
+  return best?.anchor ?? null;
+}
+
+/**
+ * The whole straight run an edge is part of: every edge lying on the same line
+ * and touching end to end, joined into one - kept in the first edge's own
+ * direction, so an offset measured off it keeps its sign.
+ *
+ * A wall of panels is a row of short edges, one per panel. The end worth
+ * suggesting is the end of the wall, not the far corner of the first panel.
+ */
+export function collinearRun(edge: RefEdge, edges: RefEdge[]): RefEdge {
+  const len = legLength(edge.a, edge.b);
+  if (!len) return edge;
+  const { u, n } = frame(edge);
+  const across = (p: Point) => (p.x - edge.a.x) * n.x + (p.y - edge.a.y) * n.y;
+  const along = (p: Point) => (p.x - edge.a.x) * u.x + (p.y - edge.a.y) * u.y;
+  const spans = edges
+    .filter((e) => {
+      if (e.key.startsWith('ms:')) return false;
+      const l = legLength(e.a, e.b);
+      if (!l) return false;
+      const ex = (e.b.x - e.a.x) / l;
+      const ey = (e.b.y - e.a.y) / l;
+      return (
+        Math.abs(u.x * ey - u.y * ex) <= PARALLEL_SIN &&
+        Math.abs(across(e.a)) <= 0.5 &&
+        Math.abs(across(e.b)) <= 0.5
+      );
+    })
+    .map((e) => [Math.min(along(e.a), along(e.b)), Math.max(along(e.a), along(e.b))] as const);
+
+  let lo = 0;
+  let hi = len;
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [a, b] of spans) {
+      if (a <= hi + 0.5 && b >= lo - 0.5 && (a < lo - 0.01 || b > hi + 0.01)) {
+        lo = Math.min(lo, a);
+        hi = Math.max(hi, b);
+        grew = true;
+      }
+    }
+  }
+  return {
+    a: { x: edge.a.x + u.x * lo, y: edge.a.y + u.y * lo },
+    b: { x: edge.a.x + u.x * hi, y: edge.a.y + u.y * hi },
+    key: edge.key,
+  };
+}
+
+/**
+ * How close the pointer is to taking the suggested end: 1 inside its snap,
+ * falling to 0 some way out. The suggestion is drawn stronger as this rises,
+ * so the hand can see it is homing in before the snap happens.
+ */
+export function suggestionCloseness(at: Point, suggestion: MeasureAnchor | null, zoom: number): number {
+  if (!suggestion) return 0;
+  const d = Math.hypot(at.x - suggestion.point.x, at.y - suggestion.point.y);
+  const snap = reach(SUGGESTION.px, SUGGESTION.cm, zoom);
+  return Math.max(0, Math.min(1, 1 - (d - snap) / (snap * 6)));
+}
 
 /** Where the first click would land. */
 export function firstPoint(
@@ -344,6 +484,10 @@ export function firstPoint(
     });
     return { point: helper.point, helper, via: 'edge' };
   }
+
+  const tracked = trackEnds(ctx.edges, at, { zoom, step });
+  if (tracked) return { point: tracked.point, helper: tracked, via: 'track' };
+
   return { point: grid, helper: null, via: 'free' };
 }
 
@@ -439,6 +583,9 @@ export function secondPoint(
     return { point: helper.point, via: 'edge', helper };
   }
 
+  const tracked = trackEnds(edges, at, { zoom, step });
+  if (tracked) return { point: tracked.point, via: 'track', helper: tracked };
+
   return { point: roundFrom(first, at, step, AXIS_PX / zoom), via: 'free', helper: null };
 }
 
@@ -449,6 +596,8 @@ export interface MeasurePreview {
   suggestion: MeasureAnchor | null;
   onSuggestion: boolean;
   via: SnapVia;
+  /** 0..1, how near the pointer is to taking the suggestion - see `suggestionCloseness` */
+  closeness: number;
 }
 
 // ── reading saved lines ─────────────────────────────────────────────────────

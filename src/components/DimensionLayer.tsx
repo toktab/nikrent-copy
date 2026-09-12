@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { collectDimItems, layoutDimensions, type PlacedDim } from '../lib/dimensions';
+import { referenceEdges } from '../lib/measure';
 import type { Point } from '../lib/sketch';
 
 /**
@@ -79,13 +80,36 @@ export function DimensionLayer({ hoverLeg, hoverPieceId = null, hoverMeasureId =
     ],
   );
 
+  /**
+   * Every edge on the drawing, so a length can see what is around it: which
+   * side has room, and what it must not be written over. A piece's four edges
+   * all belong to that piece, so its own label ignores them.
+   */
+  const obstacles = useMemo(
+    () =>
+      referenceEdges(showSketch ? sketch : [], pieces, byId, measures).map((e) => ({
+        a: e.a,
+        b: e.b,
+        owner: e.key.startsWith('pc:') ? e.key.slice(0, e.key.lastIndexOf(':')) : e.key,
+      })),
+    [showSketch, sketch, pieces, byId, measures],
+  );
+
   const placed = useMemo(
     // Genuinely too dense to read: bail out unless the user forces labels on.
     () =>
       zoom < 0.12 && !forceLabels
         ? []
-        : layoutDimensions(items, { zoom, panX, panY, stageW, stageH, force: forceLabels }),
-    [items, zoom, panX, panY, stageW, stageH, forceLabels],
+        : layoutDimensions(items, {
+            zoom,
+            panX,
+            panY,
+            stageW,
+            stageH,
+            force: forceLabels,
+            obstacles,
+          }),
+    [items, zoom, panX, panY, stageW, stageH, forceLabels, obstacles],
   );
 
   const stepped = placed.filter((p) => p.dimLine);

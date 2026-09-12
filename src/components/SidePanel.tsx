@@ -4,6 +4,7 @@ import { buildBom } from '../lib/bom';
 import { DetailsPanel } from './DetailsPanel';
 import { BomPanel } from './BomPanel';
 import { InventoryPanel } from './InventoryPanel';
+import { RecommendPanel } from './RecommendPanel';
 import { Icon } from './Icon';
 
 /** Right-hand inspector with the three working views. */
@@ -18,7 +19,8 @@ export function SidePanel() {
   const setInspectorOpen = useEditorStore((s) => s.setInspectorOpen);
 
   return (
-    <aside className="inspector">
+    // Wider for recommendations: a card carries a strip of the whole run.
+    <aside className={`inspector${tab === 'recommend' ? ' wide' : ''}`}>
       <div className="panel-head">
         <button
           className="btn icon ghost small"
@@ -56,12 +58,21 @@ export function SidePanel() {
           მარაგი
           {shortages > 0 && <span className="tab-badge">{shortages}</span>}
         </button>
+        <button
+          className={tab === 'recommend' ? 'tab active' : 'tab'}
+          role="tab"
+          aria-selected={tab === 'recommend'}
+          onClick={() => setTab('recommend')}
+        >
+          რეკომენდაცია
+        </button>
       </div>
 
       <div className="tab-body">
         {tab === 'details' && <DetailsPanel />}
         {tab === 'bom' && <BomPanel />}
         {tab === 'inventory' && <InventoryPanel />}
+        {tab === 'recommend' && <RecommendPanel />}
       </div>
     </aside>
   );
