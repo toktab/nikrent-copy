@@ -321,7 +321,7 @@ export function offsetPath(path: SketchPath, dist: number): Point[] {
  * other face of the same wall: set both faces back by the same amount and the
  * same panels serve either side of the pour.
  */
-const OUTER_CORNER_GAP = 20;
+export const OUTER_CORNER_GAP = 20;
 
 /**
  * The inner corner profile at one course height, and how much face it covers.
@@ -418,7 +418,7 @@ interface FaceRun {
  * between them, not a pour. Two looking at each other across sixty centimetres
  * are a wall, or a column, and either way they are built as a pair.
  */
-const MAX_WALL_CM = 120;
+export const MAX_WALL_CM = 120;
 
 /**
  * How far apart two faces can be and still be read as facing each other.

@@ -133,7 +133,7 @@ filter gives the second.)
 | spare 90s (`spare90`) | penalty per 90, so variants with the same piece count but fewer 90s rise |
 | exclude widths (`excludeWidths`) | those widths are not used at all |
 | max fillers (`maxFillers`) | 0 to 3 per course |
-| stock (`useStock`) | a variant needing more than is free sinks below every one that fits |
+| stock (`useStock`) | a variant needing more than is free sinks below every one that fits; free = stock minus what the **open drawing** already uses, the same figure as the ნაშთი tab (other drawings are the architect's call) |
 | sort (`sort`) | `pieces` (default), `fillers`, or `scarce` (spare what other drawings need) |
 
 ## Learning loop

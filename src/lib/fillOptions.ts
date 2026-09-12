@@ -1,6 +1,6 @@
-import type { DrawingDoc, Material } from '../types';
+import type { Material, Piece } from '../types';
 import { coverExact, optionsAt, panelHeights, type PanelOption } from './formwork';
-import { available, commitmentsByMaterial, totalStock } from './inventory';
+import { totalStock } from './inventory';
 
 /**
  * Every sensible way to fill one run with panels and ჩაკერება, ranked.
@@ -125,7 +125,7 @@ export interface FillRequest {
   materials: Material[];
   /** materialId → how many are free to take; see `freeStock` */
   free?: Map<string, number>;
-  /** materialId → how much of it the company has already committed (0..1+) */
+  /** materialId → how much of it the open drawing already uses (0..1+); see `stockPressure` */
   pressure?: Map<string, number>;
   filters?: Partial<FillFilters>;
   /** how many variants to return */
@@ -567,24 +567,38 @@ export function choiceFromVariant(variant: Variant): {
 
 // ── stock, from the drawings ────────────────────────────────────────────────
 
-/** How many of each material is free: owned, minus what every drawing has already placed. */
-export function freeStock(materials: Material[], documents: DrawingDoc[]): Map<string, number> {
-  const commitments = commitmentsByMaterial(documents, '');
-  return new Map(materials.map((m) => [m.id, Math.max(0, available(m, commitments.get(m.id)))]));
+/**
+ * How many of each material is free for this drawing: owned, minus what the
+ * open drawing already has placed.
+ *
+ * The open drawing only - the same figure the ნაშთი sheet shows. Which job gets
+ * the last 90s when several run at once is decided by a person, not by quietly
+ * ranking one drawing's answers against another drawing's placements.
+ */
+export function freeStock(materials: Material[], pieces: Piece[]): Map<string, number> {
+  const used = countByMaterial(pieces);
+  return new Map(
+    materials.map((m) => [m.id, Math.max(0, totalStock(m) - (used.get(m.id) ?? 0))]),
+  );
 }
 
 /**
- * How spoken-for each material already is across the company: committed over
- * owned. 0 is untouched, 1 is all of it placed somewhere, above 1 is short.
- * Materials nobody owns any of count as fully pressed, so they are spared.
+ * How spoken-for each material already is by this drawing: placed over owned.
+ * 0 is untouched, 1 is all of it used here, above 1 is short. Materials nobody
+ * owns any of count as fully pressed, so they are spared.
  */
-export function stockPressure(materials: Material[], documents: DrawingDoc[]): Map<string, number> {
-  const commitments = commitmentsByMaterial(documents, '');
+export function stockPressure(materials: Material[], pieces: Piece[]): Map<string, number> {
+  const used = countByMaterial(pieces);
   return new Map(
     materials.map((m) => {
       const owned = totalStock(m);
-      const committed = commitments.get(m.id)?.committed ?? 0;
-      return [m.id, owned > 0 ? committed / owned : 1];
+      return [m.id, owned > 0 ? (used.get(m.id) ?? 0) / owned : 1];
     }),
   );
+}
+
+function countByMaterial(pieces: Piece[]): Map<string, number> {
+  const used = new Map<string, number>();
+  for (const p of pieces) used.set(p.materialId, (used.get(p.materialId) ?? 0) + 1);
+  return used;
 }

@@ -1853,9 +1853,6 @@ input.stock-input.bad {
 
 /* Fill recommendations: ranked cards in the side panel, and their faint preview
    on the drawing. */
-.inspector.wide {
-  width: 380px;
-}
 .preview-piece {
   pointer-events: none;
   opacity: 0.5;
@@ -2180,20 +2177,28 @@ input.stock-input.bad {
   flex-direction: column;
   min-height: 0;
 }
+/* Five tabs no longer fit 300px at their natural width; rather than squeeze a
+   label into a clipped fragment, the row scrolls sideways when it must. */
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--panel);
   flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 .tab {
-  flex: 1;
+  flex: 1 0 auto;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-tertiary);
   font-family: inherit;
   font-size: 12.5px;
-  padding: 12px 4px;
+  padding: 12px 6px;
+  white-space: nowrap;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3248,6 +3253,73 @@ input.stock-input.bad {
 }
 .inv-table .stock-input {
   width: 52px;
+}
+
+/* ── აწყობის შემოწმება: a leg's pieces against its length ── */
+.length-check {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.lc-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+.lc-bad {
+  color: var(--shortage);
+  font-weight: 600;
+}
+.lc-course {
+  color: var(--muted);
+  font-size: 10.5px;
+  margin: 6px 0 2px;
+}
+.lc-face {
+  border-left: 2px solid var(--ok);
+  padding: 4px 0 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lc-face.bad {
+  border-left-color: var(--shortage);
+  background: rgba(253, 131, 88, 0.07);
+}
+.lc-face.compact {
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lc-parts {
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+.lc-result {
+  font-weight: 600;
+}
+.lc-face.ok .lc-result {
+  color: var(--ok);
+}
+.lc-face.bad .lc-result {
+  color: var(--shortage);
+}
+.lc-note {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.rec-check {
+  color: var(--ok);
+  font-size: 10.5px;
+  font-weight: 600;
 }
 .link-name {
   background: none;
@@ -4609,5 +4681,347 @@ kbd {
   .sync-banner-actions,
   .offline-when {
     margin-left: 0;
+  }
+}
+
+/* ── Inspector: size and type scale ──────────────────────────────────────────
+   The right-hand panel is read, not glanced at - recommendation cards, a stock
+   table, a leg-by-leg length check - and at 300px with 12px text the labels
+   clipped and the tables were cramped. One width for every tab (recommendations
+   used to widen the panel on their own) and a type scale a notch up. Kept last
+   so it wins over the per-rule defaults and the breakpoints above. */
+.inspector {
+  width: 420px;
+}
+@media (max-width: 1280px) {
+  .inspector {
+    width: 380px;
+  }
+}
+@media (max-width: 1024px) {
+  .inspector {
+    width: 340px;
+  }
+}
+@media (max-width: 820px) {
+  .inspector {
+    width: 380px;
+    max-width: 92vw;
+  }
+}
+.inspector .tab {
+  font-size: 13.5px;
+  padding: 13px 10px;
+}
+.inspector .tab-badge {
+  font-size: 11px;
+}
+.inspector .tab-body {
+  font-size: 13.5px;
+  padding: 14px 16px;
+}
+.inspector .kv {
+  padding: 7px 0;
+}
+/* A long label beside a long value wraps instead of pushing the value out. */
+.inspector .kv .k {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.inspector .rot-field input[type='number'] {
+  width: 68px;
+  padding: 4px 6px;
+}
+.inspector .hint-note {
+  font-size: 12.5px;
+}
+.inspector .empty {
+  font-size: 13.5px;
+}
+.inspector .check-row {
+  font-size: 13px;
+}
+.inspector .section {
+  margin-top: 8px;
+}
+.inspector .section-title {
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.inspector .section-title:first-child {
+  margin-top: 0;
+}
+
+/* stat tiles and tables */
+.inspector .sc-item span {
+  font-size: 12px;
+}
+.inspector .sc-item b {
+  font-size: 20px;
+}
+.inspector .bom-cat,
+.inspector .bom-cat b {
+  font-size: 13px;
+}
+.inspector .bom-table {
+  font-size: 13px;
+}
+.inspector .bom-table th {
+  font-size: 11.5px;
+  padding: 4px 6px;
+}
+.inspector .bom-table td {
+  padding: 6px;
+}
+.inspector .bom-size {
+  font-size: 11.5px;
+}
+.inspector .search {
+  font-size: 13.5px;
+}
+.inspector .inv-table .stock-input {
+  width: 64px;
+}
+
+/* recommendations */
+.inspector .rec-chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  font-size: 13px;
+}
+.inspector .rec-select {
+  height: 30px;
+  font-size: 13px;
+}
+.inspector .rec-controls .field {
+  width: 130px;
+}
+.inspector .rec-run-head {
+  font-size: 14px;
+}
+.inspector .rec-card {
+  padding: 10px 12px;
+}
+.inspector .rec-card-top {
+  font-size: 13px;
+}
+.inspector .rec-strip {
+  height: 26px;
+}
+.inspector .rec-strip span {
+  font-size: 11.5px;
+}
+.inspector .rec-summary {
+  font-size: 14px;
+}
+.inspector .rec-check,
+.inspector .rec-reasons {
+  font-size: 12.5px;
+}
+
+/* length check */
+.inspector .lc-course,
+.inspector .lc-note {
+  font-size: 12.5px;
+}
+.inspector .lc-parts {
+  font-size: 13.5px;
+}
+
+/* ── ნაშთი: the top-bar button and its window ──────────────────────────────── */
+.remaining-btn {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+/* Short in the yard: the shortage hue on the button itself, seen from any view. */
+.remaining-btn.short {
+  border-color: rgba(253, 131, 88, 0.5);
+  color: var(--shortage);
+}
+.rem {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13.5px;
+}
+.rem-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.rem-tile {
+  background: var(--well);
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  padding: 12px 14px;
+}
+.rem-tile span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.rem-tile b {
+  display: block;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.rem-tile small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.rem-tile.good b {
+  color: var(--ok);
+}
+.rem-tile.warn {
+  background: rgba(253, 131, 88, 0.09);
+  border-color: rgba(253, 131, 88, 0.42);
+}
+.rem-tile.warn b {
+  color: var(--shortage);
+}
+.rem-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rem-bar .search {
+  flex: 1 1 160px;
+  width: auto;
+}
+.rem-seg-count {
+  margin-left: 4px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+/* Admin mode is a different kind of window - say so with more than a toggle. */
+.rem-admin {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: rgba(112, 166, 245, 0.1);
+  border: 1px solid rgba(112, 166, 245, 0.35);
+  font-size: 12.5px;
+}
+.rem-admin .grow {
+  flex: 1 1 200px;
+  color: var(--muted);
+}
+.rem-bulk {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.rem-bulk input {
+  width: 80px;
+}
+.rem-table-wrap {
+  overflow-x: auto;
+}
+.rem-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+/* The header stays put while a long catalog scrolls under it; -20px is the
+   modal body's own padding, so it sticks to the very top edge. */
+.rem-table th {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  background: var(--panel);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.rem-table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(58, 66, 76, 0.5);
+  vertical-align: middle;
+}
+.rem-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rem-table tr.short td {
+  background: rgba(253, 131, 88, 0.07);
+}
+.rem-cat td {
+  padding: 16px 8px 6px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.rem-cat .catdot {
+  margin-right: 8px;
+}
+.rem-cat-count {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.rem-name {
+  display: block;
+  font-weight: 500;
+}
+.rem-size {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rem-dim,
+.rem-left.dim {
+  color: var(--text-tertiary);
+}
+.rem-left.short {
+  color: var(--shortage);
+  font-weight: 650;
+}
+.rem-stock-input {
+  width: 84px;
+  text-align: right;
+}
+.rem-meter-head,
+.rem-meter {
+  width: 120px;
+}
+.rem-meter i {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--well);
+  overflow: hidden;
+}
+.rem-meter i b {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ok);
+}
+.rem-meter.tight i b {
+  background: var(--warn);
+}
+.rem-meter.over i b {
+  background: var(--shortage);
+}
+@media (max-width: 760px) {
+  .rem-tiles {
+    grid-template-columns: 1fr;
+  }
+  .rem-meter-head,
+  .rem-meter {
+    display: none;
   }
 }

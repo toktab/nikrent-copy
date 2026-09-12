@@ -12,7 +12,7 @@ export type Shape = 'rect' | 'L' | 'line';
 export type HiddenLineMode = 'hide' | 'dashed' | 'show';
 
 /** The inspector's three working views. */
-export type InspectorTab = 'details' | 'bom' | 'inventory' | 'recommend';
+export type InspectorTab = 'recommend' | 'bom' | 'inventory';
 
 /**
  * Stock is held per warehouse: `{ [warehouseId]: quantity }`. Companies that
@@ -265,6 +265,7 @@ export type DialogState =
   | { kind: 'errors' }
   | { kind: 'password' }
   | { kind: 'display-settings' }
+  | { kind: 'remaining' }
   | {
       kind: 'confirm';
       title: string;

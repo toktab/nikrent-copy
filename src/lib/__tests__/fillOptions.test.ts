@@ -12,7 +12,6 @@ import {
 } from '../fillOptions';
 import { coverExact } from '../formwork';
 import { createSeedMaterials } from '../../data/seedCatalog';
-import type { DrawingDoc } from '../../types';
 
 /**
  * The rules in docs/FILL-RULES.md, as examples. A failure here means either the
@@ -180,21 +179,14 @@ describe('stock', () => {
     expect(widths(fill(510, { free, filters: { useStock: false } }).variants[0])).toBe('90 90 90 90 90 60');
   });
 
-  it('works out free stock and pressure from every drawing', () => {
+  it('works out free stock and pressure from the open drawing', () => {
     const owned = materials.map((m) => (m.id === 'panel-90x300' ? { ...m, stock: { main: 10 } } : m));
-    const doc: DrawingDoc = {
-      id: 'd',
-      name: 'd',
-      updatedAt: 1,
-      projectName: '',
-      revision: 'A',
-      scale: 50,
-      pieces: Array.from({ length: 4 }, (_, i) => ({ id: `p${i}`, materialId: 'panel-90x300', x: 0, y: 0, rot: 0 })),
-      sketch: [],
-      measures: [],
-    };
-    expect(freeStock(owned, [doc]).get('panel-90x300')).toBe(6);
-    expect(stockPressure(owned, [doc]).get('panel-90x300')).toBeCloseTo(0.4);
+    const pieces = Array.from({ length: 4 }, (_, i) => ({ id: `p${i}`, materialId: 'panel-90x300', x: 0, y: 0, rot: 0 }));
+    expect(freeStock(owned, pieces).get('panel-90x300')).toBe(6);
+    expect(stockPressure(owned, pieces).get('panel-90x300')).toBeCloseTo(0.4);
+    // Nobody owns a 30: none of it is free, and it counts as fully spoken for.
+    expect(freeStock(owned, pieces).get('panel-30x300')).toBe(0);
+    expect(stockPressure(owned, pieces).get('panel-30x300')).toBe(1);
   });
 });
 

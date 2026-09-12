@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 import { legAngle, legLength, pathLength, segments } from '../lib/sketch';
 import { keepWheelOffNumber } from '../lib/numberField';
 import type { SketchPath } from '../types';
+import { LengthCheckPanel } from './LengthCheckPanel';
 
 /** Inspector for the current selection — one piece in detail, or a group summary. */
 export function DetailsPanel() {
@@ -43,7 +44,8 @@ export function DetailsPanel() {
   if (!selectedPieces.length) {
     return (
       <div className="empty">
-        მონიშნე ელემენტი დეტალების სანახავად.
+        მონიშნე ხაზვის ხაზი - აქ გამოჩნდება მისი ზომები, აწყობის შემოწმება და რა პანელებით
+        ჯობია მისი შევსება. ელემენტის მონიშნვით - მისი დეტალები.
         <br />
         <br />
         ცარიელ ადგილას თრევით მონიშნავ რამდენიმეს ერთდროულად; <kbd>Shift</kbd> + დაწკაპუნება
@@ -285,21 +287,20 @@ function RotationField({ rot }: { rot: number }) {
  * done. Reading them back is half the value; typing over one is the other half.
  */
 /**
- * Opens the ranked ways to fill what is selected, beside the drawing. The
- * selection stays as it is, so the recommendations are for exactly these lines.
+ * The ranked ways to fill what is selected sit right under these details, in
+ * the same tab. On a line with many legs they are below the fold, so this takes
+ * you down to them rather than leaving you to find the scroll.
  */
 function RecommendButton() {
   return (
     <button
       className="btn small"
       title="საუკეთესო ვარიანტები - როგორ შეივსოს ეს ხაზი"
-      onClick={() => {
-        const s = useEditorStore.getState();
-        s.setInspectorOpen(true);
-        s.setInspectorTab('recommend');
-      }}
+      onClick={() =>
+        document.getElementById('recommendations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
     >
-      <Icon name="sliders" /> რეკომენდაცია
+      <Icon name="sliders" /> რეკომენდაცია ↓
     </button>
   );
 }
@@ -415,6 +416,8 @@ function SketchDetails({ path }: { path: SketchPath }) {
           წასასვლელი არ აქვს და კონტური იშლება. გადაათრიე მონაკვეთი ნახაზზე.
         </p>
       )}
+
+      <LengthCheckPanel paths={[path]} />
     </div>
   );
 }
@@ -556,6 +559,8 @@ function SketchGroupDetails({ paths }: { paths: SketchPath[] }) {
         უხვევს, და არა იქ, სადაც ორი ხაზი ერთმანეთს ხვდება. ცალკე მონაკვეთის
         ზომებისთვის მონიშნე ერთი ხაზი.
       </p>
+
+      <LengthCheckPanel paths={paths} />
     </div>
   );
 }

@@ -702,3 +702,36 @@ it('panels both faces of a wall to match, opposite each other', () => {
   }
   expect(failures.length, report('a wall is panelled the same on both faces', failures)).toBe(0);
 });
+
+/**
+ * 7. The length check agrees with the fill.
+ *
+ * `checkPath` reads what stands on a line the way a person checks a drawing -
+ * pieces against length, the architect's ცდომილება - without asking the fill
+ * what it did. On anything the fill lays it may find a hole the fill reported
+ * itself, but never a piece too many; and where the fill left nothing open but
+ * corners, it has to read 0 on every leg.
+ */
+it('reads ცდომილება 0 on every run the fill lays', async () => {
+  const { checkPath } = await import('../lengthCheck');
+  const failures: Array<{ c: FuzzCase; detail: string }> = [];
+  for (const c of CASES) {
+    const plan = planOf(c);
+    const exact = !plan.openings.some((o) => o.kind === 'short');
+    for (const path of c.paths) {
+      const faces = checkPath(path, c.paths, plan.pieces, byId).courses.flatMap((k) => k.faces);
+      const face = faces.find((f) => f.error > 0.5 || f.overlaps.length > 0 || (exact && !f.ok));
+      if (face) {
+        failures.push({
+          c,
+          detail:
+            `${path.id} leg ${face.leg}: error ${face.error}, gaps ${JSON.stringify(face.gaps)}, ` +
+            `overlaps ${JSON.stringify(face.overlaps)}, open ${JSON.stringify(face.openCorners)}, ` +
+            `parts ${face.parts.map((p) => `${p.label}×${p.count}`).join(' ')}`,
+        });
+        break;
+      }
+    }
+  }
+  expect(failures.length, report('the length check agrees with the fill', failures)).toBe(0);
+});

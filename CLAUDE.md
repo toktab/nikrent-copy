@@ -43,6 +43,8 @@ saved drawing.
 | measure tool (გაზომვა) - snapping helper, saved lines | `src/lib/measure.ts`, `src/components/MeasureLayer.tsx` |
 | drawing export / import file | `src/lib/catalogFile.ts` |
 | fill recommendations - ranked ways to fill a run; the ruleset | `src/lib/fillOptions.ts`, `docs/FILL-RULES.md` |
+| ნაშთი - stock left once the open drawing is delivered (top-bar window) | `src/lib/remaining.ts`, `src/components/RemainingDialog.tsx` |
+| ცდომილება - pieces on a drawn line against its length | `src/lib/lengthCheck.ts`, `src/components/LengthCheckPanel.tsx` |
 | all state, undo, persistence, sync | `src/store/useEditorStore.ts` |
 | the canvas | `src/components/StageCanvas.tsx`, `SketchLayer.tsx` |
 

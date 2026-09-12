@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { migratePersisted } from '../useEditorStore';
+import { migratePersisted, normalizeInspectorTab } from '../useEditorStore';
 import { DEFAULT_LENGTH_VISIBILITY } from '../../lib/dimensions';
 
 /**
@@ -45,7 +45,31 @@ describe('migratePersisted', () => {
     expect(migratePersisted({ snapStep: 25 }).snapStep).toBe(30);
   });
 
+  it('opens რეკომენდაცია for a saved choice of a retired tab', () => {
+    // დეტალები was merged into რეკომენდაცია and ნაშთი became a window; a saved
+    // choice of either would otherwise leave the panel empty.
+    expect(migratePersisted({ inspectorTab: 'details' as never }).inspectorTab).toBe('recommend');
+    expect(migratePersisted({ inspectorTab: 'remaining' as never }).inspectorTab).toBe('recommend');
+    expect(migratePersisted({ inspectorTab: 'inventory' }).inspectorTab).toBe('inventory');
+    expect('inspectorTab' in migratePersisted({ zoom: 1 })).toBe(false);
+  });
+
   it('survives nothing having been saved', () => {
     expect(migratePersisted(undefined)).toEqual({});
+  });
+});
+
+/**
+ * The same check `merge` applies on every load - `migrate` alone missed the
+ * people already on the current persist version, which is everybody.
+ */
+describe('normalizeInspectorTab', () => {
+  it('keeps a tab that exists and turns a retired or broken one into რეკომენდაცია', () => {
+    expect(normalizeInspectorTab('recommend')).toBe('recommend');
+    expect(normalizeInspectorTab('bom')).toBe('bom');
+    expect(normalizeInspectorTab('inventory')).toBe('inventory');
+    expect(normalizeInspectorTab('details')).toBe('recommend');
+    expect(normalizeInspectorTab('remaining')).toBe('recommend');
+    expect(normalizeInspectorTab(42)).toBe('recommend');
   });
 });

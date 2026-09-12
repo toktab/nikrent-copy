@@ -119,6 +119,42 @@ export function InventoryPanel() {
         >
           საწყობები…
         </button>
+        {/* A stand-in figure until real counts are entered, so recommendations
+            and the ნაშთი sheet have something to count against. Asked first:
+            it writes over every count in the store, real ones included. */}
+        {canManage && editing && (
+          <button
+            className="btn small"
+            title="ყველა კომპონენტის მარაგი ამ საწყობში - 500"
+            onClick={() =>
+              openDialog({
+                kind: 'confirm',
+                title: 'მარაგი: ყველას 500',
+                message: `„${editing.name}“-ში ყველა კომპონენტის (${materials.length}) მარაგი გახდება 500. ამჟამინდელი რაოდენობები ჩაანაცვლდება. გავაგრძელო?`,
+                confirmLabel: 'ყველას 500',
+                danger: true,
+                onConfirm: () => useEditorStore.getState().setAllStock(editing.id, 500),
+              })
+            }
+          >
+            ყველას 500 (ტესტი)
+          </button>
+        )}
+        {/* The office's own weights, for the BOM's weight column. Only where a
+            weight is still 0: a figure somebody typed is never written over. */}
+        {canManage && (
+          <button
+            className="btn small"
+            title="კომპანიის Excel-ის წონები - მხოლოდ იქ, სადაც წონა ჯერ 0-ა"
+            onClick={() => {
+              const s = useEditorStore.getState();
+              const n = s.fillMissingWeights();
+              s.setToast(n ? `წონა ჩაიწერა ${n} კომპონენტს.` : 'ყველა კომპონენტს წონა უკვე აქვს.');
+            }}
+          >
+            წონები (Excel-იდან)
+          </button>
+        )}
       </div>
 
       <input

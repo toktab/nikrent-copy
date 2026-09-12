@@ -25,6 +25,7 @@ import { UsersDialog } from './components/UsersDialog';
 import { ErrorLogDialog } from './components/ErrorLogDialog';
 import { PasswordDialog } from './components/PasswordDialog';
 import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
+import { RemainingDialog } from './components/RemainingDialog';
 import { Icon } from './components/Icon';
 
 export default function App() {
@@ -116,6 +117,7 @@ export default function App() {
       {dialog?.kind === 'errors' && <ErrorLogDialog />}
       {dialog?.kind === 'password' && <PasswordDialog />}
       {dialog?.kind === 'display-settings' && <DisplaySettingsDialog />}
+      {dialog?.kind === 'remaining' && <RemainingDialog />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}

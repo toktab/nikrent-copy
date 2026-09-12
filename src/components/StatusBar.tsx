@@ -27,6 +27,7 @@ export function StatusBar() {
   const pieces = useEditorStore((s) => s.pieces);
   const materials = useEditorStore((s) => s.materials);
   const showGaps = useEditorStore((s) => s.showGaps);
+  const simple = useEditorStore((s) => s.simpleMode);
 
   // Only counted while the check is on. Running it over every piece on every
   // keystroke to display a number nobody asked for would be a tax on drawing.
@@ -51,29 +52,33 @@ export function StatusBar() {
 
   return (
     <footer className="statusbar">
-      <span className="hintlist">
-        <span>
-          <kbd>R</kbd> მოტრიალება
+      {/* Simple mode is for somebody who already knows the keys, or does not
+          need them: the hints go, what the drawing says stays. */}
+      {!simple && (
+        <span className="hintlist">
+          <span>
+            <kbd>R</kbd> მოტრიალება
+          </span>
+          <span>
+            <kbd>{combo(['mod', 'Z'])}</kbd> დაბრუნება
+          </span>
+          <span>
+            <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
+          </span>
+          {/* The two modifiers that only exist mid-drag. Nobody discovers a key
+              you have to already be holding something to use, and both had been
+              found the hard way — by asking why the thing would not move. */}
+          <span className="opt">
+            <kbd>{combo(['shift'])}</kbd> + თრევა - სწორ ხაზზე
+          </span>
+          <span className="opt">
+            <kbd>{overrideLabel()}</kbd> + თრევა - მიბმის გარეშე
+          </span>
+          <span className="opt">
+            <kbd>Space</kbd> + თრევა - ხედის გადაწევა
+          </span>
         </span>
-        <span>
-          <kbd>{combo(['mod', 'Z'])}</kbd> დაბრუნება
-        </span>
-        <span>
-          <kbd>{combo(['mod', 'D'])}</kbd> დუბლირება
-        </span>
-        {/* The two modifiers that only exist mid-drag. Nobody discovers a key
-            you have to already be holding something to use, and both had been
-            found the hard way — by asking why the thing would not move. */}
-        <span className="opt">
-          <kbd>{combo(['shift'])}</kbd> + თრევა - სწორ ხაზზე
-        </span>
-        <span className="opt">
-          <kbd>{overrideLabel()}</kbd> + თრევა - მიბმის გარეშე
-        </span>
-        <span className="opt">
-          <kbd>Space</kbd> + თრევა - ხედის გადაწევა
-        </span>
-      </span>
+      )}
 
       <span className="flex-spacer" />
 
@@ -94,7 +99,7 @@ export function StatusBar() {
         </span>
       )}
       <span className="status-view">
-        {total} ელემენტი · {view} · {Math.round(zoom * 100)}%
+        {total} ელემენტი{simple ? '' : ` · ${view}`} · {Math.round(zoom * 100)}%
       </span>
     </footer>
   );

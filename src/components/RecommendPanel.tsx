@@ -39,9 +39,13 @@ interface RunList {
  * decides anything the fill generator does not already: it only chooses which
  * of its exact answers gets built.
  */
-export function RecommendPanel() {
+export function RecommendPanel({
+  active = true,
+}: {
+  /** false while it is kept mounted but hidden: nothing is previewed on the drawing */
+  active?: boolean;
+} = {}) {
   const materials = useEditorStore((s) => s.materials);
-  const documents = useEditorStore((s) => s.documents);
   const sketch = useEditorStore((s) => s.sketch);
   const selectedSketchIds = useEditorStore((s) => s.selectedSketchIds);
   const applyFillVariants = useEditorStore((s) => s.applyFillVariants);
@@ -68,11 +72,13 @@ export function RecommendPanel() {
   };
 
   // Stock only means something once it has been entered; see `stockEntered`.
+  // Counted against the open drawing only, the same figure the ნაშთი tab shows.
+  const pieces = useEditorStore((s) => s.pieces);
   const hasStock = useMemo(() => stockEntered(materials), [materials]);
-  const free = useMemo(() => (hasStock ? freeStock(materials, documents) : undefined), [hasStock, materials, documents]);
+  const free = useMemo(() => (hasStock ? freeStock(materials, pieces) : undefined), [hasStock, materials, pieces]);
   const pressure = useMemo(
-    () => (hasStock ? stockPressure(materials, documents) : undefined),
-    [hasStock, materials, documents],
+    () => (hasStock ? stockPressure(materials, pieces) : undefined),
+    [hasStock, materials, pieces],
   );
 
   const runs = useMemo(
@@ -121,7 +127,7 @@ export function RecommendPanel() {
 
   // What is picked - or pointed at - shown faint on the drawing.
   useEffect(() => {
-    if (!paths.length || !(h > 0) || !shown.length) {
+    if (!active || !paths.length || !(h > 0) || !shown.length) {
       setRecommendPreview(null);
       return;
     }
@@ -137,7 +143,7 @@ export function RecommendPanel() {
     }
     setRecommendPreview(planSketchFillAll(paths, { ...spec, stack, choices }, materials).pieces);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, hover, picked, paths, spec, materials, h]);
+  }, [active, shown, hover, picked, paths, spec, materials, h]);
 
   // Leaving the tab, or the panel, takes the ghost with it.
   useEffect(() => () => setRecommendPreview(null), [setRecommendPreview]);
@@ -297,6 +303,12 @@ export function RecommendPanel() {
                 </div>
                 <Strip variant={v} />
                 <div className="rec-summary">{variantSummary(v)}</div>
+                {/* The architect's own check, on the answer: every course adds
+                    up to the run exactly. True by construction - shown because
+                    it is the number he trusts, not because it could be wrong. */}
+                {v.courses.every(
+                  (c) => Math.abs(c.sequence.reduce((sum, p) => sum + p.w, 0) - list.run.length) < 0.05,
+                ) && <div className="rec-check">ცდომილება 0 ✓</div>}
                 <div className="rec-reasons">{v.reasons.join(' · ')}</div>
               </button>
             ))}

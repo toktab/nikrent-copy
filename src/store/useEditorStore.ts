@@ -17,6 +17,7 @@ import type {
   Warehouse,
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
+import { withCompanyWeights } from '../data/companyWeights';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -137,6 +138,7 @@ const PREF_KEYS = [
   'paletteOpen',
   'inspectorOpen',
   'inspectorTab',
+  'simpleMode',
 ] as const;
 
 /**
@@ -242,6 +244,12 @@ export interface EditorState {
   inspectorTab: InspectorTab;
   /** mark every open gap, not only the one beside the selection */
   showGaps: boolean;
+  /**
+   * Simple mode: only what drawing and filling need stays on screen - drawing,
+   * measuring, the parts, the recommendation tab. Everything else comes back
+   * when it is switched off.
+   */
+  simpleMode: boolean;
   /**
    * Show the drawn layout.
    *
@@ -463,6 +471,8 @@ export interface EditorState {
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
+  /** switch simple mode; switching it on also brings the view back to the plan */
+  setSimpleMode: (on: boolean) => void;
   setShowSketch: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   /** Switch the surface between plan, front and side, reframing as it goes. */
@@ -478,6 +488,10 @@ export interface EditorState {
   updateMaterial: (id: string, draft: MaterialDraft) => void;
   deleteMaterial: (id: string, cascade: boolean) => void;
   setStock: (id: string, warehouseId: string, quantity: number) => void;
+  /** one quantity for every material in one warehouse - the admin's test "500 each" */
+  setAllStock: (warehouseId: string, quantity: number) => void;
+  /** the company's own weights onto built-ins that still have none; returns how many */
+  fillMissingWeights: () => number;
   importMaterials: (drafts: MaterialDraft[]) => number;
   replaceCatalog: (materials: Material[], warehouses?: Warehouse[]) => number;
   resetCatalog: () => void;
@@ -683,7 +697,24 @@ export function migratePersisted(persisted: unknown): Partial<EditorState> {
           : { ...DEFAULT_LENGTH_VISIBILITY },
     };
   }
+
+  if (next.inspectorTab !== undefined) {
+    next = { ...next, inspectorTab: normalizeInspectorTab(next.inspectorTab) };
+  }
   return next;
+}
+
+/**
+ * A saved inspector tab that still exists, or რეკომენდაცია.
+ *
+ * The დეტალები tab was folded into რეკომენდაცია and ნაშთი moved out to its own
+ * window, so a tab saved before either change names nothing - and the panel
+ * opened with no tab and an empty body. Applied in `merge` as well as here:
+ * `migrate` only runs when the persist version changes, and these tabs went
+ * away without one.
+ */
+export function normalizeInspectorTab(value: unknown): InspectorTab {
+  return value === 'recommend' || value === 'bom' || value === 'inventory' ? value : 'recommend';
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -779,6 +810,7 @@ export const useEditorStore = create<EditorState>()(
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
         inspectorTab: 'bom',
         showGaps: false,
+        simpleMode: false,
         showSketch: true,
         measureStyle: { ...DEFAULT_MEASURE_STYLE },
 
@@ -1732,6 +1764,15 @@ export const useEditorStore = create<EditorState>()(
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
+        // Simple mode has no view switcher, so it opens on the plan it works in -
+        // through the view setters, so whatever a view change also resets, it does.
+        setSimpleMode: (on) => {
+          set({ simpleMode: on });
+          if (!on) return;
+          const s = get();
+          if (s.viewMode !== '2d') s.setViewMode('2d');
+          if (s.surfaceView !== 'plan') s.setSurfaceView('plan');
+        },
         setShowSketch: (on) =>
           set((s) => ({
             showSketch: on,
@@ -1806,6 +1847,25 @@ export const useEditorStore = create<EditorState>()(
               m.id === id ? { ...m, stock: withStockIn(m.stock, warehouseId, quantity) } : m,
             ),
           })),
+
+        // The same as a stock edit on every row at once: no undo step, and the
+        // sync diff sends each changed row through set_stock, so the server's
+        // stock log records it like any other count.
+        setAllStock: (warehouseId, quantity) =>
+          set((s) => ({
+            materials: s.materials.map((m) => ({
+              ...m,
+              stock: withStockIn(m.stock, warehouseId, quantity),
+            })),
+          })),
+
+        // Catalog data, so it is an undo step like any material edit - and only
+        // ever onto a blank; see COMPANY_WEIGHTS.
+        fillMissingWeights: () => {
+          const { materials, filled } = withCompanyWeights(get().materials);
+          if (filled) commit(() => ({ materials }));
+          return filled;
+        },
 
         importMaterials: (drafts) => {
           if (!drafts.length) return 0;
@@ -2115,6 +2175,10 @@ export const useEditorStore = create<EditorState>()(
             measureStyle: normalizeMeasureStyle(saved.measureStyle),
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+            inspectorTab:
+              saved.inspectorTab === undefined
+                ? current.inspectorTab
+                : normalizeInspectorTab(saved.inspectorTab),
             dataLoaded: false,
           };
         }
@@ -2135,6 +2199,12 @@ export const useEditorStore = create<EditorState>()(
           pieces,
           sketch,
           measures,
+          // See normalizeInspectorTab: a tab that no longer exists opens an
+          // empty panel, and `migrate` does not run within the same version.
+          inspectorTab:
+            saved.inspectorTab === undefined
+              ? current.inspectorTab
+              : normalizeInspectorTab(saved.inspectorTab),
           selectedIds: [],
           selectedSketchIds: [],
           // Reopening in a mode that swallows clicks would be baffling.

@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { Bom } from './bom';
 import { fmtNum, sizeLabel } from './bom';
+import type { Remaining } from './remaining';
 import { downloadText, stampedName } from './files';
 
 /** Ordering-sheet columns (Georgian first, English kept for shared use). */
@@ -122,6 +123,38 @@ export function exportBomToExcel(bom: Bom): void {
 export function exportBomToCsv(bom: Bom): void {
   const ws = XLSX.utils.aoa_to_sheet(bomRows(bom));
   downloadText(XLSX.utils.sheet_to_csv(ws), stampedName('du-bom', 'csv'), 'text/csv');
+}
+
+/**
+ * The ნაშთი sheet as .xlsx: stock, used in this drawing, left. Replaces the
+ * architect's own ნაშთი and პრინტ sheets for the drawing that is open.
+ */
+export function exportRemainingToExcel(remaining: Remaining, drawingName: string): void {
+  const aoa: Cell[][] = [
+    [`ნაშთი - ${drawingName}`],
+    [],
+    [
+      'კომპონენტი / Component',
+      'ზომა (სმ) / Size (cm)',
+      'სულ მარაგი / In stock',
+      'ამ ნახაზში გამოყენებული / Used in this drawing',
+      'დარჩა მარაგი / Left',
+    ],
+  ];
+  for (const group of remaining.groups) {
+    aoa.push([group.label]);
+    for (const row of group.rows) {
+      aoa.push([row.material.name, sizeLabel(row.material), row.stock, row.used, row.left]);
+    }
+    aoa.push([]);
+  }
+  aoa.push(['სულ გამოყენებული / Total used', '', '', remaining.used, '']);
+  if (remaining.shortages > 0) {
+    aoa.push([`⚠ ${remaining.shortages} პოზიციას მარაგი არ ჰყოფნის.`]);
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, makeSheet(aoa, [34, 15, 14, 24, 14]), 'ნაშთი');
+  XLSX.writeFile(wb, stampedName('du-remaining', 'xlsx'));
 }
 
 export interface CatalogExportRow {
