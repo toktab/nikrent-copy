@@ -12,7 +12,7 @@ export type Shape = 'rect' | 'L' | 'line';
 export type HiddenLineMode = 'hide' | 'dashed' | 'show';
 
 /** The inspector's three working views. */
-export type InspectorTab = 'details' | 'bom' | 'inventory';
+export type InspectorTab = 'recommend' | 'bom' | 'inventory';
 
 /**
  * Stock is held per warehouse: `{ [warehouseId]: quantity }`. Companies that
@@ -126,6 +126,20 @@ export interface SketchPath {
   perimeter?: 'outer' | 'inner';
 }
 
+/**
+ * A measured line the user put on the drawing: "from here to there is this far".
+ *
+ * Free in direction, unlike a sketch leg - a check dimension is taken wherever
+ * the question is, across a corner or on a diagonal. Annotation only: it never
+ * reaches the bill of materials and the fill never builds against it. Plan
+ * world centimetres, like everything else on the surface.
+ */
+export interface MeasureLine {
+  id: string;
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+}
+
 export interface DrawingDoc {
   id: string;
   name: string;
@@ -134,6 +148,8 @@ export interface DrawingDoc {
   pieces: Piece[];
   /** the layout the formwork is being set out to — see SketchPath */
   sketch: SketchPath[];
+  /** measured check lines placed with the measure tool — see MeasureLine */
+  measures: MeasureLine[];
   /** title-block fields for the printable drawing */
   projectName: string;
   revision: string;
@@ -146,6 +162,7 @@ export interface DocSnapshot {
   materials: Material[];
   pieces: Piece[];
   sketch: SketchPath[];
+  measures: MeasureLine[];
   removedBuiltins: string[];
 }
 
@@ -208,13 +225,28 @@ export interface CatalogFile {
   warehouses?: Warehouse[];
 }
 
-/** Shape of an exported layout file (placed pieces, no catalog). */
+/**
+ * Shape of an exported drawing file.
+ *
+ * Version 3 carries the whole drawing, not just the panels: a file taken to
+ * another computer has to open as the same drawing, and before it did the
+ * setting-out lines, the title block and any material that machine's catalog
+ * lacked were all quietly left behind. Materials travel as definitions only,
+ * for the ones the pieces use - stock is company data and stays at home.
+ */
 export interface LayoutFile {
   app: 'du-formwork';
   kind: 'layout';
   version: number;
   exportedAt: string;
+  name?: string;
+  projectName?: string;
+  revision?: string;
+  scale?: number;
   pieces: Piece[];
+  sketch?: SketchPath[];
+  measures?: MeasureLine[];
+  materials?: Material[];
 }
 
 /** Modal currently open (kept out of persisted state). */
@@ -232,6 +264,8 @@ export type DialogState =
   | { kind: 'users' }
   | { kind: 'errors' }
   | { kind: 'password' }
+  | { kind: 'display-settings' }
+  | { kind: 'remaining' }
   | {
       kind: 'confirm';
       title: string;

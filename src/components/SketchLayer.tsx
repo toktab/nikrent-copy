@@ -201,8 +201,6 @@ function PathShape({
   const hotVertex = hover?.vertex ?? null;
   const pickedLeg = part?.kind === 'leg' ? part.index : null;
   const pickedVertex = part?.kind === 'vertex' ? part.index : null;
-  const total = Math.round(pathLength(path));
-  const first = path.points[0];
 
   /**
    * Which side of the line the formwork will stand on, drawn as short ticks
@@ -257,12 +255,10 @@ function PathShape({
           strokeWidth={hair * (pickedLeg === i ? 3 : hotLeg === i ? 2.6 : 1.8)}
         />
       ))}
-      {/* Every leg measured, but only on the path being worked on. All of them
-          at once on a busy layout is not a drawing, it is a wall of numbers. */}
-      {chosen &&
-        legs.map(([a, b], i) => (
-          <LegLabel key={`m${i}`} a={a} b={b} hair={hair} className="sketch-measure" />
-        ))}
+      {/* Leg lengths and the run's total are drawn by the dimension layer, which
+          puts each at the middle of what it measures and keeps them clear of
+          each other. The total used to sit at the run's first corner, where it
+          read as the length of the leg beside it. */}
       {/* Vertices, so a corner reads as a decision rather than a kink. */}
       {path.points.map((p, i) => (
         <circle
@@ -275,13 +271,6 @@ function PathShape({
           r={hair * (pickedVertex === i ? 4.2 : hotVertex === i ? 3.6 : 2.4)}
         />
       ))}
-      {/* How much wall this is, which is the first thing anyone wants from a
-          layout and would otherwise mean adding up the legs by hand. */}
-      {first && (
-        <text className="sketch-len" x={first.x} y={first.y - hair * 5} fontSize={hair * 9}>
-          {total} სმ
-        </text>
-      )}
     </g>
   );
 }

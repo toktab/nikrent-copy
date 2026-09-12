@@ -59,6 +59,39 @@ export interface SketchFillSpec {
   flip?: boolean;
   /** close the corners with profiles instead of butting the panels */
   includeCorners: boolean;
+  /**
+   * Course heights, bottom to top, in place of the fewest-courses stack - a
+   * recommendation that stacks 150 + 150 instead of one 300. Ignored unless it
+   * really makes the pour height out of heights the catalog has.
+   */
+  stack?: number[];
+  /**
+   * A chosen sequence per run, per course height, in laying order - the
+   * recommendation somebody picked. Keys are `FillPlan.runs[].key`. A run with
+   * no choice is filled exactly as it always was.
+   */
+  choices?: Record<string, Record<number, Array<{ materialId: string; w: number }>>>;
+}
+
+/**
+ * One run the fill lays, once per wall.
+ *
+ * The two faces of a matched wall and every course of it are one run here,
+ * because they get one answer: the same panels facing each other (R6) and the
+ * same sequence up the stack. This is what a recommendation is chosen for.
+ */
+export interface RunInfo {
+  /** stable while the drawing is unchanged; the key `SketchFillSpec.choices` takes */
+  key: string;
+  /** one face between its corners, cm */
+  length: number;
+  /** 2 when two faces of a wall are matched */
+  faces: number;
+  /** course heights it stands, bottom to top */
+  heights: number[];
+  /** its middle, world cm, for pointing at it */
+  x: number;
+  y: number;
 }
 
 /**
@@ -85,6 +118,8 @@ export interface FillPlan {
   warnings: string[];
   /** every stretch of face the fill does not cover, in the order it was planned */
   openings: Opening[];
+  /** every run laid, once per wall - see `RunInfo` */
+  runs: RunInfo[];
   summary: {
     panels: number;
     fillers: number;
@@ -286,7 +321,7 @@ export function offsetPath(path: SketchPath, dist: number): Point[] {
  * other face of the same wall: set both faces back by the same amount and the
  * same panels serve either side of the pour.
  */
-const OUTER_CORNER_GAP = 20;
+export const OUTER_CORNER_GAP = 20;
 
 /**
  * The inner corner profile at one course height, and how much face it covers.
@@ -383,7 +418,7 @@ interface FaceRun {
  * between them, not a pour. Two looking at each other across sixty centimetres
  * are a wall, or a column, and either way they are built as a pair.
  */
-const MAX_WALL_CM = 120;
+export const MAX_WALL_CM = 120;
 
 /**
  * How far apart two faces can be and still be read as facing each other.
@@ -671,8 +706,39 @@ function agreeEnds(a: FaceRun, b: FaceRun, thickness: number): boolean {
   return true;
 }
 
+/** The course height a run stands, read off the parts offered for it. */
+function courseHeightOf(run: FaceRun): number {
+  return run.panels[0]?.material.h ?? run.fillers[0]?.material.h ?? 0;
+}
+
+/**
+ * A chosen sequence, as parts of this run - or null when it no longer is an
+ * answer for it: a part that does not stand this course, or widths that do not
+ * add up to this length. A drawing edited since the choice was made turns it
+ * into a wrong answer, and a wrong answer is not placed.
+ */
+function resolveChoice(
+  choice: Array<{ materialId: string; w: number }>,
+  run: FaceRun,
+  length: number,
+): PanelOption[] | null {
+  const byId = new Map([...run.panels, ...run.fillers].map((o) => [o.material.id, o]));
+  const out: PanelOption[] = [];
+  for (const part of choice) {
+    const option = byId.get(part.materialId);
+    if (!option) return null;
+    out.push(option);
+  }
+  const sum = out.reduce((total, o) => total + o.w, 0);
+  return out.length && Math.abs(sum - length) <= 0.01 ? out : null;
+}
+
 /** Stand the panels along one run, and say what could not be covered. */
-function layRun(run: FaceRun): {
+function layRun(
+  run: FaceRun,
+  /** a chosen sequence to lay as it is, in order - see `SketchFillSpec.choices` */
+  choice?: Array<{ materialId: string; w: number }>,
+): {
   pieces: Piece[];
   panels: number;
   fillers: number;
@@ -708,9 +774,14 @@ function layRun(run: FaceRun): {
     };
   }
 
-  const { used, remainder } = coverFace(length, run.panels, run.fillers);
+  const chosen = choice ? resolveChoice(choice, run, length) : null;
+  const { used, remainder } = chosen
+    ? { used: chosen, remainder: 0 }
+    : coverFace(length, run.panels, run.fillers);
   let warning: string | undefined;
-  if (!used.length) {
+  if (choice && !chosen) {
+    warning = `${Math.round(length)} სმ მონაკვეთზე შერჩეული ვარიანტი აღარ ემთხვევა - აიწყო ავტომატურად.`;
+  } else if (!used.length) {
     warning = `${Math.round(length)} სმ სიგრძის მხარე ვერ დაიფარა - ყველაზე ვიწრო პანელია ${
       run.panels.length ? Math.min(...run.panels.map((o) => o.w)) : '-'
     } სმ.`;
@@ -808,8 +879,18 @@ function describeFace(
   if (!heights.length) return fail('კატალოგში პანელები ვერ მოიძებნა.');
 
   // ── Vertical: how many panel courses stack up the pour ────────────────────
-  const stack = coverExact(spec.height, heights);
-  const courses = stack.picks.map((i) => heights[i]);
+  // A chosen stack - a recommendation's 150 + 150 - wins when it really makes
+  // the height out of heights the catalog has; otherwise the fewest courses.
+  const chosenStack =
+    spec.stack?.length &&
+    Math.abs(spec.stack.reduce((sum, h) => sum + h, 0) - spec.height) <= 0.01 &&
+    spec.stack.every((h) => heights.includes(h))
+      ? [...spec.stack]
+      : null;
+  const stack = chosenStack
+    ? { picks: [] as number[], remainder: 0 }
+    : coverExact(spec.height, heights);
+  const courses = chosenStack ?? stack.picks.map((i) => heights[i]);
   if (!courses.length) {
     warnings.push(
       `სიმაღლე ${spec.height} სმ ნებისმიერ პანელზე დაბალია - უმცირესი პანელია ${Math.min(...heights)} სმ.`,
@@ -1163,6 +1244,40 @@ export function planSketchFillAll(
   const runs = jobs.flatMap((job) => job.runs);
   const pairs = pairFaces(runs);
 
+  /**
+   * One key per wall run, the same for both faces and every course.
+   *
+   * Read off geometry only - which axis, the near face's line, the two ends
+   * after the corners - so a preview and the fill that follows it name the same
+   * run, and a run moved in between no longer matches its old choice.
+   */
+  const keyOf = new Map<FaceRun, string>();
+  const infos = new Map<string, RunInfo>();
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  for (const run of runs) {
+    if (closesAnEnd(run, pairs)) continue;
+    const pair = pairs.find((p) => p.a === run || p.b === run);
+    const at = pair ? Math.min(pair.a.at, pair.b.at) : run.at;
+    const key = `${run.across ? 'x' : 'y'}:${r1(at)}:${r1(run.lo)}:${r1(run.hi)}`;
+    keyOf.set(run, key);
+    // A pair's second face adds nothing new: same length, same courses.
+    if (pair && pair.b === run) continue;
+    const info = infos.get(key);
+    if (info) {
+      info.heights.push(courseHeightOf(run));
+      continue;
+    }
+    const along = (run.lo + run.hi) / 2;
+    infos.set(key, {
+      key,
+      length: r1(run.hi - run.lo),
+      faces: pair ? 2 : 1,
+      heights: [courseHeightOf(run)],
+      x: run.across ? along : at,
+      y: run.across ? at : along,
+    });
+  }
+
   for (const run of runs) {
     if (closesAnEnd(run, pairs)) {
       // The whole leg, corner set-backs included: nothing stands anywhere on
@@ -1178,7 +1293,8 @@ export function planSketchFillAll(
       });
       continue;
     }
-    const laid = layRun(run);
+    const key = keyOf.get(run);
+    const laid = layRun(run, key ? spec.choices?.[key]?.[courseHeightOf(run)] : undefined);
     pieces.push(...laid.pieces);
     openings.push(...laid.openings);
     summary.panels += laid.panels;
@@ -1189,5 +1305,11 @@ export function planSketchFillAll(
 
   // Each face of each course reports for itself, so identical legs produce the
   // same sentence repeatedly. Legs with different geometry differ and are kept.
-  return { pieces, warnings: [...new Set(warnings)], openings, summary };
+  return {
+    pieces,
+    warnings: [...new Set(warnings)],
+    openings,
+    runs: [...infos.values()],
+    summary,
+  };
 }

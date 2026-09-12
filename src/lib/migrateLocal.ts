@@ -46,7 +46,10 @@ export function readLegacyData(): DataSnapshot | null {
   const warehouses = restoreWarehouses(saved.warehouses, materials);
   const { documents } = restoreDocuments(saved);
 
-  const hasDrawnAnything = documents.some((d) => d.pieces.length > 0);
+  // A drawing of setting-out lines or measurements alone is still work to keep.
+  const hasDrawnAnything = documents.some(
+    (d) => d.pieces.length > 0 || d.sketch.length > 0 || d.measures.length > 0,
+  );
   const hasCustomCatalog = materials.some((m) => !m.builtin);
   const hasStock = materials.some((m) => Object.values(m.stock).some((q) => q > 0));
 

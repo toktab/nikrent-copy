@@ -55,7 +55,21 @@ import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
 import { ShapeSvg } from './ShapeSvg';
-import { LabelLayer } from './LabelLayer';
+import { DimensionLayer } from './DimensionLayer';
+import { MeasureLayer } from './MeasureLayer';
+import {
+  collinearRun,
+  firstPoint,
+  freeAnchor,
+  measureAt,
+  pieceAt,
+  referenceEdges,
+  secondPoint,
+  suggestEnd,
+  suggestionCloseness,
+  type MeasurePreview,
+  type RefEdge,
+} from '../lib/measure';
 import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
 import { GapMark } from './GapMark';
@@ -155,6 +169,12 @@ export function StageCanvas() {
    */
   const [sketchHover, setSketchHover] = useState<SegmentHit | null>(null);
   const [addAt, setAddAt] = useState<{ x: number; y: number } | null>(null);
+  /** What the measure tool would do with the next click; local for the same reason. */
+  const [measurePreview, setMeasurePreview] = useState<MeasurePreview | null>(null);
+  /** The saved measured line under the pointer, with the select tool. */
+  const [measureHoverId, setMeasureHoverId] = useState<string | null>(null);
+  /** The piece under the pointer, for lengths set to show on hover. */
+  const [hoverPieceId, setHoverPieceId] = useState<string | null>(null);
   const [ghost, setGhost] = useState<{
     material: Material;
     x: number;
@@ -178,6 +198,8 @@ export function StageCanvas() {
   const showSketch = useEditorStore((s) => s.showSketch);
   const showGaps = useEditorStore((s) => s.showGaps);
   const surfaceView = useEditorStore((s) => s.surfaceView);
+  const measures = useEditorStore((s) => s.measures);
+  const recommendPreview = useEditorStore((s) => s.recommendPreview);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -193,6 +215,18 @@ export function StageCanvas() {
     () => depthRanks(pieces, byId, surfaceView),
     [pieces, byId, surfaceView],
   );
+
+  /**
+   * Everything the measure tool can take a measurement off: drawn legs, every
+   * edge of every piece, lines already measured. Plan only. Kept in a ref too,
+   * because the pointer handlers are stable callbacks that read the latest.
+   */
+  const refEdges = useMemo(
+    () => (elevation ? [] : referenceEdges(showSketch ? sketch : [], pieces, byId, measures)),
+    [elevation, showSketch, sketch, pieces, byId, measures],
+  );
+  const edgesRef = useRef<RefEdge[]>(refEdges);
+  edgesRef.current = refEdges;
 
   /**
    * Every face piece as the gap check sees it.
@@ -530,6 +564,22 @@ export function StageCanvas() {
 
       const mod = e.metaKey || e.ctrlKey;
 
+      // The measure tool: Escape lets go of a half-placed line first and puts
+      // the tool down second; Backspace only ever lets go of the line.
+      if (s.tool === 'measure' && !mod) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (s.measureFirst) s.measureCancel();
+          else s.setTool('select');
+          return;
+        }
+        if (e.key === 'Backspace' && s.measureFirst) {
+          e.preventDefault();
+          s.measureCancel();
+          return;
+        }
+      }
+
       // While the pen is drawing it owns these keys outright: Backspace has to
       // walk back a vertex rather than delete the selection, and Escape has to
       // abandon the path rather than clear a selection that is not the point.
@@ -611,6 +661,15 @@ export function StageCanvas() {
 
       // e.code so the shortcut still works on a Georgian keyboard layout
       if (e.code === 'KeyR' || e.key.toLowerCase() === 'r') s.rotateSelected();
+      // D is the master switch for every length. Ctrl+D never gets here -
+      // duplicate took it in the modifier branch above.
+      if (e.code === 'KeyD' || e.key.toLowerCase() === 'd') {
+        s.setShowLengths(!s.showLengths);
+      }
+      // H switches the measuring helper, for the line it keeps getting wrong.
+      if (e.code === 'KeyH' || e.key.toLowerCase() === 'h') {
+        s.setMeasureStyle({ helper: !s.measureStyle.helper });
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // A junction is picked out of a run, so deleting means taking it out —
         // not throwing away the wall it was a corner of.
@@ -640,6 +699,14 @@ export function StageCanvas() {
         s.setTool('pen', e.shiftKey ? 'inner' : 'outer');
       }
       if (e.code === 'KeyV' || e.key.toLowerCase() === 'v') s.setTool('select');
+      // M for the measure tool - plan only, where there is something to measure off.
+      if (
+        (e.code === 'KeyM' || e.key.toLowerCase() === 'm') &&
+        s.viewMode === '2d' &&
+        !isElevation(s.surfaceView)
+      ) {
+        s.setTool('measure');
+      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -661,8 +728,11 @@ export function StageCanvas() {
   const onPiecePointerDown = useCallback((e: ReactPointerEvent, id: string) => {
     // space / middle-button gestures belong to the pan handler below
     if (e.button !== 0 || spaceRef.current) return;
-    e.stopPropagation();
     const s = useEditorStore.getState();
+    // The measure tool owns the surface: a click on a panel's end is where a
+    // check line starts, not a selection. Let it through to the stage.
+    if (s.tool === 'measure') return;
+    e.stopPropagation();
 
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       s.toggleSelect(id);
@@ -771,8 +841,89 @@ export function StageCanvas() {
     [worldAt],
   );
 
+  /**
+   * What the measure tool would do with a click here.
+   *
+   * Before the first click: held off the nearest edge. After it: the matching
+   * point at the far end of that same edge is offered, and taken if the pointer
+   * is near it - see `lib/measure.ts` for the order the snaps are tried in.
+   */
+  const measureTarget = useCallback(
+    (clientX: number, clientY: number, shift: boolean, free: boolean): MeasurePreview | null => {
+      const at = worldAt(clientX, clientY);
+      if (!at) return null;
+      const s = useEditorStore.getState();
+      const step = drawStep(s.snap, s.snapStep);
+      const edges = edgesRef.current;
+      const first = s.measureFirst;
+      // Alt holds the helper off for this one move, without touching the setting.
+      const helper = s.measureStyle.helper && !free;
+
+      if (!first) {
+        const r = firstPoint(at, { edges, measures: s.measures, zoom: s.zoom, step, helper });
+        return {
+          point: r.point,
+          helper: r.helper,
+          suggestion: null,
+          onSuggestion: false,
+          via: r.via,
+          closeness: 0,
+        };
+      }
+      const edge = first.edgeKey ? edges.find((k) => k.key === first.edgeKey) : undefined;
+      // Offered off the whole straight run the edge belongs to - the end of the
+      // wall, not of its first panel. Off a measured line too, when the first
+      // point is held some way off it: the suggestion is then a parallel copy.
+      // Standing ON a measured line, its far end would only measure it again.
+      const suggestion =
+        helper && edge && (!edge.key.startsWith('ms:') || Math.abs(first.offsetCm) > 0.01)
+          ? suggestEnd(collinearRun(edge, edges), first)
+          : null;
+      const r = secondPoint(at, {
+        first: first.point,
+        firstEdge: edge ?? null,
+        suggestion,
+        edges,
+        measures: s.measures,
+        zoom: s.zoom,
+        step,
+        shift,
+        helper,
+      });
+      return {
+        point: r.point,
+        helper: r.helper,
+        suggestion,
+        onSuggestion: r.via === 'suggestion',
+        via: r.via,
+        closeness: suggestionCloseness(at, suggestion, s.zoom),
+      };
+    },
+    [worldAt],
+  );
+
   const onStagePointerDown = useCallback((e: ReactPointerEvent) => {
     const s = useEditorStore.getState();
+
+    // ── the measure tool owns the surface while it is out, like the pen ──
+    if (s.tool === 'measure' && !spaceRef.current && (e.button === 0 || e.button === 2)) {
+      e.preventDefault();
+      if (e.button === 2) {
+        s.measureCancel();
+        return;
+      }
+      const target = measureTarget(e.clientX, e.clientY, e.shiftKey, overrideHeld(e));
+      if (!target) return;
+      if (!s.measureFirst) {
+        // The anchor carries the edge it was held off, which is what lets the
+        // second click be offered the matching end.
+        s.measureStart(target.helper ?? freeAnchor(target.point));
+      } else {
+        s.measureFinish(target.point);
+      }
+      setMeasurePreview(measureTarget(e.clientX, e.clientY, e.shiftKey, overrideHeld(e)));
+      return;
+    }
 
     // ── the pen owns the surface while it is active ──
     if (s.tool === 'pen' && e.button === 0 && !spaceRef.current) {
@@ -824,6 +975,17 @@ export function StageCanvas() {
     // being hit. Tolerance is a screen distance turned back into world cm, so
     // it feels the same at every zoom.
     const world = worldAt(e.clientX, e.clientY);
+
+    // A measured line is picked the same way, and ahead of the layout: it is
+    // usually drawn just off a wall, well inside the reach of that wall's line.
+    if (world && !isElevation(s.surfaceView) && s.measures.length) {
+      const hit = measureAt(s.measures, world, 7 / s.zoom);
+      if (hit) {
+        s.selectMeasure(hit);
+        return;
+      }
+    }
+
     // Hidden means gone: a line nobody can see must not take the click that
     // was meant for the panel sitting on top of it.
     if (world && s.showSketch && !isElevation(s.surfaceView)) {
@@ -886,7 +1048,7 @@ export function StageCanvas() {
       sx: e.clientX - rect.left,
       sy: e.clientY - rect.top,
     };
-  }, [penTarget, worldAt]);
+  }, [penTarget, measureTarget, worldAt]);
 
   /**
    * Where a dragged material would land, in surface cm plus the world position
@@ -984,16 +1146,21 @@ export function StageCanvas() {
     ? 'grabbing'
     : spaceDown
       ? 'grab'
-      : tool === 'pen'
+      : tool !== 'select'
         ? 'crosshair'
         : 'default';
 
   return (
     <main
       ref={stageRef}
-      className={`stage${tool === 'pen' ? ' drawing' : ''}`}
+      className={`stage${tool !== 'select' ? ' drawing' : ''}`}
       style={{ cursor }}
       onPointerDown={onStagePointerDown}
+      // Right-click lets go of a half-placed measured line; the browser's own
+      // menu would open over the drawing instead.
+      onContextMenu={(e) => {
+        if (tool === 'measure') e.preventDefault();
+      }}
       onPointerMove={(e) => {
         if (interaction.current) return;
         const s = useEditorStore.getState();
@@ -1013,6 +1180,21 @@ export function StageCanvas() {
           setAddAt(null);
         }
 
+        const plan = !isElevation(s.surfaceView);
+        const pointer = plan ? worldAt(e.clientX, e.clientY) : null;
+        setMeasureHoverId(
+          tool === 'select' && pointer && s.measures.length
+            ? measureAt(s.measures, pointer, 7 / s.zoom)
+            : null,
+        );
+        setHoverPieceId(pointer ? pieceAt(s.pieces, byId, pointer) : null);
+        if (tool === 'measure') {
+          setMeasurePreview(
+            plan ? measureTarget(e.clientX, e.clientY, e.shiftKey, overrideHeld(e)) : null,
+          );
+          return;
+        }
+
         if (tool !== 'pen') return;
         setPenHover(penTarget(e.clientX, e.clientY, overrideHeld(e)));
       }}
@@ -1020,6 +1202,9 @@ export function StageCanvas() {
         setPenHover(null);
         setSketchHover(null);
         setAddAt(null);
+        setMeasurePreview(null);
+        setMeasureHoverId(null);
+        setHoverPieceId(null);
       }}
       onDoubleClick={(e) => {
         // Finishing an open run, the way every polyline tool ends one.
@@ -1124,11 +1309,57 @@ export function StageCanvas() {
             />
           );
         })}
+
+        {/* A recommendation being looked at, faint and untouchable: it is not
+            on the drawing until it is applied. */}
+        {!elevation &&
+          recommendPreview?.map((piece) => {
+            const material = byId.get(piece.materialId);
+            if (!material) return null;
+            return (
+              <div
+                key={`preview-${piece.id}`}
+                className="piece preview-piece"
+                style={{
+                  left: piece.x,
+                  top: piece.y,
+                  width: planW(material),
+                  height: planH(material),
+                  transform: `rotate(${piece.rot}deg)`,
+                }}
+              >
+                <ShapeSvg
+                  material={material}
+                  width={planW(material)}
+                  height={planH(material)}
+                  strokeWidth={1 / zoom}
+                />
+              </div>
+            );
+          })}
+
+        {/* Measured lines over the work, not under it: a check dimension is
+            read across the panels it measures. */}
+        {!elevation && (
+          <MeasureLayer
+            worldW={WORLD_W}
+            worldH={WORLD_H}
+            preview={tool === 'measure' ? measurePreview : null}
+            hoverMeasureId={measureHoverId}
+            edges={refEdges}
+          />
+        )}
       </div>
 
-      {/* Labels are measured off the plan footprint, so they would sit in the
+      {/* Lengths are measured off the plan footprint, so they would sit in the
           wrong place over an elevation. */}
-      {!elevation && <LabelLayer />}
+      {!elevation && (
+        <DimensionLayer
+          hoverLeg={sketchHover && sketchHover.vertex === undefined ? sketchHover : null}
+          hoverMeasureId={measureHoverId}
+          hoverPieceId={hoverPieceId}
+        />
+      )}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text
           stays readable at any zoom. Amber, because an unclosed gap is
@@ -1163,7 +1394,11 @@ export function StageCanvas() {
       {/* A drawn layout is not an empty drawing. Someone who has set the walls
           out has started; putting a "nothing here yet" card over their lines
           would be the app disagreeing with what is plainly on screen. */}
-      {pieces.length === 0 && sketch.length === 0 && penPoints.length === 0 && <EmptyDrawing />}
+      {pieces.length === 0 &&
+        sketch.length === 0 &&
+        measures.length === 0 &&
+        penPoints.length === 0 &&
+        tool !== 'measure' && <EmptyDrawing />}
 
       {elevation && <div className="surface-hint">{VIEW_HINT[surfaceView]}</div>}
     </main>

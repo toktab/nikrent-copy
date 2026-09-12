@@ -33,6 +33,7 @@ const doc = (id: string, name: string, materialIds: string[]): DrawingDoc => ({
   name,
   updatedAt: 0,
   sketch: [],
+  measures: [],
   projectName: '',
   revision: 'A',
   scale: 50,

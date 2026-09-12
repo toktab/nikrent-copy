@@ -1794,53 +1794,377 @@ input.stock-input.bad {
 }
 
 /* ------------------------------------------------------ dimension labels */
-.label-layer {
+/* Measured lines and the measure tool's guides. Colours come from the user's
+   settings inline; only what is fixed lives here. */
+.measure-layer {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+.measure-layer text {
+  font-family: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: rgba(20, 23, 28, 0.85);
+  stroke-width: 0.3em;
+}
+.measure-layer .measure-live {
+  fill: var(--text);
+}
+.measure-offset-line line {
+  stroke: var(--warn);
+}
+.measure-offset-line text {
+  fill: var(--warn);
+}
+.measure-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.measure-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  padding: 0;
+  cursor: pointer;
+}
+.measure-swatch.on {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+/* Where measured lines meet: green, an end resting on a line; orange, two lines
+   running through each other. */
+.measure-contact {
+  fill: none;
+}
+.measure-contact.touch {
+  stroke: var(--ok);
+}
+.measure-contact.cross,
+.measure-contact.cross circle,
+.measure-contact.cross line {
+  stroke: var(--warn);
+  fill: none;
+}
+
+/* Fill recommendations: ranked cards in the side panel, and their faint preview
+   on the drawing. */
+.preview-piece {
+  pointer-events: none;
+  opacity: 0.5;
+  outline: 1px dashed var(--accent);
+}
+.rec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rec-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.rec-controls .field {
+  width: 110px;
+}
+.rec-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.rec-chip {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--well);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.rec-chip.on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(112, 166, 245, 0.14);
+}
+.rec-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.rec-select {
+  height: 26px;
+  font-size: 11.5px;
+}
+.rec-run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rec-run-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.rec-run-head span {
+  color: var(--text-tertiary);
+}
+.rec-card {
+  width: 100%;
+  text-align: left;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rec-card:hover {
+  border-color: var(--line-strong);
+}
+.rec-card.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* Short of stock: still listed, never quietly hidden - but dashed. */
+.rec-card.short {
+  border-style: dashed;
+}
+.rec-card-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+}
+.rec-rank {
+  font-weight: 700;
+}
+.rec-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rec-strip {
+  display: flex;
+  height: 22px;
+  gap: 1px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rec-strip span {
+  min-width: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #c9a25a;
+  color: #1c1c1c;
+  font-size: 10px;
+  font-weight: 600;
+}
+.rec-strip span.filler {
+  background: var(--warn);
+}
+.rec-summary {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.rec-reasons {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+.rec-apply {
+  position: sticky;
+  bottom: -12px;
+  padding: 8px 0 12px;
+  background: var(--surface);
+}
+.rec-apply .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* The display settings: which length shows when, on screen and on paper. */
+.vis-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.vis-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.vis-check input {
+  margin-top: 3px;
+}
+.vis-master {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.vis-scroll {
+  overflow-x: auto;
+}
+.vis-scroll.muted {
+  opacity: 0.45;
+}
+.vis-matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.vis-matrix th,
+.vis-matrix td {
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  padding: 6px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+.vis-matrix tr > :last-child {
+  border-right: none;
+}
+.vis-matrix tbody tr:last-child > * {
+  border-bottom: none;
+}
+.vis-matrix thead th {
+  font-weight: 600;
+  min-width: 96px;
+}
+.vis-matrix th span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.vis-matrix tbody th {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vis-cell {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  color: var(--ok);
+  cursor: pointer;
+}
+.vis-cell:hover {
+  border-color: var(--line-strong);
+}
+.vis-cell.on {
+  background: rgba(113, 197, 117, 0.12);
+  border: 1px solid rgba(113, 197, 117, 0.5);
+}
+.vis-section {
+  margin: 18px 0 8px;
+  font-size: 13px;
+}
+.vis-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Lengths. Where each one goes is lib/dimensions.ts; this is only how it looks.
+   The chip's padding and border are what that file's PAD_X / PAD_Y assume, so
+   change the two together or labels will think they fit where they do not. */
+.dim-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 40;
   overflow: hidden;
 }
-.plabel {
+.dim-lines {
   position: absolute;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+.dim-lines line,
+.dim-lines polyline {
+  fill: none;
+  stroke: rgba(230, 233, 238, 0.6);
+  stroke-width: 1;
+}
+/* Extension lines are the quietest thing on the drawing: they only say where. */
+.dim-lines .dim-ext {
+  stroke: rgba(230, 233, 238, 0.3);
+  stroke-dasharray: 3 3;
+}
+.dim-lines g.accent line,
+.dim-lines g.accent polyline {
+  stroke: var(--accent);
+}
+.dim-lines g.accent .dim-ext {
+  stroke: rgba(112, 166, 245, 0.55);
+}
+.dim-label {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
+  font-size: 11px;
   line-height: 1.28;
   white-space: nowrap;
   letter-spacing: 0.1px;
-}
-.plabel .nm {
-  font-size: 0.92em;
-  font-weight: 500;
-}
-.plabel .dim {
-  font-weight: 700;
-}
-/* on the piece: dark text on the light material fill */
-.plabel.inside {
-  color: #14181d;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
-}
-/* off the piece: light pill on the dark surface */
-.plabel.outside {
+  font-variant-numeric: tabular-nums;
+  /* off the piece: light pill on the dark surface, opaque enough to break the
+     dimension line it sits on */
   color: var(--text);
-  background: rgba(20, 24, 29, 0.86);
+  background: rgba(20, 24, 29, 0.9);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 5px;
 }
-.plabel.sel {
+.dim-label .nm {
+  font-size: 0.92em;
+  font-weight: 500;
+}
+.dim-label .dim {
+  font-weight: 700;
+}
+/* on the piece: dark text on the light material fill */
+.dim-label.inside {
+  color: #14181d;
+  background: none;
+  border-color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+.dim-label.accent {
   color: #1c1c1c;
-}
-.plabel.sel.inside {
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-.plabel.sel.outside {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1c1c1c;
+}
+.dim-label.inside.accent {
+  background: none;
+  border-color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 /* --------------------------------------------------------------- inspector */
@@ -1853,20 +2177,28 @@ input.stock-input.bad {
   flex-direction: column;
   min-height: 0;
 }
+/* Five tabs no longer fit 300px at their natural width; rather than squeeze a
+   label into a clipped fragment, the row scrolls sideways when it must. */
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--panel);
   flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 .tab {
-  flex: 1;
+  flex: 1 0 auto;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-tertiary);
   font-family: inherit;
   font-size: 12.5px;
-  padding: 12px 4px;
+  padding: 12px 6px;
+  white-space: nowrap;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2921,6 +3253,73 @@ input.stock-input.bad {
 }
 .inv-table .stock-input {
   width: 52px;
+}
+
+/* ── აწყობის შემოწმება: a leg's pieces against its length ── */
+.length-check {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.lc-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+.lc-bad {
+  color: var(--shortage);
+  font-weight: 600;
+}
+.lc-course {
+  color: var(--muted);
+  font-size: 10.5px;
+  margin: 6px 0 2px;
+}
+.lc-face {
+  border-left: 2px solid var(--ok);
+  padding: 4px 0 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lc-face.bad {
+  border-left-color: var(--shortage);
+  background: rgba(253, 131, 88, 0.07);
+}
+.lc-face.compact {
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lc-parts {
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+.lc-result {
+  font-weight: 600;
+}
+.lc-face.ok .lc-result {
+  color: var(--ok);
+}
+.lc-face.bad .lc-result {
+  color: var(--shortage);
+}
+.lc-note {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.rec-check {
+  color: var(--ok);
+  font-size: 10.5px;
+  font-weight: 600;
 }
 .link-name {
   background: none;
@@ -4282,5 +4681,347 @@ kbd {
   .sync-banner-actions,
   .offline-when {
     margin-left: 0;
+  }
+}
+
+/* ── Inspector: size and type scale ──────────────────────────────────────────
+   The right-hand panel is read, not glanced at - recommendation cards, a stock
+   table, a leg-by-leg length check - and at 300px with 12px text the labels
+   clipped and the tables were cramped. One width for every tab (recommendations
+   used to widen the panel on their own) and a type scale a notch up. Kept last
+   so it wins over the per-rule defaults and the breakpoints above. */
+.inspector {
+  width: 420px;
+}
+@media (max-width: 1280px) {
+  .inspector {
+    width: 380px;
+  }
+}
+@media (max-width: 1024px) {
+  .inspector {
+    width: 340px;
+  }
+}
+@media (max-width: 820px) {
+  .inspector {
+    width: 380px;
+    max-width: 92vw;
+  }
+}
+.inspector .tab {
+  font-size: 13.5px;
+  padding: 13px 10px;
+}
+.inspector .tab-badge {
+  font-size: 11px;
+}
+.inspector .tab-body {
+  font-size: 13.5px;
+  padding: 14px 16px;
+}
+.inspector .kv {
+  padding: 7px 0;
+}
+/* A long label beside a long value wraps instead of pushing the value out. */
+.inspector .kv .k {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.inspector .rot-field input[type='number'] {
+  width: 68px;
+  padding: 4px 6px;
+}
+.inspector .hint-note {
+  font-size: 12.5px;
+}
+.inspector .empty {
+  font-size: 13.5px;
+}
+.inspector .check-row {
+  font-size: 13px;
+}
+.inspector .section {
+  margin-top: 8px;
+}
+.inspector .section-title {
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.inspector .section-title:first-child {
+  margin-top: 0;
+}
+
+/* stat tiles and tables */
+.inspector .sc-item span {
+  font-size: 12px;
+}
+.inspector .sc-item b {
+  font-size: 20px;
+}
+.inspector .bom-cat,
+.inspector .bom-cat b {
+  font-size: 13px;
+}
+.inspector .bom-table {
+  font-size: 13px;
+}
+.inspector .bom-table th {
+  font-size: 11.5px;
+  padding: 4px 6px;
+}
+.inspector .bom-table td {
+  padding: 6px;
+}
+.inspector .bom-size {
+  font-size: 11.5px;
+}
+.inspector .search {
+  font-size: 13.5px;
+}
+.inspector .inv-table .stock-input {
+  width: 64px;
+}
+
+/* recommendations */
+.inspector .rec-chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  font-size: 13px;
+}
+.inspector .rec-select {
+  height: 30px;
+  font-size: 13px;
+}
+.inspector .rec-controls .field {
+  width: 130px;
+}
+.inspector .rec-run-head {
+  font-size: 14px;
+}
+.inspector .rec-card {
+  padding: 10px 12px;
+}
+.inspector .rec-card-top {
+  font-size: 13px;
+}
+.inspector .rec-strip {
+  height: 26px;
+}
+.inspector .rec-strip span {
+  font-size: 11.5px;
+}
+.inspector .rec-summary {
+  font-size: 14px;
+}
+.inspector .rec-check,
+.inspector .rec-reasons {
+  font-size: 12.5px;
+}
+
+/* length check */
+.inspector .lc-course,
+.inspector .lc-note {
+  font-size: 12.5px;
+}
+.inspector .lc-parts {
+  font-size: 13.5px;
+}
+
+/* ── ნაშთი: the top-bar button and its window ──────────────────────────────── */
+.remaining-btn {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+/* Short in the yard: the shortage hue on the button itself, seen from any view. */
+.remaining-btn.short {
+  border-color: rgba(253, 131, 88, 0.5);
+  color: var(--shortage);
+}
+.rem {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13.5px;
+}
+.rem-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.rem-tile {
+  background: var(--well);
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  padding: 12px 14px;
+}
+.rem-tile span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.rem-tile b {
+  display: block;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.rem-tile small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.rem-tile.good b {
+  color: var(--ok);
+}
+.rem-tile.warn {
+  background: rgba(253, 131, 88, 0.09);
+  border-color: rgba(253, 131, 88, 0.42);
+}
+.rem-tile.warn b {
+  color: var(--shortage);
+}
+.rem-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rem-bar .search {
+  flex: 1 1 160px;
+  width: auto;
+}
+.rem-seg-count {
+  margin-left: 4px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+/* Admin mode is a different kind of window - say so with more than a toggle. */
+.rem-admin {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--r);
+  background: rgba(112, 166, 245, 0.1);
+  border: 1px solid rgba(112, 166, 245, 0.35);
+  font-size: 12.5px;
+}
+.rem-admin .grow {
+  flex: 1 1 200px;
+  color: var(--muted);
+}
+.rem-bulk {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.rem-bulk input {
+  width: 80px;
+}
+.rem-table-wrap {
+  overflow-x: auto;
+}
+.rem-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+/* The header stays put while a long catalog scrolls under it; -20px is the
+   modal body's own padding, so it sticks to the very top edge. */
+.rem-table th {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  background: var(--panel);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.rem-table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(58, 66, 76, 0.5);
+  vertical-align: middle;
+}
+.rem-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.rem-table tr.short td {
+  background: rgba(253, 131, 88, 0.07);
+}
+.rem-cat td {
+  padding: 16px 8px 6px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.rem-cat .catdot {
+  margin-right: 8px;
+}
+.rem-cat-count {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.rem-name {
+  display: block;
+  font-weight: 500;
+}
+.rem-size {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rem-dim,
+.rem-left.dim {
+  color: var(--text-tertiary);
+}
+.rem-left.short {
+  color: var(--shortage);
+  font-weight: 650;
+}
+.rem-stock-input {
+  width: 84px;
+  text-align: right;
+}
+.rem-meter-head,
+.rem-meter {
+  width: 120px;
+}
+.rem-meter i {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--well);
+  overflow: hidden;
+}
+.rem-meter i b {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ok);
+}
+.rem-meter.tight i b {
+  background: var(--warn);
+}
+.rem-meter.over i b {
+  background: var(--shortage);
+}
+@media (max-width: 760px) {
+  .rem-tiles {
+    grid-template-columns: 1fr;
+  }
+  .rem-meter-head,
+  .rem-meter {
+    display: none;
   }
 }

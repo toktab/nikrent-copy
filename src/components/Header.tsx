@@ -10,6 +10,8 @@ import {
 import { isLegacyBritania, legacyBritaniaToV1, schemaToSketchPaths } from '../lib/detectImport';
 import type { LegacyDetectedDoc } from '../lib/detection/types';
 import { pickFile, readFileAsText } from '../lib/files';
+import { isConfigured } from '../lib/supabase';
+import { materialIdsOnServer } from '../lib/repo';
 import { combo, overrideLabel } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
@@ -20,6 +22,7 @@ import { ProfileMenu } from './ProfileMenu';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
+import { RemainingButton } from './RemainingButton';
 
 /**
  * Grid steps that match the catalog.
@@ -41,7 +44,6 @@ const SNAP_STEPS = [5, 15, 30];
  * one job only, setting the first pieces out on the building's axes.
  */
 type SnapMode = 'edge' | 'grid' | 'off';
-
 const SNAP_LABEL: Record<SnapMode, string> = {
   edge: 'კიდეზე',
   grid: 'ბადეზე',
@@ -58,7 +60,10 @@ export function Header() {
   const snap = useEditorStore((s) => s.snap);
   const snapStep = useEditorStore((s) => s.snapStep);
   const zoom = useEditorStore((s) => s.zoom);
-  const showDims = useEditorStore((s) => s.showDims);
+  const showLengths = useEditorStore((s) => s.showLengths);
+  const pdfVisibility = useEditorStore((s) => s.pdfVisibility);
+  const measureHelper = useEditorStore((s) => s.measureStyle.helper);
+  const setMeasureStyle = useEditorStore((s) => s.setMeasureStyle);
   const showNames = useEditorStore((s) => s.showNames);
   const forceLabels = useEditorStore((s) => s.forceLabels);
   const edgeSnap = useEditorStore((s) => s.edgeSnap);
@@ -70,6 +75,8 @@ export function Header() {
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
+  const sketch = useEditorStore((s) => s.sketch);
+  const measures = useEditorStore((s) => s.measures);
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const canUndo = useEditorStore((s) => s.past.length > 0);
   const canRedo = useEditorStore((s) => s.future.length > 0);
@@ -77,10 +84,10 @@ export function Header() {
   const activeDocId = useEditorStore((s) => s.activeDocId);
   const warehouses = useEditorStore((s) => s.warehouses);
   const storageError = useEditorStore((s) => s.storageError);
+  const simple = useEditorStore((s) => s.simpleMode);
 
   const setSnap = useEditorStore((s) => s.setSnap);
   const setSnapStep = useEditorStore((s) => s.setSnapStep);
-  const setShowDims = useEditorStore((s) => s.setShowDims);
   const setShowNames = useEditorStore((s) => s.setShowNames);
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
@@ -92,6 +99,7 @@ export function Header() {
   const setShowSketch = useEditorStore((s) => s.setShowSketch);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
+  const setSimpleMode = useEditorStore((s) => s.setSimpleMode);
   const rotateSelected = useEditorStore((s) => s.rotateSelected);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
   const duplicateSelected = useEditorStore((s) => s.duplicateSelected);
@@ -135,6 +143,7 @@ export function Header() {
         doc: { ...doc, pieces, sketch: showSketch ? doc.sketch : [] },
         materials,
         showSketch,
+        visibility: pdfVisibility,
       });
       if (!result) setToast('ნახაზი ცარიელია.');
       else if (result.rescaled) {
@@ -193,8 +202,7 @@ export function Header() {
           return;
         }
         const apply = () => {
-          const prev = useEditorStore.getState().sketch;
-          useEditorStore.setState({ sketch: [...prev, ...sketchPaths] });
+          useEditorStore.getState().appendSketch(sketchPaths);
           useEditorStore.getState().fitToContent();
           setToast(`დეტექციიდან ${sketchPaths.length} მონახაზი ჩაიტვირთა.`);
         };
@@ -212,41 +220,56 @@ export function Header() {
         return;
       }
 
-      // Otherwise, try as a layout file.
-      const incoming = parseLayoutFile(text);
-      const known = new Set(materials.map((m) => m.id));
-      const usable = incoming.filter((p) => known.has(p.materialId));
-      const dropped = incoming.length - usable.length;
+      // Otherwise, a drawing file. It opens as a drawing of its own, so there
+      // is nothing on screen to overwrite and nothing to confirm.
+      const parsed = parseLayoutFile(text);
 
-      if (!usable.length) {
+      // With a server, a material this screen lacks may already be there -
+      // created by someone else since this tab loaded. Adding the file's older
+      // copy would overwrite theirs, so the import waits for a reload instead.
+      if (isConfigured) {
+        const local = new Set(materials.map((m) => m.id));
+        const missing = [...new Set(parsed.pieces.map((p) => p.materialId))].filter(
+          (id) => !local.has(id),
+        );
+        const onServer = await materialIdsOnServer(missing);
+        if (onServer.size) {
+          setToast(
+            `ფაილის ${onServer.size} მასალა სერვერზე უკვე არსებობს, ეს ეკრანი ძველია - გადატვირთე გვერდი და ისევ შემოიტანე.`,
+          );
+          return;
+        }
+      }
+
+      const result = useEditorStore.getState().importDrawing(parsed, {
+        // Without a server there is no one else's catalog to protect.
+        addMissingMaterials: canManage || !isConfigured,
+      });
+
+      if (!result.created) {
         setToast(
           'ნახაზი ვერ ჩაიტვირთა - ფაილის მასალები ამ კატალოგში არ არის. ჯერ კატალოგი დააიმპორტე.',
         );
         return;
       }
+      useEditorStore.getState().fitToContent();
 
-      const apply = () => {
-        useEditorStore.getState().replaceLayout(usable);
-        useEditorStore.getState().fitToContent();
-        setToast(
-          dropped > 0
-            ? `ნახაზი ჩაიტვირთა (${usable.length}). ${dropped} ელემენტი გამოტოვდა - მასალა კატალოგში არ არის.`
-            : `ნახაზი ჩაიტვირთა (${usable.length} ელემენტი).`,
-        );
-      };
-
-      // Never silently overwrite a drawing that is already on the surface.
-      if (pieces.length) {
-        openDialog({
-          kind: 'confirm',
-          title: 'ნახაზის იმპორტი',
-          message: `მიმდინარე ნახაზი (${pieces.length} ელემენტი) ჩანაცვლდება ფაილის ${usable.length} ელემენტით. გავაგრძელო?`,
-          confirmLabel: 'ჩანაცვლება',
-          onConfirm: apply,
-        });
-      } else {
-        apply();
+      const name = parsed.meta.name || file.name;
+      const report = [
+        `„${name}“ ჩაიტვირთა ახალ ნახაზად: ${result.added} ელემენტი, ${parsed.sketch.length} ხაზი, ${parsed.measures.length} ზომა.`,
+      ];
+      if (result.addedMaterials) {
+        report.push(`კატალოგს დაემატა ${result.addedMaterials} მასალა.`);
       }
+      if (result.droppedPieces) {
+        report.push(
+          `${result.droppedPieces} ელემენტი გამოტოვდა - მასალა კატალოგში არ არის, ადმინისტრატორმა დაამატოს.`,
+        );
+      }
+      if (result.mismatched) {
+        report.push(`${result.mismatched} მასალის ზომა ამ კატალოგში განსხვავდება - დარჩა ადგილობრივი.`);
+      }
+      setToast(report.join(' '));
     } catch (e) {
       setToast(`ნახაზის წაკითხვა ვერ მოხერხდა: ${(e as Error).message}`);
     }
@@ -330,135 +353,162 @@ export function Header() {
           </Menu>
         </div>
 
-        <div className="seg" role="group" aria-label="ხედი">
-          {VIEW_ORDER.map((v) => (
+        <RemainingButton />
+
+        {/* Simple mode works in plan only, so the views go with it. */}
+        {!simple && (
+          <div className="seg" role="group" aria-label="ხედი">
+            {VIEW_ORDER.map((v) => (
+              <button
+                key={v}
+                className={viewMode === '2d' && surfaceView === v ? 'on' : undefined}
+                aria-pressed={viewMode === '2d' && surfaceView === v}
+                onClick={() => {
+                  setViewMode('2d');
+                  setSurfaceView(v);
+                }}
+                title={VIEW_HINT[v]}
+              >
+                {VIEW_LABEL[v]}
+              </button>
+            ))}
             <button
-              key={v}
-              className={viewMode === '2d' && surfaceView === v ? 'on' : undefined}
-              aria-pressed={viewMode === '2d' && surfaceView === v}
-              onClick={() => {
-                setViewMode('2d');
-                setSurfaceView(v);
-              }}
-              title={VIEW_HINT[v]}
+              className={viewMode === '3d' ? 'on' : undefined}
+              aria-pressed={viewMode === '3d'}
+              onClick={() => setViewMode('3d')}
+              title="სივრცითი ხედი - რედაქტირებადი"
             >
-              {VIEW_LABEL[v]}
+              3D
             </button>
-          ))}
-          <button
-            className={viewMode === '3d' ? 'on' : undefined}
-            aria-pressed={viewMode === '3d'}
-            onClick={() => setViewMode('3d')}
-            title="სივრცითი ხედი - რედაქტირებადი"
-          >
-            3D
-          </button>
-        </div>
+          </div>
+        )}
 
         <div className="row-right">
+          {/* The one switch that is always on screen: it takes away everything
+              the drawing itself does not need, and brings it back. */}
+          <button
+            className={`btn small${simple ? ' engaged' : ''}`}
+            onClick={() => setSimpleMode(!simple)}
+            aria-pressed={simple}
+            title={
+              simple
+                ? 'მარტივი რეჟიმი ჩართულია - დააჭირე ყველა ინსტრუმენტის დასაბრუნებლად'
+                : 'მარტივი რეჟიმი - მხოლოდ ხაზვა, გაზომვა, ელემენტები და რეკომენდაცია'
+            }
+          >
+            <Icon name="eye" size={14} /> მარტივი
+          </button>
+
           {/* Everything that is used once a session rather than once a minute.
               These eleven actions used to be a permanent second toolbar. */}
-          <Menu
-            align="right"
-            trigger={(open) => (
-              <button
-                className={`btn icon ghost${open ? ' active' : ''}`}
-                aria-label="ნახაზისა და კატალოგის მოქმედებები"
-              >
-                <Icon name="more" size={17} />
-              </button>
-            )}
-          >
-            {(close) => (
-              <>
-                <MenuLabel>ნახაზი</MenuLabel>
-                <MenuItem
-                  icon="sheet"
-                  onClick={() => {
-                    openDialog({ kind: 'title-block' });
-                    close();
-                  }}
+          {!simple && (
+            <Menu
+              align="right"
+              trigger={(open) => (
+                <button
+                  className={`btn icon ghost${open ? ' active' : ''}`}
+                  aria-label="ნახაზისა და კატალოგის მოქმედებები"
                 >
-                  შტამპი…
-                </MenuItem>
-                <MenuItem
-                  icon="print"
-                  disabled={!pieces.length || printing}
-                  onClick={() => {
-                    void printDrawing();
-                    close();
-                  }}
-                >
-                  {printing ? 'იბეჭდება…' : 'ბეჭდვა (PDF)'}
-                </MenuItem>
-                <MenuItem
-                  icon="download"
-                  disabled={!pieces.length}
-                  onClick={() => {
-                    exportLayoutFile(pieces);
-                    close();
-                  }}
-                >
-                  ნახაზის ექსპორტი
-                </MenuItem>
-                <MenuItem
-                  icon="upload"
-                  onClick={() => {
-                    void importLayout();
-                    close();
-                  }}
-                >
-                  ნახაზის იმპორტი
-                </MenuItem>
-                <MenuItem
-                  icon="trash"
-                  danger
-                  disabled={!pieces.length}
-                  onClick={() => {
-                    clearAll();
-                    close();
-                  }}
-                >
-                  ზედაპირის გასუფთავება
-                </MenuItem>
+                  <Icon name="more" size={17} />
+                </button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <MenuLabel>ნახაზი</MenuLabel>
+                  <MenuItem
+                    icon="sheet"
+                    onClick={() => {
+                      openDialog({ kind: 'title-block' });
+                      close();
+                    }}
+                  >
+                    შტამპი…
+                  </MenuItem>
+                  <MenuItem
+                    icon="print"
+                    disabled={!pieces.length || printing}
+                    onClick={() => {
+                      void printDrawing();
+                      close();
+                    }}
+                  >
+                    {printing ? 'იბეჭდება…' : 'ბეჭდვა (PDF)'}
+                  </MenuItem>
+                  <MenuItem
+                    icon="download"
+                    // A drawing of lines alone is still a drawing worth taking along.
+                    disabled={!pieces.length && !sketch.length && !measures.length}
+                    onClick={() => {
+                      // The live mirrors, not the stored copy, so the file holds
+                      // exactly what is on screen this instant.
+                      if (activeDoc) {
+                        exportLayoutFile({ ...activeDoc, pieces, sketch, measures }, materials);
+                      }
+                      close();
+                    }}
+                  >
+                    ნახაზის ექსპორტი
+                  </MenuItem>
+                  <MenuItem
+                    icon="upload"
+                    onClick={() => {
+                      void importLayout();
+                      close();
+                    }}
+                  >
+                    ნახაზის იმპორტი
+                  </MenuItem>
+                  <MenuItem
+                    icon="trash"
+                    danger
+                    disabled={!pieces.length}
+                    onClick={() => {
+                      clearAll();
+                      close();
+                    }}
+                  >
+                    ზედაპირის გასუფთავება
+                  </MenuItem>
 
-                <MenuSep />
-                <MenuLabel>კატალოგი</MenuLabel>
-                <MenuItem
-                  icon="download"
-                  onClick={() => {
-                    exportCatalogFile(materials, warehouses);
-                    close();
-                  }}
-                >
-                  კატალოგის ექსპორტი
-                </MenuItem>
-                <MenuItem
-                  icon="upload"
-                  disabled={!canManage}
-                  title={gate(ADMIN_ONLY_TITLE)}
-                  onClick={() => {
-                    void importCatalog();
-                    close();
-                  }}
-                >
-                  კატალოგის იმპორტი
-                </MenuItem>
-                <MenuItem
-                  icon="reset"
-                  danger
-                  disabled={!canManage}
-                  title={gate(ADMIN_ONLY_TITLE)}
-                  onClick={() => {
-                    resetCatalog();
-                    close();
-                  }}
-                >
-                  ჩაშენებული კატალოგის აღდგენა
-                </MenuItem>
-              </>
-            )}
-          </Menu>
+                  <MenuSep />
+                  <MenuLabel>კატალოგი</MenuLabel>
+                  <MenuItem
+                    icon="download"
+                    onClick={() => {
+                      exportCatalogFile(materials, warehouses);
+                      close();
+                    }}
+                  >
+                    კატალოგის ექსპორტი
+                  </MenuItem>
+                  <MenuItem
+                    icon="upload"
+                    disabled={!canManage}
+                    title={gate(ADMIN_ONLY_TITLE)}
+                    onClick={() => {
+                      void importCatalog();
+                      close();
+                    }}
+                  >
+                    კატალოგის იმპორტი
+                  </MenuItem>
+                  <MenuItem
+                    icon="reset"
+                    danger
+                    disabled={!canManage}
+                    title={gate(ADMIN_ONLY_TITLE)}
+                    onClick={() => {
+                      resetCatalog();
+                      close();
+                    }}
+                  >
+                    ჩაშენებული კატალოგის აღდგენა
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
+          )}
 
           <SyncBadge />
           <PresenceBar />
@@ -482,109 +532,135 @@ export function Header() {
           </button>
         </Tooltip>
 
-        <span className="sep" />
+        {/* Snapping and what the drawing shows: settings, not acts. Simple mode
+            keeps whatever they were last set to. */}
+        {!simple && (
+          <>
+            <span className="sep" />
 
-        <Menu
-          trigger={(open) => (
-            <button className={`btn${open ? ' active' : ''}`} title={SNAP_HINT[snapMode]}>
-              <Icon name="grid" /> მიბმა: <b>{SNAP_LABEL[snapMode]}</b>
-              {snapMode === 'grid' && <span className="snap-step">{snapStep} სმ</span>}
-              <Icon name="chevron-down" size={12} />
-            </button>
-          )}
-        >
-          {(close) => (
-            <>
-              <MenuLabel>მიბმა</MenuLabel>
-              {(['edge', 'grid', 'off'] as SnapMode[]).map((mode) => (
-                <MenuItem
-                  key={mode}
-                  on={mode === snapMode}
-                  title={SNAP_HINT[mode]}
-                  onClick={() => {
-                    setSnapMode(mode);
-                    if (mode !== 'grid') close();
-                  }}
-                >
-                  {SNAP_LABEL[mode]}
-                </MenuItem>
-              ))}
-              {/* Only when there is a grid to have a step. */}
-              {snapMode === 'grid' && (
+            <Menu
+              trigger={(open) => (
+                <button className={`btn${open ? ' active' : ''}`} title={SNAP_HINT[snapMode]}>
+                  <Icon name="grid" /> მიბმა: <b>{SNAP_LABEL[snapMode]}</b>
+                  {snapMode === 'grid' && <span className="snap-step">{snapStep} სმ</span>}
+                  <Icon name="chevron-down" size={12} />
+                </button>
+              )}
+            >
+              {(close) => (
                 <>
-                  <MenuSep />
-                  <MenuLabel>ბადის ბიჯი</MenuLabel>
-                  {SNAP_STEPS.map((s) => (
+                  <MenuLabel>მიბმა</MenuLabel>
+                  {(['edge', 'grid', 'off'] as SnapMode[]).map((mode) => (
                     <MenuItem
-                      key={s}
-                      on={s === snapStep}
+                      key={mode}
+                      on={mode === snapMode}
+                      title={SNAP_HINT[mode]}
                       onClick={() => {
-                        setSnapStep(s);
-                        close();
+                        setSnapMode(mode);
+                        if (mode !== 'grid') close();
                       }}
                     >
-                      {s} სმ
-                      {/* The one step every panel width divides into. */}
-                      {s === 15 && <span className="menu-note">პანელის მოდული</span>}
+                      {SNAP_LABEL[mode]}
                     </MenuItem>
                   ))}
+                  {/* Only when there is a grid to have a step. */}
+                  {snapMode === 'grid' && (
+                    <>
+                      <MenuSep />
+                      <MenuLabel>ბადის ბიჯი</MenuLabel>
+                      {SNAP_STEPS.map((s) => (
+                        <MenuItem
+                          key={s}
+                          on={s === snapStep}
+                          onClick={() => {
+                            setSnapStep(s);
+                            close();
+                          }}
+                        >
+                          {s} სმ
+                          {/* The one step every panel width divides into. */}
+                          {s === 15 && <span className="menu-note">პანელის მოდული</span>}
+                        </MenuItem>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
-        </Menu>
+            </Menu>
 
-        <Menu
-          trigger={(open) => (
-            <button className={`btn icon${open ? ' active' : ''}`} aria-label="ხედის პარამეტრები">
-              <Icon name="sliders" size={16} />
-            </button>
-          )}
-        >
-          <>
-            <MenuLabel>წარწერები</MenuLabel>
-            <MenuItem on={showDims} onClick={() => setShowDims(!showDims)}>
-              ზომები
-            </MenuItem>
-            <MenuItem on={showNames} onClick={() => setShowNames(!showNames)}>
-              სახელები
-            </MenuItem>
-            <MenuItem
-              on={forceLabels}
-              onClick={() => setForceLabels(!forceLabels)}
-              title="წარწერები არ დაიმალოს ძალიან პატარა/დაშორებულ ხედზეც"
+            <Menu
+              trigger={(open) => (
+                <button className={`btn icon${open ? ' active' : ''}`} aria-label="ხედის პარამეტრები">
+                  <Icon name="sliders" size={16} />
+                </button>
+              )}
             >
-              ყოველთვის
-            </MenuItem>
-            <MenuSep />
-            <MenuItem
-              on={showSketch}
-              onClick={() => setShowSketch(!showSketch)}
-              title="დახაზული გეგმის ჩვენება - გამორთვისას არც ჩანს, არც ებმება"
-            >
-              მონახაზი
-            </MenuItem>
+              <>
+                <MenuItem
+                  icon="eye"
+                  onClick={() => openDialog({ kind: 'display-settings' })}
+                  title="რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში"
+                >
+                  ზომების ჩვენება…
+                </MenuItem>
+                <MenuSep />
+                <MenuLabel>წარწერები</MenuLabel>
+                <MenuItem on={showNames} onClick={() => setShowNames(!showNames)}>
+                  სახელები
+                </MenuItem>
+                <MenuItem
+                  on={forceLabels}
+                  onClick={() => setForceLabels(!forceLabels)}
+                  title="წარწერები არ დაიმალოს ძალიან პატარა/დაშორებულ ხედზეც"
+                >
+                  ყოველთვის
+                </MenuItem>
+                <MenuSep />
+                <MenuItem
+                  on={showSketch}
+                  onClick={() => setShowSketch(!showSketch)}
+                  title="დახაზული გეგმის ჩვენება - გამორთვისას არც ჩანს, არც ებმება"
+                >
+                  მონახაზი
+                </MenuItem>
 
-            <MenuSep />
-            <MenuLabel>შემოწმება</MenuLabel>
-            {/* Edge snapping used to live here as a third toggle. It is the
-                snap control now — it was never a display option. */}
-            <MenuItem
-              on={showOverlaps}
-              onClick={() => setShowOverlaps(!showOverlaps)}
-              title="გადაფარებული ელემენტების მონიშვნა"
+                <MenuSep />
+                <MenuLabel>შემოწმება</MenuLabel>
+                {/* Edge snapping used to live here as a third toggle. It is the
+                    snap control now — it was never a display option. */}
+                <MenuItem
+                  on={showOverlaps}
+                  onClick={() => setShowOverlaps(!showOverlaps)}
+                  title="გადაფარებული ელემენტების მონიშვნა"
+                >
+                  გადაფარება
+                </MenuItem>
+                <MenuItem
+                  on={showGaps}
+                  onClick={() => setShowGaps(!showGaps)}
+                  title="ყველა ღია ნაპრალი ნახაზზე - შეკვეთამდე შესამოწმებლად"
+                >
+                  ყველა ნაპრალი
+                </MenuItem>
+              </>
+            </Menu>
+
+            {/* Which lengths show, on screen and on paper - its own menu, because it
+                is a table of choices rather than a switch. */}
+            <Tooltip
+              label="ზომების ჩვენება"
+              reason={`რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში · D - ${showLengths ? 'ყველა ზომის დამალვა' : 'ზომების ჩვენება'}`}
             >
-              გადაფარება
-            </MenuItem>
-            <MenuItem
-              on={showGaps}
-              onClick={() => setShowGaps(!showGaps)}
-              title="ყველა ღია ნაპრალი ნახაზზე - შეკვეთამდე შესამოწმებლად"
-            >
-              ყველა ნაპრალი
-            </MenuItem>
+              <button
+                className={`btn icon${showLengths ? '' : ' engaged'}`}
+                onClick={() => openDialog({ kind: 'display-settings' })}
+                aria-label="ზომების ჩვენება"
+              >
+                <Icon name="eye" size={16} />
+              </button>
+            </Tooltip>
           </>
-        </Menu>
+        )}
 
         <span className="sep" />
 
@@ -634,27 +710,81 @@ export function Header() {
           </span>
         )}
 
-        <button
-          className="btn raised"
-          onClick={() => openDialog({ kind: 'column-wizard' })}
-          title="კოლონის ავტომატური აწყობა"
+        {/* Measuring sits beside drawing because it is the same kind of act:
+            setting a line out against what is already there. */}
+        <Tooltip
+          label="გაზომვა - ზომის ხაზი"
+          reason={
+            surfaceView === 'plan'
+              ? 'M - გაზომვა · მიიტანე კედელთან ან პანელთან, დააჭირე, მერე მეორე წერტილზე · Shift - 15° კუთხეები · Esc - გაუქმება'
+              : 'მხოლოდ გეგმაზე'
+          }
         >
-          <Icon name="column" /> <span className="btn-label">კოლონა</span>
-        </button>
-        <button
-          className="btn raised"
-          onClick={() => openDialog({ kind: 'wall-wizard' })}
-          title="კედლის ავტომატური აწყობა"
-        >
-          <Icon name="wall" /> <span className="btn-label">კედელი</span>
-        </button>
-        <button
-          className="btn"
-          onClick={() => openDialog({ kind: 'templates' })}
-          title="შენახული შაბლონები - მონიშნულის შენახვა და ჩასმა"
-        >
-          <Icon name="copy" /> <span className="btn-label">შაბლონი</span>
-        </button>
+          <button
+            className={`btn${tool === 'measure' ? ' engaged' : ''}`}
+            onClick={() => setTool(tool === 'measure' ? 'select' : 'measure')}
+            disabled={viewMode === '3d' || surfaceView !== 'plan'}
+            aria-pressed={tool === 'measure'}
+          >
+            <Icon name="ruler" /> <span className="btn-label">გაზომვა</span>
+          </button>
+        </Tooltip>
+        {tool === 'measure' && (
+          <span className="pen-face" role="group" aria-label="გაზომვის დამხმარე">
+            {/* The helper can be wrong about one particular line; this is the
+                way to place that one by hand. */}
+            <button
+              className={`btn small${measureHelper ? ' engaged' : ''}`}
+              onClick={() => setMeasureStyle({ helper: !measureHelper })}
+              aria-pressed={measureHelper}
+              title={
+                measureHelper
+                  ? 'დამხმარე ჩართულია: კედლის/პანელის აღმოჩენა, შეთავაზება, მაგნიტი. H - გამორთვა · Alt - დროებით'
+                  : 'დამხმარე გამორთულია: თავისუფალი ხაზი. H - ჩართვა'
+              }
+            >
+              <Icon name="magnet" size={14} /> {measureHelper ? 'დამხმარე' : 'თავისუფალი'}
+            </button>
+            {!simple && (
+              <button
+                className="btn icon small"
+                onClick={() => openDialog({ kind: 'display-settings' })}
+                title="ზომების ჩვენება და ზომის ხაზის პარამეტრები"
+                aria-label="ზომების ჩვენება და ზომის ხაზის პარამეტრები"
+              >
+                <Icon name="sliders" size={14} />
+              </button>
+            )}
+          </span>
+        )}
+
+        {/* The wizards and templates are shortcuts to a whole wall or column;
+            simple mode draws the line and fills it instead. */}
+        {!simple && (
+          <>
+            <button
+              className="btn raised"
+              onClick={() => openDialog({ kind: 'column-wizard' })}
+              title="კოლონის ავტომატური აწყობა"
+            >
+              <Icon name="column" /> <span className="btn-label">კოლონა</span>
+            </button>
+            <button
+              className="btn raised"
+              onClick={() => openDialog({ kind: 'wall-wizard' })}
+              title="კედლის ავტომატური აწყობა"
+            >
+              <Icon name="wall" /> <span className="btn-label">კედელი</span>
+            </button>
+            <button
+              className="btn"
+              onClick={() => openDialog({ kind: 'templates' })}
+              title="შენახული შაბლონები - მონიშნულის შენახვა და ჩასმა"
+            >
+              <Icon name="copy" /> <span className="btn-label">შაბლონი</span>
+            </button>
+          </>
+        )}
 
         <span className="sep" />
 
@@ -673,32 +803,36 @@ export function Header() {
             <Icon name="rotate-cw" size={17} />
           </button>
         </Tooltip>
-        <Tooltip
-          label="დუბლირება"
-          reason={hasSelection ? combo(['mod', 'D']) : 'ჯერ მონიშნე ელემენტი'}
-        >
-          <button
-            className="btn icon ghost"
-            onClick={duplicateSelected}
-            disabled={!hasSelection}
-            aria-label="დუბლირება"
-          >
-            <Icon name="copy" size={17} />
-          </button>
-        </Tooltip>
-        <Tooltip
-          label="მასივი"
-          reason={hasSelection ? 'ასლების გამრავლება ბადეზე' : 'ჯერ მონიშნე ელემენტი'}
-        >
-          <button
-            className="btn icon ghost"
-            onClick={() => openDialog({ kind: 'array' })}
-            disabled={!hasSelection}
-            aria-label="მასივი"
-          >
-            <Icon name="array" size={17} />
-          </button>
-        </Tooltip>
+        {!simple && (
+          <>
+            <Tooltip
+              label="დუბლირება"
+              reason={hasSelection ? combo(['mod', 'D']) : 'ჯერ მონიშნე ელემენტი'}
+            >
+              <button
+                className="btn icon ghost"
+                onClick={duplicateSelected}
+                disabled={!hasSelection}
+                aria-label="დუბლირება"
+              >
+                <Icon name="copy" size={17} />
+              </button>
+            </Tooltip>
+            <Tooltip
+              label="მასივი"
+              reason={hasSelection ? 'ასლების გამრავლება ბადეზე' : 'ჯერ მონიშნე ელემენტი'}
+            >
+              <button
+                className="btn icon ghost"
+                onClick={() => openDialog({ kind: 'array' })}
+                disabled={!hasSelection}
+                aria-label="მასივი"
+              >
+                <Icon name="array" size={17} />
+              </button>
+            </Tooltip>
+          </>
+        )}
         <Tooltip
           label="წაშლა"
           reason={hasSelection ? combo(['del']) : 'ჯერ მონიშნე ელემენტი'}
@@ -749,7 +883,7 @@ export function Header() {
           <Icon name="warning" /> {storageError}
         </div>
       )}
-      {shortages > 0 && <ShortageBar count={shortages} />}
+      {shortages > 0 && <ShortageBar count={shortages} simple={simple} />}
     </header>
   );
 }
@@ -759,23 +893,30 @@ export function Header() {
  * about, so it gets a line of its own under the toolbar rather than a badge
  * competing for space inside it.
  */
-function ShortageBar({ count }: { count: number }) {
+function ShortageBar({ count, simple }: { count: number; simple: boolean }) {
   const setInspectorOpen = useEditorStore((s) => s.setInspectorOpen);
   const setInspectorTab = useEditorStore((s) => s.setInspectorTab);
+  const openDialog = useEditorStore((s) => s.openDialog);
   return (
     <div className="shortage-bar">
       <span className="badge shortage">დეფიციტი</span>
       <span>
         <b>{count}</b> კომპონენტს მარაგი არ ჰყოფნის ამ ნახაზისთვის.
       </span>
+      {/* Simple mode has no bill-of-materials tab; the ნაშთი window says the
+          same thing, row by row. */}
       <button
         className="btn small"
         onClick={() => {
+          if (simple) {
+            openDialog({ kind: 'remaining' });
+            return;
+          }
           setInspectorOpen(true);
           setInspectorTab('bom');
         }}
       >
-        უწყისში ნახვა
+        {simple ? 'ნაშთში ნახვა' : 'უწყისში ნახვა'}
       </button>
     </div>
   );

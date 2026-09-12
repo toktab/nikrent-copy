@@ -11,12 +11,14 @@ import type {
   InspectorTab,
   Material,
   MaterialDraft,
+  MeasureLine,
   Piece,
   SketchPath,
   Warehouse,
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
-import { sanitizeMaterial } from '../lib/catalogFile';
+import { withCompanyWeights } from '../data/companyWeights';
+import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
   computeEdgeSnap,
@@ -51,6 +53,7 @@ import {
   type SketchFillSpec,
 } from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
+import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import {
   isElevation,
   projectPiece,
@@ -60,6 +63,22 @@ import {
 } from '../lib/projection';
 import { isConfigured } from '../lib/supabase';
 import type { DataSnapshot } from '../lib/syncDiff';
+import {
+  DEFAULT_LENGTH_VISIBILITY,
+  DEFAULT_PDF_VISIBILITY,
+  LENGTH_KINDS,
+  normalizeLengthVisibility,
+  normalizePdfVisibility,
+  type LengthKind,
+  type LengthVisibility,
+  type PdfVisibility,
+} from '../lib/dimensions';
+import {
+  DEFAULT_MEASURE_STYLE,
+  normalizeMeasureStyle,
+  type MeasureAnchor,
+  type MeasureStyle,
+} from '../lib/measure';
 
 export const STORAGE_KEY = 'du-formwork-v2';
 
@@ -104,18 +123,22 @@ const PREF_KEYS = [
   'snapStep',
   'orthoLock',
   'edgeSnap',
-  'showDims',
+  'showLengths',
+  'lengthVisibility',
+  'pdfVisibility',
   'showNames',
   'forceLabels',
   'showOverlaps',
   'showGaps',
   'showSketch',
+  'measureStyle',
   'viewMode',
   'surfaceView',
   'hiddenLines',
   'paletteOpen',
   'inspectorOpen',
   'inspectorTab',
+  'simpleMode',
 ] as const;
 
 /**
@@ -156,6 +179,8 @@ export interface EditorState {
   pieces: Piece[];
   /** the drawn layout the formwork is being set out to (also mirrored) */
   sketch: SketchPath[];
+  /** measured check lines of the active drawing (also mirrored) */
+  measures: MeasureLine[];
   removedBuiltins: string[];
   documents: DrawingDoc[];
   activeDocId: string;
@@ -192,7 +217,15 @@ export interface EditorState {
    * to draw even though it cannot fill it.
    */
   orthoLock: boolean;
-  showDims: boolean;
+  /** The master switch for every length on screen (D). */
+  showLengths: boolean;
+  /**
+   * When each kind of thing shows its length: always, on hover, on click, or
+   * never. One mode for everything gave a busy layout nothing in between.
+   */
+  lengthVisibility: Record<LengthKind, LengthVisibility>;
+  /** what the printed sheet shows - see `PdfVisibility` */
+  pdfVisibility: PdfVisibility;
   showNames: boolean;
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
@@ -211,6 +244,12 @@ export interface EditorState {
   inspectorTab: InspectorTab;
   /** mark every open gap, not only the one beside the selection */
   showGaps: boolean;
+  /**
+   * Simple mode: only what drawing and filling need stays on screen - drawing,
+   * measuring, the parts, the recommendation tab. Everything else comes back
+   * when it is switched off.
+   */
+  simpleMode: boolean;
   /**
    * Show the drawn layout.
    *
@@ -238,7 +277,13 @@ export interface EditorState {
    * everything else. Deliberately not persisted: reopening the app in a mode
    * that swallows clicks would be baffling.
    */
-  tool: 'select' | 'pen';
+  tool: 'select' | 'pen' | 'measure';
+  /** the measure tool's first click, while the second is being placed */
+  measureFirst: MeasureAnchor | null;
+  /** a measured line picked out on its own - kept apart from pieces and runs */
+  selectedMeasureId: string | null;
+  /** how measured lines look; a per-person preference, not part of the drawing */
+  measureStyle: MeasureStyle;
   /**
    * Which face of the pour the pen is drawing — see `SketchPath.perimeter`.
    *
@@ -261,6 +306,11 @@ export interface EditorState {
   guideY: number | null;
   /** material being dragged in from the palette, for the drop preview */
   draggingMaterialId: string | null;
+  /**
+   * Pieces a recommendation would place, drawn faint on the surface while it is
+   * being looked at. Never part of the drawing, its history or what is saved.
+   */
+  recommendPreview: Piece[] | null;
 
   // ── actions: data ──
   /** Replace all company data with what the server holds. */
@@ -358,6 +408,36 @@ export interface EditorState {
   insertPieces: (pieces: Piece[]) => void;
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
+  /**
+   * Open a drawing file as a new drawing, exactly as it was exported.
+   *
+   * A new drawing rather than a replacement, so nothing already on screen is
+   * at risk. Materials the file uses and this catalog lacks are added under
+   * their own ids when the caller may change the catalog; otherwise the pieces
+   * that need them are dropped and counted, never silently.
+   */
+  importDrawing: (
+    parsed: ParsedLayout,
+    options: { addMissingMaterials: boolean },
+  ) => {
+    created: boolean;
+    added: number;
+    droppedPieces: number;
+    addedMaterials: number;
+    mismatched: number;
+  };
+  /** Add drawn runs to the active drawing as one undoable step (detection import). */
+  appendSketch: (paths: SketchPath[]) => void;
+  /**
+   * Take the server's copy of a drawing after a conflict, or drop the drawing
+   * when the server no longer has it.
+   *
+   * All three mirrors move with it. Setting only `pieces` left the rejected
+   * lines and measurements on screen, and the next edit wrote them back over
+   * the version that had just been accepted - silently, since that write then
+   * matched the server's version number.
+   */
+  adoptServerDocument: (docId: string, fresh: DrawingDoc | null) => void;
 
   // ── actions: history ──
   undo: () => void;
@@ -381,11 +461,18 @@ export interface EditorState {
   setSnapStep: (step: number) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
-  setShowDims: (on: boolean) => void;
+  setShowLengths: (on: boolean) => void;
+  setLengthVisibility: (kind: LengthKind, visibility: LengthVisibility) => void;
+  setPdfVisibility: (patch: Partial<PdfVisibility>) => void;
+  /** the screen table, the master switch and the measured-line settings */
+  resetScreenDisplay: () => void;
+  resetPdfVisibility: () => void;
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
+  /** switch simple mode; switching it on also brings the view back to the plan */
+  setSimpleMode: (on: boolean) => void;
   setShowSketch: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   /** Switch the surface between plan, front and side, reframing as it goes. */
@@ -401,6 +488,10 @@ export interface EditorState {
   updateMaterial: (id: string, draft: MaterialDraft) => void;
   deleteMaterial: (id: string, cascade: boolean) => void;
   setStock: (id: string, warehouseId: string, quantity: number) => void;
+  /** one quantity for every material in one warehouse - the admin's test "500 each" */
+  setAllStock: (warehouseId: string, quantity: number) => void;
+  /** the company's own weights onto built-ins that still have none; returns how many */
+  fillMissingWeights: () => number;
   importMaterials: (drafts: MaterialDraft[]) => number;
   replaceCatalog: (materials: Material[], warehouses?: Warehouse[]) => number;
   resetCatalog: () => void;
@@ -409,10 +500,21 @@ export interface EditorState {
   openDialog: (dialog: DialogState) => void;
   closeDialog: () => void;
   setToast: (message: string | null) => void;
+  setRecommendPreview: (pieces: Piece[] | null) => void;
 
   // ── actions: the drawn layout ──
   /** Pick up the pen. The second argument also sets which face it draws. */
-  setTool: (tool: 'select' | 'pen', perimeter?: 'outer' | 'inner') => void;
+  setTool: (tool: 'select' | 'pen' | 'measure', perimeter?: 'outer' | 'inner') => void;
+  /** First click of a measured line, already snapped by the caller. */
+  measureStart: (first: MeasureAnchor) => void;
+  /** Second click: save the line, as one undoable step. */
+  measureFinish: (b: Point) => void;
+  /** Drop a half-placed line, keeping the tool out. */
+  measureCancel: () => void;
+  selectMeasure: (id: string | null) => void;
+  deleteMeasure: (id: string) => void;
+  setMeasureStyle: (patch: Partial<MeasureStyle>) => void;
+  resetMeasureStyle: () => void;
   /** Switch the pen between the outside and the inside of the pour. */
   setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
   /** Change which face already-drawn runs are, and so which way they fill. */
@@ -474,6 +576,19 @@ export interface EditorState {
    * up by hand to know what to order.
    */
   fillSketch: (pathIds: string[], spec: SketchFillSpec) => { added: number; warnings: string[] };
+  /**
+   * Fill with recommendations picked per run (`FillPlan.runs[].key`), as one
+   * undo step.
+   *
+   * Every run in one fill stands the same courses, so the first pick's stack is
+   * the job's; a pick for a course height the job does not stand is ignored and
+   * that run is filled the usual way, as is any run with no pick at all.
+   */
+  applyFillVariants: (
+    pathIds: string[],
+    spec: SketchFillSpec,
+    picks: Array<{ runKey: string; variant: Variant }>,
+  ) => { added: number; warnings: string[] };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -485,6 +600,7 @@ function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
     updatedAt: Date.now(),
     pieces,
     sketch: [],
+    measures: [],
     projectName: '',
     revision: 'A',
     scale: 50,
@@ -497,6 +613,7 @@ function snap(s: EditorState): DocSnapshot {
     materials: s.materials,
     pieces: s.pieces,
     sketch: s.sketch,
+    measures: s.measures,
     removedBuiltins: s.removedBuiltins,
   };
 }
@@ -536,18 +653,85 @@ const safeStorage = createJSONStorage(() => ({
   },
 }));
 
+/**
+ * Upgrades preferences saved by an older version. Exported so the upgrade can
+ * be tested directly, without persisting a store.
+ *
+ * Above `create()` for the same reason as `BUILTIN_SIZE_FIXES`: rehydration
+ * calls it while the store is still being built.
+ */
+export function migratePersisted(persisted: unknown): Partial<EditorState> {
+  type Legacy = Partial<EditorState> & { showDims?: boolean; dimMode?: string };
+  const state = persisted as Legacy | undefined;
+  if (!state) return {};
+  let next: Legacy = state;
+
+  // v3 offered 10 cm and 25 cm grid steps. The panels are 30/45/60/75/90,
+  // whose common module is 15: a 25 cm grid lands one of those five on a
+  // grid line and 10 lands three, so both spent most of their time
+  // pulling panels off the joints they were meant to butt against. The
+  // 1 cm step went the same way later, for the opposite reason — it put
+  // nothing on a joint and produced legs like 180.2. Anyone still on one
+  // of them moves to the nearest step the catalog divides into.
+  const remap: Record<number, number> = { 1: DRAW_STEP_CM, 10: 15, 25: 30 };
+  const step = next.snapStep;
+  if (typeof step === 'number' && remap[step]) {
+    next = { ...next, snapStep: remap[step] };
+  }
+
+  // v4's on/off lengths switch and v5's three modes both become the master
+  // switch and the per-kind table. Off stays off, "all" stays every length,
+  // everyone else gets the default table.
+  if (next.lengthVisibility === undefined) {
+    const { showDims, dimMode, ...rest } = next;
+    const old = dimMode ?? (showDims === false ? 'off' : undefined);
+    next = {
+      ...rest,
+      showLengths: old !== 'off',
+      lengthVisibility:
+        old === 'all'
+          ? (Object.fromEntries(LENGTH_KINDS.map((k) => [k, 'always'])) as Record<
+              LengthKind,
+              LengthVisibility
+            >)
+          : { ...DEFAULT_LENGTH_VISIBILITY },
+    };
+  }
+
+  if (next.inspectorTab !== undefined) {
+    next = { ...next, inspectorTab: normalizeInspectorTab(next.inspectorTab) };
+  }
+  return next;
+}
+
+/**
+ * A saved inspector tab that still exists, or რეკომენდაცია.
+ *
+ * The დეტალები tab was folded into რეკომენდაცია and ნაშთი moved out to its own
+ * window, so a tab saved before either change names nothing - and the panel
+ * opened with no tab and an empty body. Applied in `merge` as well as here:
+ * `migrate` only runs when the persist version changes, and these tabs went
+ * away without one.
+ */
+export function normalizeInspectorTab(value: unknown): InspectorTab {
+  return value === 'recommend' || value === 'bom' || value === 'inventory' ? value : 'recommend';
+}
+
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => {
       /** Mirror the working pieces and sketch back into the active document. */
       const syncDoc = (s: EditorState, patch: Partial<EditorState>): Partial<EditorState> => {
-        if (!patch.pieces && !patch.sketch) return patch;
+        if (!patch.pieces && !patch.sketch && !patch.measures) return patch;
         const pieces = patch.pieces ?? s.pieces;
         const sketch = patch.sketch ?? s.sketch;
+        const measures = patch.measures ?? s.measures;
         return {
           ...patch,
           documents: s.documents.map((d) =>
-            d.id === s.activeDocId ? { ...d, pieces, sketch, updatedAt: Date.now() } : d,
+            d.id === s.activeDocId
+              ? { ...d, pieces, sketch, measures, updatedAt: Date.now() }
+              : d,
           ),
         };
       };
@@ -556,13 +740,24 @@ export const useEditorStore = create<EditorState>()(
       const apply = (fn: (s: EditorState) => Partial<EditorState>) =>
         set((s) => syncDoc(s, fn(s)));
 
-      /** Mutation that starts a new undo step. */
+      /**
+       * Mutation that starts a new undo step.
+       *
+       * An action with nothing to do returns `{}`, and that must stay nothing: it
+       * used to push an empty undo step and clear redo, so a Delete with nothing
+       * selected quietly threw away every step that could have been redone.
+       * Opening a step deliberately, for a drag, is `beginDrag`'s job.
+       */
       const commit = (fn: (s: EditorState) => Partial<EditorState>) =>
-        set((s) => ({
-          ...syncDoc(s, fn(s)),
-          past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
-          future: [],
-        }));
+        set((s) => {
+          const patch = fn(s);
+          if (!Object.keys(patch).length) return {};
+          return {
+            ...syncDoc(s, patch),
+            past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
+            future: [],
+          };
+        });
 
       const snapPoint = (s: EditorState, x: number, y: number) => ({
         x: snapValue(x, s.snapStep, s.snap),
@@ -575,9 +770,12 @@ export const useEditorStore = create<EditorState>()(
         materials: SEED_MATERIALS,
         pieces: [],
         sketch: [],
+        measures: [],
         selectedSketchIds: [],
         selectedSketchPart: null,
         tool: 'select',
+        measureFirst: null,
+        selectedMeasureId: null,
         penPerimeter: 'outer',
         penPoints: [],
         removedBuiltins: [],
@@ -598,7 +796,9 @@ export const useEditorStore = create<EditorState>()(
         snapStep: DRAW_STEP_CM,
         edgeSnap: true,
         orthoLock: true,
-        showDims: true,
+        showLengths: true,
+        lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
+        pdfVisibility: { ...DEFAULT_PDF_VISIBILITY },
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
@@ -610,7 +810,9 @@ export const useEditorStore = create<EditorState>()(
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
         inspectorTab: 'bom',
         showGaps: false,
+        simpleMode: false,
         showSketch: true,
+        measureStyle: { ...DEFAULT_MEASURE_STYLE },
 
         selectedIds: [],
         clipboard: [],
@@ -621,6 +823,7 @@ export const useEditorStore = create<EditorState>()(
         guideX: null,
         guideY: null,
         draggingMaterialId: null,
+        recommendPreview: null,
 
         // ── data ──────────────────────────────────────────────────────────
         /**
@@ -658,12 +861,15 @@ export const useEditorStore = create<EditorState>()(
               activeDocId: active.id,
               pieces: active.pieces,
               sketch: active.sketch,
+              measures: active.measures ?? [],
               removedBuiltins: [],
               dataLoaded: true,
               selectedIds: [],
               selectedSketchIds: [],
               selectedSketchPart: null,
               penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -717,14 +923,17 @@ export const useEditorStore = create<EditorState>()(
         resetView: () => set({ ...DEFAULT_VIEW }),
 
         // ── selection ─────────────────────────────────────────────────────
-        select: (id) => set({ selectedIds: id ? [id] : [] }),
+        select: (id) =>
+          set(id ? { selectedIds: [id], selectedMeasureId: null } : { selectedIds: [] }),
         toggleSelect: (id) =>
           set((s) => ({
             selectedIds: s.selectedIds.includes(id)
               ? s.selectedIds.filter((x) => x !== id)
               : [...s.selectedIds, id],
           })),
-        setSelection: (ids) => set({ selectedIds: ids }),
+        // Also the "clear everything" path (Escape, a press on empty surface,
+        // the rubber band), so a picked measured line lets go here too.
+        setSelection: (ids) => set({ selectedIds: ids, selectedMeasureId: null }),
         // Everything means everything: the layout is part of the drawing, and
         // "select all, move it over" is the commonest reason to want either.
         selectAll: () =>
@@ -1048,12 +1257,19 @@ export const useEditorStore = create<EditorState>()(
             // inspector — would be wrong if a line could get into `selectedIds`.
             const pieceIds = new Set(s.selectedIds);
             const sketchIds = new Set(s.selectedSketchIds);
-            if (!pieceIds.size && !sketchIds.size) return {};
+            // Only a line that is still there counts as selected.
+            const measureId =
+              s.selectedMeasureId && s.measures.some((m) => m.id === s.selectedMeasureId)
+                ? s.selectedMeasureId
+                : null;
+            if (!pieceIds.size && !sketchIds.size && !measureId) return {};
             return {
               pieces: pieceIds.size ? s.pieces.filter((p) => !pieceIds.has(p.id)) : s.pieces,
               sketch: sketchIds.size ? s.sketch.filter((k) => !sketchIds.has(k.id)) : s.sketch,
+              measures: measureId ? s.measures.filter((m) => m.id !== measureId) : s.measures,
               selectedIds: [],
               selectedSketchIds: [],
+              selectedMeasureId: null,
             };
           }),
 
@@ -1169,6 +1385,163 @@ export const useEditorStore = create<EditorState>()(
         clearPieces: () => commit(() => ({ pieces: [], selectedIds: [] })),
         replaceLayout: (pieces) => commit(() => ({ pieces, selectedIds: [] })),
 
+        importDrawing: (parsed, { addMissingMaterials }) => {
+          const s = get();
+          const local = new Map(s.materials.map((m) => [m.id, m]));
+          const offered = new Map(parsed.materials.map((m) => [m.id, m]));
+          const additions: Material[] = [];
+          let mismatched = 0;
+
+          for (const id of new Set(parsed.pieces.map((p) => p.materialId))) {
+            const mine = local.get(id);
+            const theirs = offered.get(id);
+            if (mine) {
+              // Same part, different size: this catalog's own figure wins. It
+              // is the one the yard's stock and every other drawing agree on,
+              // but the difference is reported rather than absorbed.
+              if (
+                theirs &&
+                (mine.w !== theirs.w ||
+                  mine.h !== theirs.h ||
+                  mine.depth !== theirs.depth ||
+                  mine.shape !== theirs.shape)
+              ) {
+                mismatched++;
+              }
+            } else if (theirs && addMissingMaterials) {
+              // Kept under its own id, because that is what the pieces point at.
+              // A built-in this company had deleted comes back as a built-in.
+              // Judged against the seed, not `removedBuiltins`, which a server
+              // session never fills in.
+              additions.push({
+                ...theirs,
+                builtin: SEED_MATERIALS.some((m) => m.id === id),
+                stock: {},
+              });
+            }
+          }
+
+          const known = new Set([...local.keys(), ...additions.map((m) => m.id)]);
+          const pieces = parsed.pieces.filter((p) => known.has(p.materialId));
+          const outcome = {
+            added: pieces.length,
+            droppedPieces: parsed.pieces.length - pieces.length,
+            addedMaterials: additions.length,
+            mismatched,
+          };
+          if (!pieces.length && !parsed.sketch.length && !parsed.measures.length) {
+            return { created: false, ...outcome };
+          }
+
+          const doc = newDoc(parsed.meta.name || 'ნახაზი (იმპორტი)', pieces);
+          doc.sketch = parsed.sketch;
+          doc.measures = parsed.measures;
+          doc.projectName = parsed.meta.projectName;
+          if (parsed.meta.revision) doc.revision = parsed.meta.revision;
+          if (parsed.meta.scale !== null) doc.scale = parsed.meta.scale;
+
+          const restored = new Set(additions.map((m) => m.id));
+          set({
+            materials: additions.length ? [...s.materials, ...additions] : s.materials,
+            removedBuiltins: s.removedBuiltins.filter((id) => !restored.has(id)),
+            documents: [...s.documents, doc],
+            activeDocId: doc.id,
+            pieces: doc.pieces,
+            sketch: doc.sketch,
+            measures: doc.measures,
+            selectedIds: [],
+            selectedSketchIds: [],
+            selectedSketchPart: null,
+            penPoints: [],
+            measureFirst: null,
+            selectedMeasureId: null,
+            past: [],
+            future: [],
+          });
+          return { created: true, ...outcome };
+        },
+
+        appendSketch: (paths) => {
+          if (!paths.length) return;
+          commit((s) => ({ sketch: [...s.sketch, ...paths] }));
+        },
+
+        adoptServerDocument: (docId, fresh) =>
+          set((s) => {
+            const replaced = fresh
+              ? s.documents.map((d) => (d.id === docId ? fresh : d))
+              : s.documents.filter((d) => d.id !== docId);
+            // Always keep one drawing, as deleteDocument does.
+            const documents = replaced.length ? replaced : [newDoc('ნახაზი 1')];
+            const active =
+              documents.find((d) => d.id === s.activeDocId) ?? documents[0];
+            const mirrorsChange = s.activeDocId === docId || active.id !== s.activeDocId;
+            return {
+              documents,
+              activeDocId: active.id,
+              ...(mirrorsChange
+                ? {
+                    pieces: active.pieces,
+                    sketch: active.sketch ?? [],
+                    measures: active.measures ?? [],
+                  }
+                : {}),
+              past: [],
+              future: [],
+              selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedMeasureId: null,
+              measureFirst: null,
+              penPoints: [],
+            };
+          }),
+
+        // ── measured lines ────────────────────────────────────────────────
+        measureStart: (first) => set({ measureFirst: first, selectedMeasureId: null }),
+
+        measureFinish: (b) => {
+          const first = get().measureFirst;
+          if (!first) return;
+          // Shorter than the drawing grid is a double click, not a measurement.
+          // The first point stays, so the line can still be finished.
+          if (Math.hypot(b.x - first.point.x, b.y - first.point.y) < DRAW_STEP_CM) return;
+          commit((s) => ({
+            measures: [
+              ...s.measures,
+              { id: uid('ms'), a: { x: first.point.x, y: first.point.y }, b: { x: b.x, y: b.y } },
+            ],
+            measureFirst: null,
+          }));
+        },
+
+        measureCancel: () => set({ measureFirst: null }),
+
+        selectMeasure: (id) =>
+          set(
+            id
+              ? {
+                  selectedMeasureId: id,
+                  selectedIds: [],
+                  selectedSketchIds: [],
+                  selectedSketchPart: null,
+                }
+              : { selectedMeasureId: null },
+          ),
+
+        deleteMeasure: (id) => {
+          if (!get().measures.some((m) => m.id === id)) return;
+          commit((s) => ({
+            measures: s.measures.filter((m) => m.id !== id),
+            selectedMeasureId: s.selectedMeasureId === id ? null : s.selectedMeasureId,
+          }));
+        },
+
+        setMeasureStyle: (patch) =>
+          set((s) => ({ measureStyle: normalizeMeasureStyle({ ...s.measureStyle, ...patch }) })),
+
+        resetMeasureStyle: () => set({ measureStyle: { ...DEFAULT_MEASURE_STYLE } }),
+
         // ── history ───────────────────────────────────────────────────────
         undo: () =>
           set((s) => {
@@ -1178,12 +1551,23 @@ export const useEditorStore = create<EditorState>()(
               ...previous,
               documents: s.documents.map((d) =>
                 d.id === s.activeDocId
-                  ? { ...d, pieces: previous.pieces, sketch: previous.sketch }
+                  ? {
+                      ...d,
+                      pieces: previous.pieces,
+                      sketch: previous.sketch,
+                      measures: previous.measures,
+                    }
                   : d,
               ),
               past: s.past.slice(0, -1),
               future: [snap(s), ...s.future].slice(0, HISTORY_LIMIT),
               selectedIds: [],
+              // A selection that outlives the thing it picked turns the next
+              // Delete into an edit nobody meant, and that edit wipes redo.
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedMeasureId: null,
+              measureFirst: null,
             };
           }),
 
@@ -1195,12 +1579,16 @@ export const useEditorStore = create<EditorState>()(
               ...next,
               documents: s.documents.map((d) =>
                 d.id === s.activeDocId
-                  ? { ...d, pieces: next.pieces, sketch: next.sketch }
+                  ? { ...d, pieces: next.pieces, sketch: next.sketch, measures: next.measures }
                   : d,
               ),
               past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
               future: s.future.slice(1),
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedMeasureId: null,
+              measureFirst: null,
             };
           }),
 
@@ -1212,7 +1600,17 @@ export const useEditorStore = create<EditorState>()(
               documents: [...s.documents, doc],
               activeDocId: doc.id,
               pieces: [],
+              // The mirrors have to empty too. Leaving the previous drawing's
+              // lines in `sketch` showed them on the new sheet, and the first
+              // edit there wrote them into it for good.
+              sketch: [],
+              measures: [],
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -1226,10 +1624,13 @@ export const useEditorStore = create<EditorState>()(
               activeDocId: id,
               pieces: target.pieces,
               sketch: target.sketch,
+              measures: target.measures ?? [],
               selectedIds: [],
               selectedSketchIds: [],
               selectedSketchPart: null,
               penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -1251,15 +1652,22 @@ export const useEditorStore = create<EditorState>()(
               source.pieces.map((p) => ({ ...p, id: uid() })),
             );
             copy.sketch = source.sketch.map((k) => ({ ...k, id: uid('sk') }));
+            copy.measures = (source.measures ?? []).map((m) => ({ ...m, id: uid('ms') }));
+            copy.projectName = source.projectName;
+            copy.revision = source.revision;
+            copy.scale = source.scale;
             return {
               documents: [...s.documents, copy],
               activeDocId: copy.id,
               pieces: copy.pieces,
               sketch: copy.sketch,
+              measures: copy.measures,
               selectedIds: [],
               selectedSketchIds: [],
               selectedSketchPart: null,
               penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -1277,10 +1685,13 @@ export const useEditorStore = create<EditorState>()(
               activeDocId: active.id,
               pieces: active.pieces,
               sketch: active.sketch,
+              measures: active.measures ?? [],
               selectedIds: [],
               selectedSketchIds: [],
               selectedSketchPart: null,
               penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -1337,11 +1748,31 @@ export const useEditorStore = create<EditorState>()(
         setSnapStep: (step) => set({ snapStep: step }),
         setEdgeSnap: (on) => set({ edgeSnap: on }),
         setOrthoLock: (on) => set({ orthoLock: on }),
-        setShowDims: (on) => set({ showDims: on }),
+        setShowLengths: (on) => set({ showLengths: on }),
+        setLengthVisibility: (kind, visibility) =>
+          set((s) => ({ lengthVisibility: { ...s.lengthVisibility, [kind]: visibility } })),
+        setPdfVisibility: (patch) =>
+          set((s) => ({ pdfVisibility: normalizePdfVisibility({ ...s.pdfVisibility, ...patch }) })),
+        resetScreenDisplay: () =>
+          set({
+            showLengths: true,
+            lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
+            measureStyle: { ...DEFAULT_MEASURE_STYLE },
+          }),
+        resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
+        // Simple mode has no view switcher, so it opens on the plan it works in -
+        // through the view setters, so whatever a view change also resets, it does.
+        setSimpleMode: (on) => {
+          set({ simpleMode: on });
+          if (!on) return;
+          const s = get();
+          if (s.viewMode !== '2d') s.setViewMode('2d');
+          if (s.surfaceView !== 'plan') s.setSurfaceView('plan');
+        },
         setShowSketch: (on) =>
           set((s) => ({
             showSketch: on,
@@ -1349,6 +1780,7 @@ export const useEditorStore = create<EditorState>()(
             // vanishing into a layer nobody can see.
             tool: on ? s.tool : 'select',
             penPoints: on ? s.penPoints : [],
+            measureFirst: on ? s.measureFirst : null,
             selectedSketchIds: on ? s.selectedSketchIds : [],
           })),
         setViewMode: (mode) => set({ viewMode: mode }),
@@ -1416,6 +1848,25 @@ export const useEditorStore = create<EditorState>()(
             ),
           })),
 
+        // The same as a stock edit on every row at once: no undo step, and the
+        // sync diff sends each changed row through set_stock, so the server's
+        // stock log records it like any other count.
+        setAllStock: (warehouseId, quantity) =>
+          set((s) => ({
+            materials: s.materials.map((m) => ({
+              ...m,
+              stock: withStockIn(m.stock, warehouseId, quantity),
+            })),
+          })),
+
+        // Catalog data, so it is an undo step like any material edit - and only
+        // ever onto a blank; see COMPANY_WEIGHTS.
+        fillMissingWeights: () => {
+          const { materials, filled } = withCompanyWeights(get().materials);
+          if (filled) commit(() => ({ materials }));
+          return filled;
+        },
+
         importMaterials: (drafts) => {
           if (!drafts.length) return 0;
           const taken = new Set(get().materials.map((m) => m.id));
@@ -1455,17 +1906,20 @@ export const useEditorStore = create<EditorState>()(
         openDialog: (dialog) => set({ dialog }),
         closeDialog: () => set({ dialog: null }),
         setToast: (message) => set({ toast: message }),
+        // Plain set: a preview is looked at, not drawn, so it takes no undo step.
+        setRecommendPreview: (pieces) => set({ recommendPreview: pieces }),
 
         // ── the drawn layout ────────────────────────────────────────────────
         setTool: (tool, perimeter) =>
           set((s) => ({
             tool,
             penPerimeter: perimeter ?? s.penPerimeter,
-            // You cannot draw into a layer you cannot see.
-            showSketch: tool === 'pen' ? true : s.showSketch,
-            // Leaving the pen abandons whatever it was halfway through, rather
-            // than keeping a dangling path that reappears next time.
+            // You cannot draw into, or measure off, a layer you cannot see.
+            showSketch: tool !== 'select' ? true : s.showSketch,
+            // Leaving a tool abandons whatever it was halfway through, rather
+            // than keeping a dangling path or point that reappears next time.
             penPoints: tool === 'pen' ? s.penPoints : [],
+            measureFirst: tool === 'measure' ? s.measureFirst : null,
           })),
 
         setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),
@@ -1561,6 +2015,17 @@ export const useEditorStore = create<EditorState>()(
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
 
+        applyFillVariants: (pathIds, spec, picks) => {
+          const choices: NonNullable<SketchFillSpec['choices']> = {};
+          let stack: number[] | undefined;
+          for (const { runKey, variant } of picks) {
+            const choice = choiceFromVariant(variant);
+            stack ??= choice.stack;
+            choices[runKey] = choice.sequences;
+          }
+          return get().fillSketch(pathIds, { ...spec, stack, choices });
+        },
+
         dragSketchAll: (dx, dy, baselines) =>
           apply((s) => {
             const step = drawStep(s.snap, s.snapStep);
@@ -1646,7 +2111,9 @@ export const useEditorStore = create<EditorState>()(
         selectSketch: (id, additive = false) =>
           set((s) => {
             if (!id) return { selectedSketchIds: [] };
-            if (!additive) return { selectedSketchIds: [id], selectedIds: [] };
+            if (!additive) {
+              return { selectedSketchIds: [id], selectedIds: [], selectedMeasureId: null };
+            }
             return {
               selectedSketchIds: s.selectedSketchIds.includes(id)
                 ? s.selectedSketchIds.filter((x) => x !== id)
@@ -1659,27 +2126,11 @@ export const useEditorStore = create<EditorState>()(
       // With a backend, only preferences are kept locally, and under their own
       // key — see PREFS_KEY for why sharing the old one would destroy data.
       name: isConfigured ? PREFS_KEY : STORAGE_KEY,
-      version: 4,
+      version: 6,
       storage: safeStorage,
       // v2 stored a single top-level `pieces` array instead of named drawings.
       // `merge` normalises either shape, so migration mostly passes through.
-      migrate: (persisted) => {
-        const state = persisted as Partial<EditorState> | undefined;
-        if (!state) return {};
-        // v3 offered 10 cm and 25 cm grid steps. The panels are 30/45/60/75/90,
-        // whose common module is 15: a 25 cm grid lands one of those five on a
-        // grid line and 10 lands three, so both spent most of their time
-        // pulling panels off the joints they were meant to butt against. The
-        // 1 cm step went the same way later, for the opposite reason — it put
-        // nothing on a joint and produced legs like 180.2. Anyone still on one
-        // of them moves to the nearest step the catalog divides into.
-        const remap: Record<number, number> = { 1: DRAW_STEP_CM, 10: 15, 25: 30 };
-        const step = state.snapStep;
-        if (typeof step === 'number' && remap[step]) {
-          return { ...state, snapStep: remap[step] };
-        }
-        return state;
-      },
+      migrate: (persisted) => migratePersisted(persisted) as EditorState,
       /**
        * The persist middleware swallows anything `merge` throws: the store is
        * left on its empty defaults and the next autosave writes those over the
@@ -1717,13 +2168,26 @@ export const useEditorStore = create<EditorState>()(
         const saved = (persisted ?? {}) as Partial<EditorState> & { pieces?: Piece[] };
 
         // Preferences only; the catalog and drawings arrive from the server.
-        if (isConfigured) return { ...current, ...saved, dataLoaded: false };
+        if (isConfigured) {
+          return {
+            ...current,
+            ...saved,
+            measureStyle: normalizeMeasureStyle(saved.measureStyle),
+            lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+            pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+            inspectorTab:
+              saved.inspectorTab === undefined
+                ? current.inspectorTab
+                : normalizeInspectorTab(saved.inspectorTab),
+            dataLoaded: false,
+          };
+        }
 
         // `sketch` has to come from the restored active drawing for the same
         // reason `pieces` does: the top-level copy is a mirror, and a reload
         // that trusts the mirror over the document shows the lines of whichever
         // drawing happened to be open when the tab was last written.
-        const { documents, activeDocId, pieces, sketch } = restoreDocuments(saved);
+        const { documents, activeDocId, pieces, sketch, measures } = restoreDocuments(saved);
         const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
           ...current,
@@ -1734,10 +2198,22 @@ export const useEditorStore = create<EditorState>()(
           activeDocId,
           pieces,
           sketch,
+          measures,
+          // See normalizeInspectorTab: a tab that no longer exists opens an
+          // empty panel, and `migrate` does not run within the same version.
+          inspectorTab:
+            saved.inspectorTab === undefined
+              ? current.inspectorTab
+              : normalizeInspectorTab(saved.inspectorTab),
           selectedIds: [],
           selectedSketchIds: [],
           // Reopening in a mode that swallows clicks would be baffling.
           tool: 'select',
+          measureFirst: null,
+          selectedMeasureId: null,
+          measureStyle: normalizeMeasureStyle(saved.measureStyle),
+          lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+          pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
           penPerimeter: 'outer',
           penPoints: [],
           clipboard: [],
@@ -1770,6 +2246,7 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
   activeDocId: string;
   pieces: Piece[];
   sketch: SketchPath[];
+  measures: MeasureLine[];
 } {
   const stored = Array.isArray(saved.documents) ? saved.documents : [];
   const documents = stored
@@ -1781,6 +2258,8 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
       pieces: Array.isArray(d.pieces) ? d.pieces : [],
       // and the sketch after those — a drawing made before the pen has none
       sketch: Array.isArray(d.sketch) ? d.sketch : [],
+      // and the measured lines after the sketch
+      measures: Array.isArray(d.measures) ? d.measures : [],
       // title-block fields arrived after named drawings did
       projectName: typeof d.projectName === 'string' ? d.projectName : '',
       revision: typeof d.revision === 'string' && d.revision ? d.revision : 'A',
@@ -1790,7 +2269,13 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
 
   if (!documents.length) {
     const doc = newDoc('ნახაზი 1', Array.isArray(saved.pieces) ? saved.pieces : []);
-    return { documents: [doc], activeDocId: doc.id, pieces: doc.pieces, sketch: doc.sketch };
+    return {
+      documents: [doc],
+      activeDocId: doc.id,
+      pieces: doc.pieces,
+      sketch: doc.sketch,
+      measures: doc.measures,
+    };
   }
 
   const active = documents.find((d) => d.id === saved.activeDocId) ?? documents[0];
@@ -1799,6 +2284,7 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
     activeDocId: active.id,
     pieces: active.pieces,
     sketch: active.sketch,
+    measures: active.measures,
   };
 }
 
