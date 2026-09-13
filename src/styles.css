@@ -2089,6 +2089,85 @@ input.stock-input.bad {
   flex-direction: column;
   gap: 8px;
 }
+.vis-check.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ექსპორტი: the choices on the left, what they produce on the right. */
+.export-grid {
+  display: grid;
+  grid-template-columns: minmax(270px, 350px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.export-grid .vis-section:first-child {
+  margin-top: 0;
+}
+.export-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--panel2);
+  color: var(--muted);
+  font-size: 11px;
+}
+.export-note {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.export-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.export-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.export-preview {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 260px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--well);
+}
+.export-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 3px;
+}
+.export-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.export-json {
+  margin: 0;
+  max-height: 460px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.export-empty {
+  margin: auto;
+  max-width: 280px;
+  color: var(--muted);
+  text-align: center;
+}
 
 /* Lengths. Where each one goes is lib/dimensions.ts; this is only how it looks.
    The chip's padding and border are what that file's PAD_X / PAD_Y assume, so

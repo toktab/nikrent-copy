@@ -250,8 +250,10 @@ export interface LayoutFile {
   revision?: string;
   scale?: number;
   pieces: Piece[];
-  sketch?: SketchPath[];
-  measures?: MeasureLine[];
+  /** `legs` - each leg's length, cm - only when the export was asked for lengths */
+  sketch?: Array<SketchPath & { legs?: number[] }>;
+  /** `length` in cm, likewise only when asked for */
+  measures?: Array<MeasureLine & { length?: number }>;
   materials?: Material[];
 }
 
@@ -272,6 +274,7 @@ export type DialogState =
   | { kind: 'password' }
   | { kind: 'display-settings' }
   | { kind: 'remaining' }
+  | { kind: 'export'; tab: 'pdf' | 'json' }
   | { kind: 'shortcuts' }
   | { kind: 'command' }
   | { kind: 'tour' }

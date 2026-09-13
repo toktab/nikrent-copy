@@ -17,6 +17,8 @@ import { makeMaterialId, uid } from './ids';
 import { DEFAULT_WAREHOUSE, normalizeStock } from './inventory';
 import { defaultDepth } from '../data/seedCatalog';
 import { DRAW_STEP_CM } from './geometry';
+import { legLength, segments } from './sketch';
+import { DEFAULT_JSON_EXPORT, type JsonExportOptions } from './exportOptions';
 
 /** 3 = the whole drawing: sketch, measured lines, title block, used materials. */
 const FILE_VERSION = 3;
@@ -160,27 +162,65 @@ export function parseCatalogFile(text: string): CatalogParseResult {
  * browser. Only the materials the pieces actually use go along, and without
  * their stock: the receiving machine needs to know what a "პანელი 45*300" is,
  * not how many this yard happens to own.
+ *
+ * `options` leave parts out. A part switched off is left out of the file
+ * altogether rather than written empty, so what is in it is what was chosen -
+ * except `pieces`, which the format has always required and goes as an empty
+ * list. The drawing's name always goes: it is what the import names the new
+ * drawing after.
  */
-export function buildLayoutFile(doc: DrawingDoc, materials: Material[]): LayoutFile {
-  const used = new Set(doc.pieces.map((p) => p.materialId));
+export function buildLayoutFile(
+  doc: DrawingDoc,
+  materials: Material[],
+  options: JsonExportOptions = DEFAULT_JSON_EXPORT,
+): LayoutFile {
+  const pieces = options.pieces ? doc.pieces : [];
+  const used = new Set(pieces.map((p) => p.materialId));
+  const cm = (v: number) => Math.round(v * 10) / 10;
   return {
     app: 'du-formwork',
     kind: 'layout',
     version: FILE_VERSION,
     exportedAt: new Date().toISOString(),
     name: doc.name,
-    projectName: doc.projectName,
-    revision: doc.revision,
-    scale: doc.scale,
-    pieces: doc.pieces,
-    sketch: doc.sketch ?? [],
-    measures: doc.measures ?? [],
-    materials: materials.filter((m) => used.has(m.id)).map((m) => ({ ...m, stock: {} })),
+    ...(options.titleBlock
+      ? { projectName: doc.projectName, revision: doc.revision, scale: doc.scale }
+      : {}),
+    pieces,
+    ...(options.sketch
+      ? {
+          sketch: (doc.sketch ?? []).map((path) =>
+            options.lengths
+              ? { ...path, legs: segments(path).map(([a, b]) => cm(legLength(a, b))) }
+              : path,
+          ),
+        }
+      : {}),
+    ...(options.measures
+      ? {
+          measures: (doc.measures ?? []).map((m) =>
+            options.lengths ? { ...m, length: cm(legLength(m.a, m.b)) } : m,
+          ),
+        }
+      : {}),
+    // Definitions travel with the pieces that need them, never on their own.
+    ...(options.pieces && options.materials
+      ? { materials: materials.filter((m) => used.has(m.id)).map((m) => ({ ...m, stock: {} })) }
+      : {}),
   };
 }
 
-export function exportLayoutFile(doc: DrawingDoc, materials: Material[]): void {
-  downloadJson(buildLayoutFile(doc, materials), stampedName('du-layout', 'json'));
+/** Whether a built file has anything in it the import could open. */
+export function layoutFileHasContent(file: LayoutFile): boolean {
+  return file.pieces.length > 0 || (file.sketch?.length ?? 0) > 0 || (file.measures?.length ?? 0) > 0;
+}
+
+export function exportLayoutFile(
+  doc: DrawingDoc,
+  materials: Material[],
+  options: JsonExportOptions = DEFAULT_JSON_EXPORT,
+): void {
+  downloadJson(buildLayoutFile(doc, materials, options), stampedName('du-layout', 'json'));
 }
 
 export interface LayoutMeta {

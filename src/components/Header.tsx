@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import {
   exportCatalogFile,
-  exportLayoutFile,
   parseCatalogFile,
   parseLayoutFile,
 } from '../lib/catalogFile';
@@ -65,7 +64,6 @@ export function Header() {
   const snapStep = useEditorStore((s) => s.snapStep);
   const zoom = useEditorStore((s) => s.zoom);
   const showLengths = useEditorStore((s) => s.showLengths);
-  const pdfVisibility = useEditorStore((s) => s.pdfVisibility);
   const measureHelper = useEditorStore((s) => s.measureStyle.helper);
   const setMeasureStyle = useEditorStore((s) => s.setMeasureStyle);
   const showNames = useEditorStore((s) => s.showNames);
@@ -121,7 +119,6 @@ export function Header() {
     [materials, pieces],
   );
   const hasSelection = selectedIds.length > 0;
-  const [printing, setPrinting] = useState(false);
   const activeDoc = documents.find((d) => d.id === activeDocId);
 
   // Two booleans, one choice. Grid keeps edge snapping on underneath it —
@@ -132,32 +129,6 @@ export function Header() {
   const setSnapMode = (mode: SnapMode) => {
     setSnap(mode === 'grid');
     setEdgeSnap(mode !== 'off');
-  };
-
-  /** Scaled, dimensioned drawing sheet with the title block. */
-  const printDrawing = async () => {
-    const doc = documents.find((d) => d.id === activeDocId);
-    if (!doc || !pieces.length) return;
-    setPrinting(true);
-    try {
-      const { exportDrawingToPdf } = await import('../lib/drawingPdf');
-      // The sheet prints what the screen shows: a layout hidden on screen is
-      // one the user has decided is not part of this drawing any more.
-      const result = exportDrawingToPdf({
-        doc: { ...doc, pieces, sketch: showSketch ? doc.sketch : [] },
-        materials,
-        showSketch,
-        visibility: pdfVisibility,
-      });
-      if (!result) setToast('ნახაზი ცარიელია.');
-      else if (result.rescaled) {
-        setToast(`ნახაზი არ ეტეოდა 1:${doc.scale}-ში - დაიბეჭდა 1:${result.scale} მასშტაბით.`);
-      }
-    } catch (e) {
-      setToast(`ბეჭდვა ვერ მოხერხდა: ${(e as Error).message}`);
-    } finally {
-      setPrinting(false);
-    }
   };
 
   // ── file actions ──────────────────────────────────────────────────────────
@@ -430,30 +401,28 @@ export function Header() {
                   >
                     შტამპი…
                   </MenuItem>
+                  {/* One window for both, with a switch for every part of the
+                      drawing; these two only decide which tab it opens on. A
+                      drawing of lines alone is still worth printing or taking along. */}
                   <MenuItem
                     icon="print"
-                    disabled={!pieces.length || printing}
+                    disabled={!pieces.length && !sketch.length && !measures.length}
                     onClick={() => {
-                      void printDrawing();
+                      openDialog({ kind: 'export', tab: 'pdf' });
                       close();
                     }}
                   >
-                    {printing ? 'იბეჭდება…' : 'ბეჭდვა (PDF)'}
+                    ექსპორტი - PDF…
                   </MenuItem>
                   <MenuItem
                     icon="download"
-                    // A drawing of lines alone is still a drawing worth taking along.
                     disabled={!pieces.length && !sketch.length && !measures.length}
                     onClick={() => {
-                      // The live mirrors, not the stored copy, so the file holds
-                      // exactly what is on screen this instant.
-                      if (activeDoc) {
-                        exportLayoutFile({ ...activeDoc, pieces, sketch, measures }, materials);
-                      }
+                      openDialog({ kind: 'export', tab: 'json' });
                       close();
                     }}
                   >
-                    ნახაზის ექსპორტი
+                    ექსპორტი - JSON…
                   </MenuItem>
                   {/* His own workbook - კონსტრუქცია, ჯამი, ნაშთი, აწყობა, პრინტ -
                       with the counts already in, so the office keeps its file. */}
@@ -625,7 +594,7 @@ export function Header() {
                 <MenuItem
                   icon="eye"
                   onClick={() => openDialog({ kind: 'display-settings' })}
-                  title="რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში"
+                  title="რა ზომა როდის ჩანდეს ეკრანზე"
                 >
                   ზომების ჩვენება…
                 </MenuItem>
@@ -675,7 +644,7 @@ export function Header() {
                 is a table of choices rather than a switch. */}
             <Tooltip
               label="ზომების ჩვენება"
-              reason={`რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში · D - ${showLengths ? 'ყველა ზომის დამალვა' : 'ზომების ჩვენება'}`}
+              reason={`რა ზომა როდის ჩანდეს ეკრანზე · D - ${showLengths ? 'ყველა ზომის დამალვა' : 'ზომების ჩვენება'}`}
             >
               <button
                 className={`btn icon${showLengths ? '' : ' engaged'}`}

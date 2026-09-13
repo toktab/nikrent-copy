@@ -57,6 +57,18 @@ export function CommandPalette() {
           );
         },
       },
+      {
+        id: 'export-pdf',
+        label: 'ექსპორტი - PDF',
+        hint: 'ბეჭდვა: ნახაზი, ხაზები, ზომები, შტამპი, უწყისი',
+        run: () => store().openDialog({ kind: 'export', tab: 'pdf' }),
+      },
+      {
+        id: 'export-json',
+        label: 'ექსპორტი - JSON',
+        hint: 'ნახაზის ფაილი',
+        run: () => store().openDialog({ kind: 'export', tab: 'json' }),
+      },
       { id: 'recommend', label: 'რეკომენდაცია', hint: 'მარჯვენა პანელი', run: () => openTab('recommend') },
       { id: 'bom', label: 'უწყისი', hint: 'მარჯვენა პანელი', run: () => (simple ? store().setSimpleMode(false) : null, openTab('bom')) },
       { id: 'inventory', label: 'მარაგი', hint: 'მარჯვენა პანელი', run: () => (simple ? store().setSimpleMode(false) : null, openTab('inventory')) },

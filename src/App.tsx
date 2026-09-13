@@ -26,6 +26,7 @@ import { ErrorLogDialog } from './components/ErrorLogDialog';
 import { PasswordDialog } from './components/PasswordDialog';
 import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
 import { RemainingDialog } from './components/RemainingDialog';
+import { ExportDialog } from './components/ExportDialog';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { CommandPalette } from './components/CommandPalette';
 import { TourDialog } from './components/TourDialog';
@@ -130,6 +131,7 @@ export default function App() {
       {dialog?.kind === 'password' && <PasswordDialog />}
       {dialog?.kind === 'display-settings' && <DisplaySettingsDialog />}
       {dialog?.kind === 'remaining' && <RemainingDialog />}
+      {dialog?.kind === 'export' && <ExportDialog key={dialog.tab} tab={dialog.tab} />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}

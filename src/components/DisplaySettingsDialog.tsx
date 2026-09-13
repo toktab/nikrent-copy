@@ -1,11 +1,9 @@
-import { useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import {
   LENGTH_KINDS,
   LENGTH_VISIBILITIES,
   type LengthKind,
   type LengthVisibility,
-  type PdfVisibility,
 } from '../lib/dimensions';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -27,28 +25,24 @@ const VISIBILITY_LABEL: Record<LengthVisibility, [string, string]> = {
   never: ['არასდროს', ''],
 };
 
-const PDF_EXTRAS: Array<[keyof PdfVisibility, string]> = [
-  ['sketchLines', 'მონახაზის ხაზები'],
-  ['measureLines', 'ზომის ხაზები'],
-  ['overall', 'ჯამური ზომები (სიგანე და სიმაღლე ნახაზის გარეთ)'],
-];
-
 /** A handful of colours that read on the dark surface, plus a free picker. */
 const SWATCHES = ['#9aa4b2', '#e6e9ee', '#70a6f5', '#71c575', '#efa831', '#e5484d'];
 
 /**
- * Everything about which lengths show, in one place.
+ * Which lengths show on screen, in one place.
  *
- * The screen side is a table - one choice per kind of thing - because the
- * question is never "lengths on or off" but "these always, those only when I
- * point at them". The PDF side is simpler: paper has no pointer, so each length
- * is on the sheet or it is not.
+ * A table - one choice per kind of thing - because the question is never
+ * "lengths on or off" but "these always, those only when I point at them".
+ *
+ * What goes on paper used to be a second tab here. It moved to the export
+ * window, next to the preview of the sheet and the button that makes it, where
+ * every other choice about the PDF now is; a link stays for anyone who looks
+ * for it here.
  */
 export function DisplaySettingsDialog() {
-  const [view, setView] = useState<'screen' | 'pdf'>('screen');
   const closeDialog = useEditorStore((s) => s.closeDialog);
+  const openDialog = useEditorStore((s) => s.openDialog);
   const resetScreenDisplay = useEditorStore((s) => s.resetScreenDisplay);
-  const resetPdfVisibility = useEditorStore((s) => s.resetPdfVisibility);
 
   return (
     <Modal
@@ -57,7 +51,7 @@ export function DisplaySettingsDialog() {
       onClose={closeDialog}
       footer={
         <>
-          <button className="btn" onClick={view === 'screen' ? resetScreenDisplay : resetPdfVisibility}>
+          <button className="btn" onClick={resetScreenDisplay}>
             ნაგულისხმევი
           </button>
           <button className="btn primary" onClick={closeDialog}>
@@ -68,21 +62,18 @@ export function DisplaySettingsDialog() {
     >
       <div className="vis-top">
         <p className="hint-note" style={{ margin: 0 }}>
-          {view === 'screen'
-            ? 'აირჩიე, როდის ჩანდეს ზომა თითოეულ ტიპზე.'
-            : 'აირჩიე, რა დაიბეჭდოს PDF-ში.'}
+          აირჩიე, როდის ჩანდეს ზომა თითოეულ ტიპზე.
         </p>
-        <div className="seg" role="group" aria-label="სად">
-          <button className={view === 'screen' ? 'on' : undefined} onClick={() => setView('screen')}>
-            ეკრანი
-          </button>
-          <button className={view === 'pdf' ? 'on' : undefined} onClick={() => setView('pdf')}>
-            <Icon name="print" size={14} /> PDF
-          </button>
-        </div>
+        <button
+          className="btn small"
+          onClick={() => openDialog({ kind: 'export', tab: 'pdf' })}
+          title="რა დაიბეჭდოს PDF-ში და რა ჩაიწეროს JSON-ში - ექსპორტის ფანჯარაში"
+        >
+          <Icon name="print" size={14} /> PDF / JSON - ექსპორტი…
+        </button>
       </div>
 
-      {view === 'screen' ? <ScreenSettings /> : <PdfSettings />}
+      <ScreenSettings />
     </Modal>
   );
 }
@@ -187,63 +178,6 @@ function ScreenSettings() {
             onChange={(e) => setMeasureStyle({ opacity: Number(e.target.value) })}
           />
         </label>
-      </div>
-    </>
-  );
-}
-
-function PdfSettings() {
-  const pdf = useEditorStore((s) => s.pdfVisibility);
-  const setPdfVisibility = useEditorStore((s) => s.setPdfVisibility);
-
-  return (
-    <>
-      <div className="vis-scroll">
-        <table className="vis-matrix">
-          <thead>
-            <tr>
-              <th />
-              {LENGTH_KINDS.map((kind) => (
-                <th key={kind} scope="col">
-                  {KIND_LABEL[kind][0]}
-                  <span>{KIND_LABEL[kind][1]}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <th scope="row">ზომა PDF-ში</th>
-              {LENGTH_KINDS.map((kind) => (
-                <td key={kind}>
-                  <button
-                    type="button"
-                    className={`vis-cell${pdf[kind] ? ' on' : ''}`}
-                    aria-pressed={pdf[kind]}
-                    aria-label={`${KIND_LABEL[kind][0]} - PDF`}
-                    onClick={() => setPdfVisibility({ [kind]: !pdf[kind] })}
-                  >
-                    {pdf[kind] && <Icon name="check" size={18} />}
-                  </button>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h4 className="vis-section">ნახაზზე</h4>
-      <div className="vis-extra">
-        {PDF_EXTRAS.map(([key, label]) => (
-          <label key={key} className="vis-check">
-            <input
-              type="checkbox"
-              checked={pdf[key]}
-              onChange={(e) => setPdfVisibility({ [key]: e.target.checked })}
-            />
-            <span>{label}</span>
-          </label>
-        ))}
       </div>
     </>
   );

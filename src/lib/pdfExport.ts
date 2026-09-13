@@ -133,8 +133,16 @@ const PRINT_CSS = `
   .doc .note{font-size:11px;color:#7a8492;margin:9px 0 0;}
 `;
 
-/** Builds the printable table off-screen, rasterises it and paginates onto A4. */
-export async function exportBomToPdf(options: PdfOptions): Promise<void> {
+/**
+ * Lays the bill of materials onto A4 portrait pages of an existing PDF.
+ *
+ * Its own function so the drawing export can put the list after the sheet in
+ * the same file: one PDF for the site and the yard, instead of two to keep
+ * together. `newPage` starts on a fresh page; without it the list begins on the
+ * document's current, still-empty first page. Every page it adds is A4 portrait
+ * whatever the document started as - a drawing sheet is A3 or A4 landscape.
+ */
+export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: boolean): Promise<void> {
   // The stylesheet goes in <head> so html2canvas's document clone definitely has it.
   const style = document.createElement('style');
   style.textContent = PRINT_CSS;
@@ -155,7 +163,7 @@ export async function exportBomToPdf(options: PdfOptions): Promise<void> {
 
     if (!canvas.width || !canvas.height) throw new Error('ცხრილის რენდერი ცარიელია');
 
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    if (newPage) pdf.addPage('a4', 'portrait');
     const margin = 10;
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
@@ -202,14 +210,21 @@ export async function exportBomToPdf(options: PdfOptions): Promise<void> {
 
       y += h;
       if (y < canvas.height) {
-        pdf.addPage();
+        // Named, not the default: the default is whatever the document was
+        // opened as, and a landscape drawing sheet would turn the list sideways.
+        pdf.addPage('a4', 'portrait');
         startY = margin;
       }
     }
-
-    pdf.save(stampedName('du-bom', 'pdf'));
   } finally {
     host.remove();
     style.remove();
   }
+}
+
+/** Builds the printable table off-screen, rasterises it and paginates onto A4. */
+export async function exportBomToPdf(options: PdfOptions): Promise<void> {
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  await appendBomPages(pdf, options, false);
+  pdf.save(stampedName('du-bom', 'pdf'));
 }

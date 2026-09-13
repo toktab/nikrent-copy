@@ -80,6 +80,13 @@ import {
   type MeasureAnchor,
   type MeasureStyle,
 } from '../lib/measure';
+import {
+  DEFAULT_JSON_EXPORT,
+  normalizeJsonExport,
+  normalizeSheetSize,
+  type JsonExportOptions,
+  type SheetSize,
+} from '../lib/exportOptions';
 
 export const STORAGE_KEY = 'du-formwork-v2';
 
@@ -127,6 +134,8 @@ const PREF_KEYS = [
   'showLengths',
   'lengthVisibility',
   'pdfVisibility',
+  'pdfSheet',
+  'jsonExport',
   'showNames',
   'forceLabels',
   'showOverlaps',
@@ -242,6 +251,10 @@ export interface EditorState {
   lengthVisibility: Record<LengthKind, LengthVisibility>;
   /** what the printed sheet shows - see `PdfVisibility` */
   pdfVisibility: PdfVisibility;
+  /** the paper the drawing is exported on */
+  pdfSheet: SheetSize;
+  /** what the exported drawing file carries - see `JsonExportOptions` */
+  jsonExport: JsonExportOptions;
   showNames: boolean;
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
@@ -489,6 +502,9 @@ export interface EditorState {
   /** the screen table, the master switch and the measured-line settings */
   resetScreenDisplay: () => void;
   resetPdfVisibility: () => void;
+  setPdfSheet: (sheet: SheetSize) => void;
+  setJsonExport: (patch: Partial<JsonExportOptions>) => void;
+  resetJsonExport: () => void;
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
@@ -825,6 +841,8 @@ export const useEditorStore = create<EditorState>()(
         showLengths: true,
         lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
         pdfVisibility: { ...DEFAULT_PDF_VISIBILITY },
+        pdfSheet: 'A4',
+        jsonExport: { ...DEFAULT_JSON_EXPORT },
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
@@ -1789,6 +1807,10 @@ export const useEditorStore = create<EditorState>()(
             measureStyle: { ...DEFAULT_MEASURE_STYLE },
           }),
         resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
+        setPdfSheet: (sheet) => set({ pdfSheet: normalizeSheetSize(sheet) }),
+        setJsonExport: (patch) =>
+          set((s) => ({ jsonExport: normalizeJsonExport({ ...s.jsonExport, ...patch }) })),
+        resetJsonExport: () => set({ jsonExport: { ...DEFAULT_JSON_EXPORT } }),
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
@@ -2212,6 +2234,8 @@ export const useEditorStore = create<EditorState>()(
             measureStyle: normalizeMeasureStyle(saved.measureStyle),
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+            pdfSheet: normalizeSheetSize(saved.pdfSheet),
+            jsonExport: normalizeJsonExport(saved.jsonExport),
             inspectorTab:
               saved.inspectorTab === undefined
                 ? current.inspectorTab
@@ -2251,6 +2275,8 @@ export const useEditorStore = create<EditorState>()(
           measureStyle: normalizeMeasureStyle(saved.measureStyle),
           lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+          pdfSheet: normalizeSheetSize(saved.pdfSheet),
+          jsonExport: normalizeJsonExport(saved.jsonExport),
           penPerimeter: 'outer',
           penPoints: [],
           clipboard: [],
