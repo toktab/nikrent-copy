@@ -58,6 +58,10 @@ export function sanitizeMaterial(raw: unknown, taken: Set<string>): Material | n
   const shapeRaw = String(r.shape ?? 'rect') as Shape;
   const shape = SHAPES.includes(shapeRaw) ? shapeRaw : 'rect';
 
+  // An L's own leg thickness; anything unusable falls back to the panel rule.
+  const legRaw = num(r.leg, NaN);
+  const leg = shape === 'L' && Number.isFinite(legRaw) && legRaw > 0 ? legRaw : undefined;
+
   const id = typeof r.id === 'string' && r.id && !taken.has(r.id)
     ? r.id
     : makeMaterialId({ name, category, w, h }, taken);
@@ -70,6 +74,7 @@ export function sanitizeMaterial(raw: unknown, taken: Set<string>): Material | n
     h,
     depth,
     shape,
+    ...(leg !== undefined ? { leg } : {}),
     color: hexColor(r.color, categoryColor(category)),
     builtin: r.builtin === true,
     // handles both the legacy `stock: number` and the per-warehouse map

@@ -61,6 +61,26 @@ describe('sanitizeMaterial', () => {
     expect(m.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
+  it('keeps an L corner\'s own leg thickness, and only on an L', () => {
+    const angle = sanitizeMaterial(
+      { name: 'x', category: 'corner', w: 10, h: 300, shape: 'L', leg: 0.1 },
+      new Set(),
+    )!;
+    expect(angle.leg).toBe(0.1);
+
+    const rect = sanitizeMaterial(
+      { name: 'y', category: 'panel', w: 10, h: 300, shape: 'rect', leg: 0.1 },
+      new Set(),
+    )!;
+    expect(rect.leg).toBeUndefined();
+
+    const broken = sanitizeMaterial(
+      { name: 'z', category: 'corner', w: 10, h: 300, shape: 'L', leg: -2 },
+      new Set(),
+    )!;
+    expect(broken.leg).toBeUndefined();
+  });
+
   it('de-duplicates ids', () => {
     const taken = new Set(['panel-10x10']);
     const m = sanitizeMaterial({ name: 'x', category: 'panel', w: 10, h: 10 }, taken)!;

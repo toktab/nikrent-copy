@@ -5,7 +5,16 @@ import { pieceBounds, planH, planW } from '../geometry';
 import { planOutline } from '../shapePath';
 import { createSeedMaterials } from '../../data/seedCatalog';
 
-const materials = createSeedMaterials();
+/**
+ * The seed catalog with the outer corner as the wizard was built around: a
+ * solid 24 cm profile with 9 cm legs. The real გარე კუთხე is now the architect's
+ * thin 10 × 10 angle, and how the wizard should wrap a column with that is still
+ * an open question for him - so these tests pin the wizard's own logic, not a
+ * catalog size that has moved under it.
+ */
+const materials = createSeedMaterials().map((m) =>
+  m.id === 'corner-outer-300' ? { ...m, w: 24, depth: 24, leg: undefined } : m,
+);
 const byId = new Map(materials.map((m) => [m.id, m]));
 
 const spec = (over: Partial<ColumnSpec> = {}): ColumnSpec => ({

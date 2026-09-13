@@ -81,6 +81,8 @@ interface MaterialRow {
   h: number;
   depth: number;
   shape: Material['shape'];
+  /** absent from the row entirely while migration 0012 has not been run */
+  leg?: number | null;
   color: string;
   builtin: boolean;
   weight: number;
@@ -103,7 +105,7 @@ interface DocumentRow {
 
 /** Stock lives in its own table, so it is stripped on the way out. */
 function materialToRow(m: Material): MaterialRow {
-  return {
+  const row: MaterialRow = {
     id: m.id,
     name: m.name,
     category: m.category,
@@ -117,9 +119,13 @@ function materialToRow(m: Material): MaterialRow {
     article: m.article,
     supplier: m.supplier,
   };
+  // Sent as null, not left out, so clearing the field in the form clears it on
+  // the server too.
+  return legUnsupported ? row : { ...row, leg: m.leg ?? null };
 }
 
 function rowToMaterial(row: MaterialRow, stock: StockByWarehouse): Material {
+  const leg = Number(row.leg);
   return {
     id: row.id,
     name: row.name,
@@ -128,6 +134,7 @@ function rowToMaterial(row: MaterialRow, stock: StockByWarehouse): Material {
     h: Number(row.h),
     depth: Number(row.depth),
     shape: row.shape,
+    ...(row.leg != null && leg > 0 ? { leg } : {}),
     color: row.color,
     builtin: row.builtin,
     weight: Number(row.weight),
@@ -135,6 +142,26 @@ function rowToMaterial(row: MaterialRow, stock: StockByWarehouse): Material {
     supplier: row.supplier,
     stock,
   };
+}
+
+/**
+ * Set once the server has said it has no `materials.leg` column - migration
+ * 0012 has not been run yet.
+ *
+ * Same reasoning as the measures column below: one missing column must not fail
+ * every catalog save. Materials go up without their leg instead. The built-in
+ * outer corner gets its 0.1 back from `applySizeFixes` on every load, so what is
+ * lost meanwhile is only a leg someone typed into the form.
+ */
+let legUnsupported = false;
+
+/** The server's two ways of saying `materials.leg` is not there. Narrow, as below. */
+export function isMissingLegColumn(error: PostgrestLikeError): boolean {
+  const text = error.message ?? '';
+  return (
+    (error.code === 'PGRST204' && text.includes("'leg'")) ||
+    /column "leg"( of relation "materials")? does not exist/i.test(text)
+  );
 }
 
 /**
@@ -297,9 +324,15 @@ export async function applyPlan(plan: SyncPlan): Promise<void> {
   }
 
   if (plan.materialsUpsert.length) {
-    const { error } = await supabase
+    let { error } = await supabase
       .from('materials')
       .upsert(plan.materialsUpsert.map(materialToRow));
+    if (error && !legUnsupported && isMissingLegColumn(error)) {
+      legUnsupported = true;
+      ({ error } = await supabase
+        .from('materials')
+        .upsert(plan.materialsUpsert.map(materialToRow)));
+    }
     if (error) throw wrapError('მასალები', error);
   }
 

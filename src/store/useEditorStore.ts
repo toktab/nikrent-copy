@@ -159,20 +159,32 @@ const PREF_KEYS = [
  * the ReferenceError is swallowed by the persist middleware — the saved drawing
  * is silently dropped and then overwritten with an empty one.
  */
-const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number }> = [
+const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; leg?: number }> = [
   // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
   // concrete face. The mismatch left a hole beside every corner and made the
   // column wizard lay panels that did not reach the corner profile.
   { id: 'corner-outer-300', fromW: 15, toW: 24 },
+  // ...and the 24 was still a guess. The architect's drawing: a thin angle,
+  // two 10 cm legs 0.1 cm thick. Listed after the 15 → 24 fix so a catalog
+  // saved before either goes all the way in one load.
+  { id: 'corner-outer-300', fromW: 24, toW: 10, leg: 0.1 },
 ];
 
 /** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
   for (const fix of BUILTIN_SIZE_FIXES) {
     const m = materials.find((x) => x.id === fix.id);
-    if (!m || !m.builtin || m.w !== fix.fromW) continue;
-    m.w = fix.toW;
-    m.depth = defaultDepth(m.category, m.w, m.h);
+    if (!m || !m.builtin) continue;
+    if (m.w === fix.fromW) {
+      m.w = fix.toW;
+      m.depth = defaultDepth(m.category, m.w, m.h);
+      if (fix.leg !== undefined) m.leg = fix.leg;
+    } else if (m.w === fix.toW && fix.leg !== undefined && m.leg === undefined) {
+      // Already resized, but the leg did not survive: a server one migration
+      // behind saves the 10 and drops the 0.1, and without this the corner
+      // would come back on the next load with the 4.5 cm panel-rule leg.
+      m.leg = fix.leg;
+    }
   }
 }
 

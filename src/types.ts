@@ -44,6 +44,12 @@ export interface Material {
    */
   depth: number;
   shape: Shape;
+  /**
+   * An L-profile's leg thickness in cm, when it is not the panel's 9 cm - a
+   * გარე კუთხე is a thin 0.1 cm angle. Absent: the panel-thickness rule in
+   * `cornerLeg`. Means nothing for any other shape.
+   */
+  leg?: number;
   /** hex colour; defaults to the category colour */
   color: string;
   /** true for the original 41 Du materials, false for user-created ones */
