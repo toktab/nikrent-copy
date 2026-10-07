@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { planSketchFillAll, type SketchFillSpec } from '../lib/sketchFill';
 import { pathLength } from '../lib/sketch';
+import { normalizeFillDefaults } from '../lib/fillDefaults';
 import { Modal } from './Modal';
 
 /**
@@ -19,8 +20,18 @@ export function SketchFillDialog({ pathIds }: { pathIds: string[] }) {
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const setToast = useEditorStore((s) => s.setToast);
 
-  const [height, setHeight] = useState('300');
-  const [includeCorners, setIncludeCorners] = useState(true);
+  // Opened at the job's remembered height and corners, and remembering any
+  // change for the next fill - see `lib/fillDefaults`.
+  const [height, setHeight] = useState(() =>
+    String(normalizeFillDefaults(useEditorStore.getState().fillDefaults).height),
+  );
+  const [includeCorners, setIncludeCorners] = useState(
+    () => normalizeFillDefaults(useEditorStore.getState().fillDefaults).includeCorners,
+  );
+  useEffect(() => {
+    const h = Number(String(height).replace(',', '.'));
+    if (Number.isFinite(h) && h > 0) useEditorStore.getState().setFillDefaults({ height: h, includeCorners });
+  }, [height, includeCorners]);
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 

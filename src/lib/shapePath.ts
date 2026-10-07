@@ -25,9 +25,21 @@ export function legThickness(w: number, h: number, panelThickness = PANEL_LEG_CM
   return Math.max(0.5, Math.min(panelThickness, Math.min(w, h) * 0.45));
 }
 
+/**
+ * The leg an L-profile actually has: its own `leg` when the catalog gives one -
+ * the გარე კუთხე is a thin angle, 10 × 10 with a 0.1 cm leg - otherwise the
+ * panel-thickness rule above. Never thicker than the box it is drawn in.
+ */
+export function cornerLeg(m: Material): number {
+  const w = planW(m);
+  const h = planH(m);
+  if (typeof m.leg === 'number' && m.leg > 0) return Math.min(m.leg, w, h);
+  return legThickness(w, h);
+}
+
 /** L-profile: vertical leg on the left, horizontal leg along the bottom. */
-export function lPoints(w: number, h: number, panelThickness = PANEL_LEG_CM): Array<[number, number]> {
-  const t = legThickness(w, h, panelThickness);
+export function lPoints(w: number, h: number, leg = legThickness(w, h)): Array<[number, number]> {
+  const t = leg;
   return [
     [0, 0],
     [t, 0],
@@ -73,7 +85,7 @@ export function barRect(w: number, h: number): Bar {
 export function planOutline(m: Material): Array<[number, number]> {
   const pw = planW(m);
   const ph = planH(m);
-  if (m.shape === 'L') return lPoints(pw, ph);
+  if (m.shape === 'L') return lPoints(pw, ph, cornerLeg(m));
   return [
     [0, 0],
     [pw, 0],
@@ -83,14 +95,42 @@ export function planOutline(m: Material): Array<[number, number]> {
 }
 
 /**
- * The same outline scaled into a renderer's own units — the px canvases work in
+ * Thinnest leg an L is DRAWN with, in cm, and the most of its box that floor may
+ * take.
+ *
+ * The გარე კუთხე's real leg is 0.1 cm. At true scale that is under a pixel even
+ * at 800 %, so the part vanished from the drawing, the preview and the print -
+ * a selection box around nothing. A drawing exaggerates thin steel so it can be
+ * seen; this is that exaggeration, and it is only ever drawn. The gap check, the
+ * measure tool and the parts list keep the real `cornerLeg`.
+ */
+const DRAWN_MIN_LEG_CM = 2;
+const DRAWN_MIN_LEG_SHARE = 0.2;
+
+/** The leg an L is drawn with: its real one, or the visible floor above. */
+export function drawnLeg(m: Material): number {
+  const floor = Math.min(DRAWN_MIN_LEG_CM, Math.min(planW(m), planH(m)) * DRAWN_MIN_LEG_SHARE);
+  return Math.max(cornerLeg(m), floor);
+}
+
+/**
+ * The outline to put on screen, on paper and in 3D. The same as `planOutline`
+ * except that a hairline L leg is thickened to `drawnLeg` so it can be seen.
+ */
+export function drawnOutline(m: Material): Array<[number, number]> {
+  if (m.shape !== 'L') return planOutline(m);
+  return lPoints(planW(m), planH(m), drawnLeg(m));
+}
+
+/**
+ * The drawn outline scaled into a renderer's own units — the px canvases work in
  * scaled pixels, but a corner's leg thickness is a real 9 cm and has to be
  * scaled with everything else rather than taken as 9 px.
  */
 export function scaledOutline(m: Material, w: number, h: number): Array<[number, number]> {
   const sx = w / planW(m);
   const sy = h / planH(m);
-  return planOutline(m).map(([x, y]): [number, number] => [x * sx, y * sy]);
+  return drawnOutline(m).map(([x, y]): [number, number] => [x * sx, y * sy]);
 }
 
 /** Twice the signed area; positive means the winding described above. */

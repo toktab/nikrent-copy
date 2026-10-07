@@ -2,6 +2,33 @@ import * as XLSX from 'xlsx';
 import type { Bom } from './bom';
 import { fmtNum, sizeLabel } from './bom';
 import type { Remaining } from './remaining';
+import { buildArchitectWorkbook, type WorkbookInput } from './architectWorkbook';
+
+/**
+ * The architect's own workbook, filled in from the open drawing - see
+ * `buildArchitectWorkbook`. Formula cells carry his formulas and the values
+ * they come to, so the file reads right in anything and recalculates in Excel
+ * the moment he changes a count.
+ */
+export function exportArchitectWorkbook(input: WorkbookInput): void {
+  const wb = XLSX.utils.book_new();
+  for (const sheet of buildArchitectWorkbook(input)) {
+    const values = sheet.rows.map((row) =>
+      row.map((cell) => (cell && typeof cell === 'object' ? cell.v : (cell ?? ''))),
+    );
+    const ws = XLSX.utils.aoa_to_sheet(values);
+    ws['!cols'] = sheet.widths.map((wch) => ({ wch }));
+    sheet.rows.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (cell && typeof cell === 'object') {
+          ws[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v: cell.v, f: cell.f };
+        }
+      }),
+    );
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+  }
+  XLSX.writeFile(wb, stampedName('du-workbook', 'xlsx'));
+}
 import { downloadText, stampedName } from './files';
 
 /** Ordering-sheet columns (Georgian first, English kept for shared use). */

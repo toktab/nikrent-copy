@@ -5,6 +5,7 @@ import { CATEGORY_OPTIONS } from '../lib/catalogFile';
 import { categoryColor } from '../data/categories';
 import { defaultDepth, PANEL_DEPTH_CM } from '../data/seedCatalog';
 import { DEFAULT_WAREHOUSE, stockIn, withStockIn } from '../lib/inventory';
+import { legThickness } from '../lib/shapePath';
 import { Modal } from './Modal';
 import { PiecePreview } from './ShapeSvg';
 
@@ -34,6 +35,9 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const [depth, setDepth] = useState(String(existing?.depth ?? PANEL_DEPTH_CM));
   // Thickness follows the category default until the user overrides it.
   const [depthTouched, setDepthTouched] = useState(Boolean(existing));
+  // An L's leg thickness. Empty means the panel rule, so an inside corner that
+  // never had one does not quietly get a fixed number just by being opened.
+  const [leg, setLeg] = useState(existing?.leg !== undefined ? String(existing.leg) : '');
   const [color, setColor] = useState(existing?.color ?? categoryColor('panel'));
   const [stock, setStock] = useState(String(existing ? stockIn(existing, primaryWarehouse) : 0));
   const [weight, setWeight] = useState(String(existing?.weight ?? 0));
@@ -48,6 +52,16 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const stockNum = Number(stock);
   const weightNum = decimal(weight);
   const depthNum = decimal(depth);
+  const legNum = leg.trim() === '' ? undefined : decimal(leg);
+  const legFor = shape === 'L' ? legNum : undefined;
+  // What an empty field draws with, shown as its placeholder.
+  const ruleLeg =
+    Math.round(
+      legThickness(
+        Number.isFinite(wNum) && wNum > 0 ? wNum : 45,
+        Number.isFinite(depthNum) && depthNum > 0 ? depthNum : PANEL_DEPTH_CM,
+      ) * 10,
+    ) / 10;
 
   const errors: string[] = [];
   if (!name.trim()) errors.push('დასახელება სავალდებულოა.');
@@ -56,6 +70,9 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   if (!Number.isFinite(stockNum) || stockNum < 0) errors.push('მარაგი არ შეიძლება იყოს უარყოფითი.');
   if (!Number.isFinite(weightNum) || weightNum < 0) errors.push('წონა არ შეიძლება იყოს უარყოფითი.');
   if (!Number.isFinite(depthNum) || depthNum <= 0) errors.push('სისქე უნდა იყოს დადებითი რიცხვი.');
+  if (legFor !== undefined && (!Number.isFinite(legFor) || legFor <= 0)) {
+    errors.push('ფეხის სისქე უნდა იყოს დადებითი რიცხვი (ან ცარიელი).');
+  }
 
   const preview = useMemo(
     () => ({
@@ -66,6 +83,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
       h: Number.isFinite(hNum) && hNum > 0 ? hNum : 300,
       depth: Number.isFinite(depthNum) && depthNum > 0 ? depthNum : PANEL_DEPTH_CM,
       shape,
+      ...(legFor !== undefined && Number.isFinite(legFor) && legFor > 0 ? { leg: legFor } : {}),
       color,
       builtin: false,
       stock: {},
@@ -73,7 +91,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
       article: '',
       supplier: '',
     }),
-    [name, category, wNum, hNum, shape, color],
+    [name, category, wNum, hNum, depthNum, shape, legFor, color],
   );
 
   const submit = () => {
@@ -87,6 +105,9 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
       h: hNum,
       depth: depthNum,
       shape,
+      // Always present, even as undefined: the store merges the draft over the
+      // old material, and a leg left out would survive a switch to the rule.
+      leg: legFor,
       color,
       stock: nextStock,
       weight: weightNum || 0,
@@ -179,6 +200,24 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
             Du-ს პანელები ყოველთვის {PANEL_DEPTH_CM} სმ სისქისაა.
           </small>
         </label>
+
+        {shape === 'L' && (
+          <label className="field span2">
+            <span>ფეხის სისქე (სმ)</span>
+            <input
+              type="number"
+              min={0.1}
+              step="any"
+              value={leg}
+              placeholder={`${ruleLeg} - პანელის სისქეით`}
+              onChange={(e) => setLeg(e.target.value)}
+            />
+            <small className="field-hint">
+              L-კუთხის ფეხის სისქე. გარე კუთხე თხელი კუთხოვანაა - 0.1 სმ. ცარიელი = პანელის
+              სისქეით ({ruleLeg} სმ).
+            </small>
+          </label>
+        )}
 
         <label className="field">
           <span>ფერი</span>

@@ -57,8 +57,19 @@ export function RecommendPanel({
     [sketch, selectedSketchIds],
   );
 
-  const [height, setHeight] = useState('300');
-  const [includeCorners, setIncludeCorners] = useState(true);
+  // Opened at the job's remembered height and corners, and remembering any
+  // change for the next fill - see `lib/fillDefaults`.
+  const [height, setHeight] = useState(() => {
+    const saved = useEditorStore.getState().fillDefaults;
+    return String(saved && saved.height > 0 ? saved.height : 300);
+  });
+  const [includeCorners, setIncludeCorners] = useState(
+    () => useEditorStore.getState().fillDefaults?.includeCorners ?? true,
+  );
+  useEffect(() => {
+    const h = Number(String(height).replace(',', '.'));
+    if (Number.isFinite(h) && h > 0) useEditorStore.getState().setFillDefaults({ height: h, includeCorners });
+  }, [height, includeCorners]);
   const [filters, setFilters] = useState<FillFilters>({ ...DEFAULT_FILL_FILTERS });
   /** runKey → which of its variants is picked */
   const [picked, setPicked] = useState<Record<string, number>>({});

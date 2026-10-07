@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { withCompanyWeights } from '../data/companyWeights';
+import { normalizeWallThickness, wallPartner } from '../lib/wallPen';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -79,6 +80,13 @@ import {
   type MeasureAnchor,
   type MeasureStyle,
 } from '../lib/measure';
+import {
+  DEFAULT_JSON_EXPORT,
+  normalizeJsonExport,
+  normalizeSheetSize,
+  type JsonExportOptions,
+  type SheetSize,
+} from '../lib/exportOptions';
 
 export const STORAGE_KEY = 'du-formwork-v2';
 
@@ -126,6 +134,8 @@ const PREF_KEYS = [
   'showLengths',
   'lengthVisibility',
   'pdfVisibility',
+  'pdfSheet',
+  'jsonExport',
   'showNames',
   'forceLabels',
   'showOverlaps',
@@ -139,6 +149,9 @@ const PREF_KEYS = [
   'inspectorOpen',
   'inspectorTab',
   'simpleMode',
+  'fillDefaults',
+  'wallThickness',
+  'tourSeen',
 ] as const;
 
 /**
@@ -155,20 +168,32 @@ const PREF_KEYS = [
  * the ReferenceError is swallowed by the persist middleware — the saved drawing
  * is silently dropped and then overwritten with an empty one.
  */
-const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number }> = [
+const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; leg?: number }> = [
   // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
   // concrete face. The mismatch left a hole beside every corner and made the
   // column wizard lay panels that did not reach the corner profile.
   { id: 'corner-outer-300', fromW: 15, toW: 24 },
+  // ...and the 24 was still a guess. The architect's drawing: a thin angle,
+  // two 10 cm legs 0.1 cm thick. Listed after the 15 → 24 fix so a catalog
+  // saved before either goes all the way in one load.
+  { id: 'corner-outer-300', fromW: 24, toW: 10, leg: 0.1 },
 ];
 
 /** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
   for (const fix of BUILTIN_SIZE_FIXES) {
     const m = materials.find((x) => x.id === fix.id);
-    if (!m || !m.builtin || m.w !== fix.fromW) continue;
-    m.w = fix.toW;
-    m.depth = defaultDepth(m.category, m.w, m.h);
+    if (!m || !m.builtin) continue;
+    if (m.w === fix.fromW) {
+      m.w = fix.toW;
+      m.depth = defaultDepth(m.category, m.w, m.h);
+      if (fix.leg !== undefined) m.leg = fix.leg;
+    } else if (m.w === fix.toW && fix.leg !== undefined && m.leg === undefined) {
+      // Already resized, but the leg did not survive: a server one migration
+      // behind saves the 10 and drops the 0.1, and without this the corner
+      // would come back on the next load with the 4.5 cm panel-rule leg.
+      m.leg = fix.leg;
+    }
   }
 }
 
@@ -226,6 +251,10 @@ export interface EditorState {
   lengthVisibility: Record<LengthKind, LengthVisibility>;
   /** what the printed sheet shows - see `PdfVisibility` */
   pdfVisibility: PdfVisibility;
+  /** the paper the drawing is exported on */
+  pdfSheet: SheetSize;
+  /** what the exported drawing file carries - see `JsonExportOptions` */
+  jsonExport: JsonExportOptions;
   showNames: boolean;
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
@@ -250,6 +279,12 @@ export interface EditorState {
    * when it is switched off.
    */
   simpleMode: boolean;
+  /** the pour height and corner setting fills open with - see `lib/fillDefaults` */
+  fillDefaults: { height: number; includeCorners: boolean };
+  /** the pen draws both faces of a wall this thick apart; null draws single lines */
+  wallThickness: number | null;
+  /** the first-visit tour has been seen (or closed) */
+  tourSeen: boolean;
   /**
    * Show the drawn layout.
    *
@@ -467,12 +502,19 @@ export interface EditorState {
   /** the screen table, the master switch and the measured-line settings */
   resetScreenDisplay: () => void;
   resetPdfVisibility: () => void;
+  setPdfSheet: (sheet: SheetSize) => void;
+  setJsonExport: (patch: Partial<JsonExportOptions>) => void;
+  resetJsonExport: () => void;
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
+  setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
+  /** a wall thickness for the pen to draw both faces with, or null for single lines */
+  setWallThickness: (thickness: number | null) => void;
+  setTourSeen: (seen: boolean) => void;
   setShowSketch: (on: boolean) => void;
   setViewMode: (mode: '2d' | '3d') => void;
   /** Switch the surface between plan, front and side, reframing as it goes. */
@@ -799,6 +841,8 @@ export const useEditorStore = create<EditorState>()(
         showLengths: true,
         lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
         pdfVisibility: { ...DEFAULT_PDF_VISIBILITY },
+        pdfSheet: 'A4',
+        jsonExport: { ...DEFAULT_JSON_EXPORT },
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
@@ -811,6 +855,9 @@ export const useEditorStore = create<EditorState>()(
         inspectorTab: 'bom',
         showGaps: false,
         simpleMode: false,
+        fillDefaults: { height: 300, includeCorners: true },
+        wallThickness: null,
+        tourSeen: false,
         showSketch: true,
         measureStyle: { ...DEFAULT_MEASURE_STYLE },
 
@@ -1760,6 +1807,10 @@ export const useEditorStore = create<EditorState>()(
             measureStyle: { ...DEFAULT_MEASURE_STYLE },
           }),
         resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
+        setPdfSheet: (sheet) => set({ pdfSheet: normalizeSheetSize(sheet) }),
+        setJsonExport: (patch) =>
+          set((s) => ({ jsonExport: normalizeJsonExport({ ...s.jsonExport, ...patch }) })),
+        resetJsonExport: () => set({ jsonExport: { ...DEFAULT_JSON_EXPORT } }),
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
@@ -1773,6 +1824,10 @@ export const useEditorStore = create<EditorState>()(
           if (s.viewMode !== '2d') s.setViewMode('2d');
           if (s.surfaceView !== 'plan') s.setSurfaceView('plan');
         },
+        // Preferences, so plain sets: remembered, never undo steps.
+        setFillDefaults: (defaults) => set({ fillDefaults: { ...defaults } }),
+        setWallThickness: (thickness) => set({ wallThickness: thickness }),
+        setTourSeen: (seen) => set({ tourSeen: seen }),
         setShowSketch: (on) =>
           set((s) => ({
             showSketch: on,
@@ -1964,7 +2019,11 @@ export const useEditorStore = create<EditorState>()(
               ...(closed ? { closed: true } : {}),
               perimeter: s.penPerimeter,
             };
-            return { sketch: [...s.sketch, path], penPoints: [] };
+            // With a wall thickness set, the pen draws a wall: the other face of
+            // the pour goes in with the line, as one undo step - see `wallPartner`.
+            const thickness = normalizeWallThickness(s.wallThickness);
+            const added = thickness === null ? [path] : [path, wallPartner(path, thickness)];
+            return { sketch: [...s.sketch, ...added], penPoints: [] };
           }),
 
         dragSketch: (hit, dx, dy, baseline, whole = false) =>
@@ -2175,6 +2234,8 @@ export const useEditorStore = create<EditorState>()(
             measureStyle: normalizeMeasureStyle(saved.measureStyle),
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+            pdfSheet: normalizeSheetSize(saved.pdfSheet),
+            jsonExport: normalizeJsonExport(saved.jsonExport),
             inspectorTab:
               saved.inspectorTab === undefined
                 ? current.inspectorTab
@@ -2214,6 +2275,8 @@ export const useEditorStore = create<EditorState>()(
           measureStyle: normalizeMeasureStyle(saved.measureStyle),
           lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+          pdfSheet: normalizeSheetSize(saved.pdfSheet),
+          jsonExport: normalizeJsonExport(saved.jsonExport),
           penPerimeter: 'outer',
           penPoints: [],
           clipboard: [],
