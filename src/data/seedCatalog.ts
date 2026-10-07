@@ -12,7 +12,7 @@ import { DEFAULT_WAREHOUSE } from '../lib/inventory';
  * length with a thin profile; small hardware uses representative sizes.
  * Everything here is editable at runtime through the catalog UI.
  */
-type Seed = [id: string, name: string, category: Category, w: number, h: number, shape: Shape];
+type Seed = [id: string, name: string, category: Category, w: number, h: number, shape: Shape, leg?: number];
 
 const SEEDS: Seed[] = [
   // ---- Panels (w × h in cm) ------------------------------------------------
@@ -34,12 +34,10 @@ const SEEDS: Seed[] = [
   ['waler-600', 'waler 600', 'waler', 600, 12, 'line'],
 
   // ---- Corners -------------------------------------------------------------
-  // 24 cm plan leg: an outer corner wraps the OUTSIDE of the box, so with a
-  // 9 cm panel it covers 24 − 9 = 15 cm of concrete face. The name carries only
-  // the 300 (height), so the leg was a guess in the v1 port — and the original
-  // 15 was geometrically impossible: it cannot both wrap a 9 cm panel and cover
-  // 15 cm of face, which is what left holes between corners and panels.
-  ['corner-outer-300', 'გარე კუთხე 300', 'corner', 24, 300, 'L'],
+  // The outer corner is a thin steel angle: two 10 cm legs, 0.1 cm thick, as
+  // the architect drew it - not the solid 24 cm profile the v1 port guessed.
+  // The 0.1 is a default; the component form changes it.
+  ['corner-outer-300', 'გარე კუთხე 300', 'corner', 10, 300, 'L', 0.1],
   ['corner-inner-20x20x150', 'შიდა კუთხე 20*20*150', 'corner', 20, 150, 'L'],
   ['corner-inner-20x20x300', 'შიდა კუთხე 20*20*300', 'corner', 20, 300, 'L'],
   ['corner-inner-20x20x300-joni', 'შიდა კუთხე 20*20*300 ჯონი', 'corner', 20, 300, 'L'],
@@ -110,7 +108,7 @@ export function defaultDepth(category: Category, w: number, h: number): number {
  * guess there is worse than an obvious blank.
  */
 export function createSeedMaterials(): Material[] {
-  return SEEDS.map(([id, name, category, w, h, shape]) => ({
+  return SEEDS.map(([id, name, category, w, h, shape, leg]) => ({
     id,
     name,
     category,
@@ -118,6 +116,7 @@ export function createSeedMaterials(): Material[] {
     h,
     depth: defaultDepth(category, w, h),
     shape,
+    ...(leg !== undefined ? { leg } : {}),
     color: categoryColor(category),
     builtin: true,
     stock: { [DEFAULT_WAREHOUSE.id]: 0 },

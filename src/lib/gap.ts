@@ -1,6 +1,6 @@
 import type { Category, Material } from '../types';
 import { planH, planW, type Rect } from './geometry';
-import { legThickness } from './shapePath';
+import { cornerLeg } from './shapePath';
 
 /**
  * What forms the concrete face.
@@ -142,7 +142,8 @@ export function faceBands(
   const y1 = rect.y + rect.h;
 
   if (m.shape === 'L') {
-    const t = legThickness(planW(m), planH(m));
+    // The leg the part really has - a thin გარე კუთხე lies in a thin plane.
+    const t = cornerLeg(m);
     // An L is drawn with its legs down the LEFT and along the BOTTOM; each
     // quarter turn carries both round one place.
     const quarter = ((Math.round(rot / 90) % 4) + 4) % 4;

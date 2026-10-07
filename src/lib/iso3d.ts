@@ -1,6 +1,6 @@
 import type { Material, Piece } from '../types';
 import { planH, planW } from './geometry';
-import { planOutline } from './shapePath';
+import { drawnOutline } from './shapePath';
 
 /**
  * Axonometric 3D projection for the read-only visualisation.
@@ -107,7 +107,8 @@ export function piecePrism(piece: Piece, m: Material): Prism {
   const base = piece.z ?? 0;
   const top = base + m.h;
 
-  const outline = planOutline(m);
+  // Drawn, not real: a 0.1 cm outer-corner leg extruded true is invisible in 3D too.
+  const outline = drawnOutline(m);
   const n = outline.length;
   const vertices: Vec3[] = new Array(n * 2);
 

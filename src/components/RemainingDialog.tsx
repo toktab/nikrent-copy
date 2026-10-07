@@ -78,6 +78,22 @@ export function RemainingDialog() {
     }
   };
 
+  /** His whole workbook, not just this table - see `buildArchitectWorkbook`. */
+  const onWorkbook = async () => {
+    setError(null);
+    try {
+      const { exportArchitectWorkbook } = await import('../lib/excelExport');
+      exportArchitectWorkbook({
+        materials,
+        pieces,
+        sketch: useEditorStore.getState().sketch,
+        drawingName,
+      });
+    } catch (e) {
+      setError(`ექსპორტი ვერ მოხერხდა: ${(e as Error).message}`);
+    }
+  };
+
   const filters: Array<[RemainingShow, string, number]> = [
     ['all', 'ყველა', materials.length],
     ['used', 'გამოყენებული', usedKinds],
@@ -129,8 +145,15 @@ export function RemainingDialog() {
             }}
             placeholder="ძებნა - მაგ. 90*300"
           />
-          <button className="btn small" onClick={() => void onExcel()}>
-            <Icon name="download" /> Excel
+          <button className="btn small" onClick={() => void onExcel()} title="მხოლოდ ნაშთის ცხრილი">
+            <Icon name="download" /> ნაშთი Excel
+          </button>
+          <button
+            className="btn small"
+            onClick={() => void onWorkbook()}
+            title="არქიტექტორის ფაილი: კონსტრუქცია, ჯამი, ნაშთი, აწყობა, პრინტ - ფორმულებით"
+          >
+            <Icon name="sheet" /> სრული Excel
           </button>
           {canManage && (
             <button

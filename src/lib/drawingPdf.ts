@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import type { DrawingDoc, Material, MeasureLine, Piece, SketchPath } from '../types';
 import { contentBounds, pieceBounds, planH, planW } from './geometry';
-import { drawingSizeLabel } from './bom';
+import { drawingSizeLabel, type Bom } from './bom';
 import { barRect, scaledOutline } from './shapePath';
 import { legLength, segments } from './sketch';
 import {
@@ -11,7 +11,10 @@ import {
   readableAngle,
   type PdfVisibility,
 } from './dimensions';
+import { sheetBounds, type SheetSize } from './exportOptions';
 import { stampedName } from './files';
+
+export type { SheetSize };
 
 /**
  * Prints the drawing itself — to scale, dimensioned, with a title block — as
@@ -23,8 +26,6 @@ import { stampedName } from './files';
  * jsPDF's built-in fonts would produce garbage. Because the canvas is placed at
  * a known mm size, the printed scale really is 1:`scale`.
  */
-
-export type SheetSize = 'A4' | 'A3';
 
 const SHEETS: Record<SheetSize, { w: number; h: number }> = {
   A4: { w: 297, h: 210 }, // landscape
@@ -47,8 +48,10 @@ export interface DrawingSheetOptions {
   showDimensions?: boolean;
   /** print the drawn layout under the formwork as a setting-out line */
   showSketch?: boolean;
-  /** which lengths and lines the sheet carries - the PDF side of the display menu */
+  /** what the sheet carries - pieces, lines, lengths, title block */
   visibility?: PdfVisibility;
+  /** render density, px per mm; lower for an on-screen preview */
+  pxPerMm?: number;
 }
 
 export interface SheetResult {
@@ -65,13 +68,24 @@ const SCALE_LADDER = [10, 20, 25, 50, 100, 200, 500];
 export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | null {
   const { doc, materials, sheet = 'A4', showDimensions = true, showSketch = true } = options;
   const vis = options.visibility ?? DEFAULT_PDF_VISIBILITY;
+  const pxPerMm = options.pxPerMm ?? PX_PER_MM;
   const byId = new Map(materials.map((m) => [m.id, m]));
-  const bounds = contentBounds(doc.pieces, byId);
+
+  // A line's length is printed along it, so lengths alone still need their
+  // lines' room on the sheet even when the lines themselves are switched off.
+  const withSketch = showSketch && (vis.sketchLines || vis.line);
+  const withMeasures = vis.measureLines || vis.measure;
+  const bounds = sheetBounds(doc, byId, {
+    pieces: vis.pieces,
+    sketch: withSketch,
+    measures: withMeasures,
+  });
   if (!bounds) return null;
 
   const paper = SHEETS[sheet];
+  const titleH = vis.titleBlock ? TITLE_H_MM : 0;
   const drawW = paper.w - MARGIN_MM * 2;
-  const drawH = paper.h - MARGIN_MM * 2 - TITLE_H_MM;
+  const drawH = paper.h - MARGIN_MM * 2 - titleH;
 
   // Dimension lines sit outside the content, so the content itself has to fit
   // in a slightly smaller box or the witness lines run into the title block.
@@ -97,12 +111,12 @@ export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | 
   }
 
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(paper.w * PX_PER_MM);
-  canvas.height = Math.round(paper.h * PX_PER_MM);
+  canvas.width = Math.round(paper.w * pxPerMm);
+  canvas.height = Math.round(paper.h * pxPerMm);
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  const mm = (v: number) => v * PX_PER_MM;
+  const mm = (v: number) => v * pxPerMm;
   /** world cm → canvas px */
   const cmToPx = (v: number) => mm((v * 10) / scale);
 
@@ -128,26 +142,33 @@ export function renderDrawingSheet(options: DrawingSheetOptions): SheetResult | 
   // just a pile of panels with no datum.
   if (showSketch && vis.sketchLines) drawSketch(ctx, doc.sketch ?? [], tx, ty, mm);
 
-  for (const piece of doc.pieces) {
-    const m = byId.get(piece.materialId);
-    if (m) drawPiece(ctx, piece, m, tx, ty, cmToPx);
-  }
-
-  if (showSketch && vis.sketchLines && vis.line) drawSketchLengths(ctx, doc.sketch ?? [], tx, ty, mm);
-
-  // Measured lines follow the PDF menu, not the on-screen layout toggle: each
-  // was put on the drawing on purpose, to be read.
-  if (vis.measureLines) drawMeasures(ctx, doc.measures ?? [], tx, ty, mm, vis.measure);
-
-  if (showDimensions) {
+  if (vis.pieces) {
     for (const piece of doc.pieces) {
       const m = byId.get(piece.materialId);
-      if (m && vis[lengthKindOf(m)]) drawPieceLabel(ctx, piece, m, tx, ty, cmToPx, mm);
+      if (m) drawPiece(ctx, piece, m, tx, ty, cmToPx);
+    }
+  }
+
+  if (showSketch && vis.line) drawSketchLengths(ctx, doc.sketch ?? [], tx, ty, mm);
+
+  // Measured lines follow the PDF choices, not the on-screen layout toggle: each
+  // was put on the drawing on purpose, to be read.
+  if (withMeasures) {
+    drawMeasures(ctx, doc.measures ?? [], tx, ty, mm, { lines: vis.measureLines, lengths: vis.measure });
+  }
+
+  if (showDimensions) {
+    // A size label with no piece under it would name nothing.
+    if (vis.pieces) {
+      for (const piece of doc.pieces) {
+        const m = byId.get(piece.materialId);
+        if (m && vis[lengthKindOf(m)]) drawPieceLabel(ctx, piece, m, tx, ty, cmToPx, mm);
+      }
     }
     if (vis.overall) drawOverallDimensions(ctx, bounds, tx, ty, mm);
   }
 
-  drawTitleBlock(ctx, doc, scale, sheet, paper, mm);
+  if (vis.titleBlock) drawTitleBlock(ctx, doc, scale, sheet, paper, mm);
 
   return { dataUrl: canvas.toDataURL('image/png'), sheet, scale, rescaled };
 }
@@ -215,14 +236,18 @@ function drawSketchLengths(
   ctx.restore();
 }
 
-/** Measured lines as thin dimension lines: end ticks, length at the middle. */
+/**
+ * Measured lines as thin dimension lines: end ticks, length at the middle. The
+ * line and its number are separate choices - a length can stand on its own
+ * where the line would only repeat an edge already drawn.
+ */
 function drawMeasures(
   ctx: CanvasRenderingContext2D,
   measures: MeasureLine[],
   tx: (x: number) => number,
   ty: (y: number) => number,
   mm: (v: number) => number,
-  withLengths = true,
+  show: { lines: boolean; lengths: boolean },
 ): void {
   if (!measures.length) return;
   ctx.save();
@@ -241,16 +266,18 @@ function drawMeasures(
     if (!len) continue;
     const ux = (bx - ax) / len;
     const uy = (by - ay) / len;
-    const tick = mm(1.2);
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
-    ctx.moveTo(ax + uy * tick, ay - ux * tick);
-    ctx.lineTo(ax - uy * tick, ay + ux * tick);
-    ctx.moveTo(bx + uy * tick, by - ux * tick);
-    ctx.lineTo(bx - uy * tick, by + ux * tick);
-    ctx.stroke();
-    if (!withLengths) continue;
+    if (show.lines) {
+      const tick = mm(1.2);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.moveTo(ax + uy * tick, ay - ux * tick);
+      ctx.lineTo(ax - uy * tick, ay + ux * tick);
+      ctx.moveTo(bx + uy * tick, by - ux * tick);
+      ctx.lineTo(bx - uy * tick, by + ux * tick);
+      ctx.stroke();
+    }
+    if (!show.lengths) continue;
 
     ctx.save();
     ctx.translate((ax + bx) / 2, (ay + by) / 2);
@@ -499,20 +526,45 @@ function drawTitleBlock(
   ctx.restore();
 }
 
-/** Renders the sheet and saves it as a PDF at true physical size. */
-export function exportDrawingToPdf(options: DrawingSheetOptions): SheetResult | null {
-  const result = renderDrawingSheet(options);
-  if (!result) return null;
+export interface DrawingExportOptions extends DrawingSheetOptions {
+  /** the bill of materials to add on its own pages after the sheet; null for none */
+  bom?: Bom | null;
+}
 
-  const paper = SHEETS[result.sheet];
-  const pdf = new jsPDF({
-    unit: 'mm',
-    format: [paper.w, paper.h],
-    orientation: 'landscape',
-  });
-  pdf.addImage(result.dataUrl, 'PNG', 0, 0, paper.w, paper.h, undefined, 'FAST');
+export interface DrawingExportResult {
+  /** the drawing page, or null when the file holds only the parts list */
+  sheet: SheetResult | null;
+  bomPages: boolean;
+}
+
+/**
+ * Renders the sheet and saves it as a PDF at true physical size, with the bill
+ * of materials after it when asked. Null when there was nothing to put in it.
+ */
+export async function exportDrawingToPdf(
+  options: DrawingExportOptions,
+): Promise<DrawingExportResult | null> {
+  const sheet = renderDrawingSheet(options);
+  const bom = options.bom && options.bom.totalPieces > 0 ? options.bom : null;
+  if (!sheet && !bom) return null;
+
+  let pdf: jsPDF;
+  if (sheet) {
+    const paper = SHEETS[sheet.sheet];
+    pdf = new jsPDF({ unit: 'mm', format: [paper.w, paper.h], orientation: 'landscape' });
+    pdf.addImage(sheet.dataUrl, 'PNG', 0, 0, paper.w, paper.h, undefined, 'FAST');
+  } else {
+    pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  }
+
+  if (bom) {
+    // html2canvas is only needed for the list, so it loads only when one is asked for.
+    const { appendBomPages } = await import('./pdfExport');
+    await appendBomPages(pdf, { bom, title: `${options.doc.name} - მასალების უწყისი` }, Boolean(sheet));
+  }
+
   pdf.save(stampedName('du-drawing', 'pdf'));
-  return result;
+  return { sheet, bomPages: Boolean(bom) };
 }
 
 /** Exposed for tests: which standard scale a drawing needs on a given sheet. */

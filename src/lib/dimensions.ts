@@ -80,6 +80,12 @@ export interface PdfVisibility {
   measureLines: boolean;
   /** overall width and height outside the drawing */
   overall: boolean;
+  /** the formwork pieces themselves - off prints the setting-out on its own */
+  pieces: boolean;
+  /** the title block along the bottom of the sheet */
+  titleBlock: boolean;
+  /** the bill of materials, on pages of its own after the drawing */
+  bomPage: boolean;
 }
 
 export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
@@ -91,6 +97,9 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   sketchLines: true,
   measureLines: true,
   overall: true,
+  pieces: true,
+  titleBlock: true,
+  bomPage: false,
 };
 
 export function normalizePdfVisibility(raw: unknown): PdfVisibility {

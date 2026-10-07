@@ -21,6 +21,7 @@ Supabase → SQL Editor → paste each file whole, in order, and run it:
 | `0009_sketch.sql` | `documents.sketch` - the drawn layout | ხაზვა lines do not reach the server |
 | `0010_custom_algorithms.sql` | the `custom_algorithms` table | saved detection algorithms stay on one device |
 | `0011_measures.sql` | `documents.measures` - measured check lines | measured lines stay on this screen; the app warns once and still saves the rest |
+| `0012_corner_leg.sql` | `materials.leg` - an L corner's leg thickness; the built-in outer corner becomes 10 × 10 with a 0.1 cm leg | a leg typed into the component form is not saved; the outer corner still draws thin, the app puts its 0.1 back on every load |
 
 All of them are safe to re-run. `0005` is the only destructive one, and only
 of prices, which nothing reads any more.
@@ -36,6 +37,8 @@ select public.keepalive();
 
 select column_name from information_schema.columns
 where table_schema = 'public' and table_name = 'documents' and column_name in ('sketch', 'measures');
+
+select w, depth, leg from public.materials where id = 'corner-outer-300';
 ```
 
 Non-null answers, a timestamp, and both `sketch` and `measures` listed means

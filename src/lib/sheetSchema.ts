@@ -45,6 +45,7 @@ const HEADER_ALIASES: Record<keyof MaterialDraft | 'w' | 'h', string[]> = {
   h: ['heightcm', 'height', 'h', 'სიმაღლე', 'სიგრძე', 'length', 'lengthcm'],
   depth: ['depthcm', 'depth', 'thickness', 'სისქე', 'სიღრმე'],
   shape: ['shape', 'form', 'ფორმა'],
+  leg: ['leg', 'legcm', 'legthickness', 'ფეხისსისქე', 'ფეხი'],
   color: ['color', 'colour', 'ფერი'],
   stock: ['stock', 'qty', 'quantity', 'inventory', 'მარაგი', 'რაოდენობა'],
   weight: ['weight', 'kg', 'weightkg', 'წონა'],
@@ -162,7 +163,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
     }
 
     /** Optional non-negative number column; warns and falls back to 0. */
-    const optionalNumber = (field: 'stock' | 'weight' | 'depth', label: string): number => {
+    const optionalNumber = (field: 'stock' | 'weight' | 'depth' | 'leg', label: string): number => {
       const value = pick(raw, field);
       if (value === undefined || String(value).trim() === '') return 0;
       const n = toNumber(value);
@@ -175,6 +176,8 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
 
     const stock = optionalNumber('stock', 'მარაგი');
     const depth = optionalNumber('depth', 'სისქე');
+    // Only an L has a leg; blank keeps the panel-thickness rule.
+    const leg = optionalNumber('leg', 'ფეხის სისქე');
     const weight = optionalNumber('weight', 'წონა');
     const article = String(pick(raw, 'article') ?? '').trim();
     const supplier = String(pick(raw, 'supplier') ?? '').trim();
@@ -193,6 +196,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
             h,
             depth: depth > 0 ? depth : defaultDepth(category, w, h),
             shape,
+            ...(shape === 'L' && leg > 0 ? { leg } : {}),
             color,
             stock: { [DEFAULT_WAREHOUSE.id]: stock },
             weight,

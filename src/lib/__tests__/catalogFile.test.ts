@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildLayoutFile,
+  layoutFileHasContent,
   parseCatalogFile,
   parseLayoutFile,
   sanitizeMaterial,
 } from '../catalogFile';
+import { DEFAULT_JSON_EXPORT, type JsonExportOptions } from '../exportOptions';
 import type { DrawingDoc } from '../../types';
 import { createSeedMaterials, SEED_IDS_IN_ORDER } from '../../data/seedCatalog';
 import { totalStock } from '../inventory';
@@ -59,6 +61,26 @@ describe('sanitizeMaterial', () => {
     const m = sanitizeMaterial({ name: 'x', category: 'bogus', w: 10, h: 10 }, new Set())!;
     expect(m.category).toBe('acc');
     expect(m.color).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  it('keeps an L corner\'s own leg thickness, and only on an L', () => {
+    const angle = sanitizeMaterial(
+      { name: 'x', category: 'corner', w: 10, h: 300, shape: 'L', leg: 0.1 },
+      new Set(),
+    )!;
+    expect(angle.leg).toBe(0.1);
+
+    const rect = sanitizeMaterial(
+      { name: 'y', category: 'panel', w: 10, h: 300, shape: 'rect', leg: 0.1 },
+      new Set(),
+    )!;
+    expect(rect.leg).toBeUndefined();
+
+    const broken = sanitizeMaterial(
+      { name: 'z', category: 'corner', w: 10, h: 300, shape: 'L', leg: -2 },
+      new Set(),
+    )!;
+    expect(broken.leg).toBeUndefined();
   });
 
   it('de-duplicates ids', () => {
@@ -230,5 +252,45 @@ describe('drawing file round trip', () => {
     expect(parsed.sketch.map((k) => k.id)).not.toContain('k1');
     expect(parsed.measures[0].id).not.toBe('m1');
     expect(roundTrip().pieces[0].id).not.toBe(parsed.pieces[0].id);
+  });
+
+  describe('export choices', () => {
+    const build = (over: Partial<JsonExportOptions>) =>
+      buildLayoutFile(doc, [...materials, custom], { ...DEFAULT_JSON_EXPORT, ...over });
+
+    it('leaves out exactly what was switched off', () => {
+      const file = build({ sketch: false, measures: false });
+      expect(file.sketch).toBeUndefined();
+      expect(file.measures).toBeUndefined();
+      expect(file.pieces).toHaveLength(2);
+      expect(file.materials).toHaveLength(2);
+    });
+
+    it('drops the material definitions along with the pieces', () => {
+      const file = build({ pieces: false });
+      expect(file.pieces).toEqual([]);
+      expect(file.materials).toBeUndefined();
+      expect(build({ materials: false }).materials).toBeUndefined();
+    });
+
+    it('writes every leg and measurement length when asked, and still opens', () => {
+      const file = build({ lengths: true });
+      expect(file.sketch?.[0].legs).toEqual([400, 300]);
+      expect(file.measures?.[0].length).toBe(45);
+      expect(build({}).measures?.[0]).not.toHaveProperty('length');
+      const parsed = parseLayoutFile(JSON.stringify(file));
+      expect(parsed.sketch).toHaveLength(2);
+      expect(parsed.measures).toHaveLength(1);
+    });
+
+    it('keeps the drawing name but not the title block when that is off', () => {
+      const parsed = parseLayoutFile(JSON.stringify(build({ titleBlock: false })));
+      expect(parsed.meta).toEqual({ name: 'ბლოკი A', projectName: '', revision: '', scale: null });
+    });
+
+    it('says when nothing is left to write', () => {
+      expect(layoutFileHasContent(build({ pieces: false, sketch: false, measures: false }))).toBe(false);
+      expect(layoutFileHasContent(build({ pieces: false, sketch: false }))).toBe(true);
+    });
   });
 });

@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import {
   exportCatalogFile,
-  exportLayoutFile,
   parseCatalogFile,
   parseLayoutFile,
 } from '../lib/catalogFile';
@@ -23,6 +22,10 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 import { RemainingButton } from './RemainingButton';
+import { ProblemsButton } from './ProblemsButton';
+import { FillAllButton } from './FillAllButton';
+import { SimpleSteps } from './SimpleSteps';
+import { WallThicknessField } from './WallThicknessField';
 
 /**
  * Grid steps that match the catalog.
@@ -61,7 +64,6 @@ export function Header() {
   const snapStep = useEditorStore((s) => s.snapStep);
   const zoom = useEditorStore((s) => s.zoom);
   const showLengths = useEditorStore((s) => s.showLengths);
-  const pdfVisibility = useEditorStore((s) => s.pdfVisibility);
   const measureHelper = useEditorStore((s) => s.measureStyle.helper);
   const setMeasureStyle = useEditorStore((s) => s.setMeasureStyle);
   const showNames = useEditorStore((s) => s.showNames);
@@ -117,7 +119,6 @@ export function Header() {
     [materials, pieces],
   );
   const hasSelection = selectedIds.length > 0;
-  const [printing, setPrinting] = useState(false);
   const activeDoc = documents.find((d) => d.id === activeDocId);
 
   // Two booleans, one choice. Grid keeps edge snapping on underneath it —
@@ -128,32 +129,6 @@ export function Header() {
   const setSnapMode = (mode: SnapMode) => {
     setSnap(mode === 'grid');
     setEdgeSnap(mode !== 'off');
-  };
-
-  /** Scaled, dimensioned drawing sheet with the title block. */
-  const printDrawing = async () => {
-    const doc = documents.find((d) => d.id === activeDocId);
-    if (!doc || !pieces.length) return;
-    setPrinting(true);
-    try {
-      const { exportDrawingToPdf } = await import('../lib/drawingPdf');
-      // The sheet prints what the screen shows: a layout hidden on screen is
-      // one the user has decided is not part of this drawing any more.
-      const result = exportDrawingToPdf({
-        doc: { ...doc, pieces, sketch: showSketch ? doc.sketch : [] },
-        materials,
-        showSketch,
-        visibility: pdfVisibility,
-      });
-      if (!result) setToast('ნახაზი ცარიელია.');
-      else if (result.rescaled) {
-        setToast(`ნახაზი არ ეტეოდა 1:${doc.scale}-ში - დაიბეჭდა 1:${result.scale} მასშტაბით.`);
-      }
-    } catch (e) {
-      setToast(`ბეჭდვა ვერ მოხერხდა: ${(e as Error).message}`);
-    } finally {
-      setPrinting(false);
-    }
   };
 
   // ── file actions ──────────────────────────────────────────────────────────
@@ -353,6 +328,7 @@ export function Header() {
           </Menu>
         </div>
 
+        <ProblemsButton />
         <RemainingButton />
 
         {/* Simple mode works in plan only, so the views go with it. */}
@@ -425,30 +401,49 @@ export function Header() {
                   >
                     შტამპი…
                   </MenuItem>
+                  {/* One window for both, with a switch for every part of the
+                      drawing; these two only decide which tab it opens on. A
+                      drawing of lines alone is still worth printing or taking along. */}
                   <MenuItem
                     icon="print"
-                    disabled={!pieces.length || printing}
+                    disabled={!pieces.length && !sketch.length && !measures.length}
                     onClick={() => {
-                      void printDrawing();
+                      openDialog({ kind: 'export', tab: 'pdf' });
                       close();
                     }}
                   >
-                    {printing ? 'იბეჭდება…' : 'ბეჭდვა (PDF)'}
+                    ექსპორტი - PDF…
                   </MenuItem>
                   <MenuItem
                     icon="download"
-                    // A drawing of lines alone is still a drawing worth taking along.
                     disabled={!pieces.length && !sketch.length && !measures.length}
                     onClick={() => {
-                      // The live mirrors, not the stored copy, so the file holds
-                      // exactly what is on screen this instant.
-                      if (activeDoc) {
-                        exportLayoutFile({ ...activeDoc, pieces, sketch, measures }, materials);
-                      }
+                      openDialog({ kind: 'export', tab: 'json' });
                       close();
                     }}
                   >
-                    ნახაზის ექსპორტი
+                    ექსპორტი - JSON…
+                  </MenuItem>
+                  {/* His own workbook - კონსტრუქცია, ჯამი, ნაშთი, აწყობა, პრინტ -
+                      with the counts already in, so the office keeps its file. */}
+                  <MenuItem
+                    icon="sheet"
+                    disabled={!pieces.length && !sketch.length}
+                    onClick={() => {
+                      close();
+                      void import('../lib/excelExport')
+                        .then(({ exportArchitectWorkbook }) =>
+                          exportArchitectWorkbook({
+                            materials,
+                            pieces,
+                            sketch,
+                            drawingName: activeDoc?.name ?? '',
+                          }),
+                        )
+                        .catch((e) => setToast(`Excel ვერ შეიქმნა: ${(e as Error).message}`));
+                    }}
+                  >
+                    Excel - არქიტექტორის ფორმატი
                   </MenuItem>
                   <MenuItem
                     icon="upload"
@@ -599,7 +594,7 @@ export function Header() {
                 <MenuItem
                   icon="eye"
                   onClick={() => openDialog({ kind: 'display-settings' })}
-                  title="რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში"
+                  title="რა ზომა როდის ჩანდეს ეკრანზე"
                 >
                   ზომების ჩვენება…
                 </MenuItem>
@@ -649,7 +644,7 @@ export function Header() {
                 is a table of choices rather than a switch. */}
             <Tooltip
               label="ზომების ჩვენება"
-              reason={`რა ზომა როდის ჩანდეს - ეკრანზე და PDF-ში · D - ${showLengths ? 'ყველა ზომის დამალვა' : 'ზომების ჩვენება'}`}
+              reason={`რა ზომა როდის ჩანდეს ეკრანზე · D - ${showLengths ? 'ყველა ზომის დამალვა' : 'ზომების ჩვენება'}`}
             >
               <button
                 className={`btn icon${showLengths ? '' : ' engaged'}`}
@@ -707,6 +702,8 @@ export function Header() {
                 {label}
               </button>
             ))}
+            {/* One line for a whole wall: its other face drawn for you. */}
+            <WallThicknessField />
           </span>
         )}
 
@@ -757,6 +754,10 @@ export function Header() {
             )}
           </span>
         )}
+
+        {/* Every still-empty line filled with its best recommendation at once -
+            in simple mode too: drawing and filling are the whole job there. */}
+        <FillAllButton />
 
         {/* The wizards and templates are shortcuts to a whole wall or column;
             simple mode draws the line and fills it instead. */}
@@ -877,6 +878,9 @@ export function Header() {
           </button>
         </div>
       </div>
+
+      {/* Simple mode's four steps - draw, fill, check, send - with the current one lit. */}
+      {simple && <SimpleSteps />}
 
       {storageError && (
         <div className="storage-banner">
