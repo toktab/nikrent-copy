@@ -1,0 +1,75 @@
+# Types, tests and a real build, on every push.
+#
+# There are 284 tests covering the parts that are easy to get quietly wrong —
+# the exact-cover panel search, the wizard geometry, the sync diff, the
+# projection maths. Until now they only ran when someone thought to run them,
+# which is the same as not having them on the day it matters.
+#
+# No secrets are used and nothing is deployed. This only ever says yes or no.
+
+name: CI
+
+on:
+  push:
+    branches: [master, backend-auth]
+  pull_request:
+  workflow_dispatch:
+
+# A new push makes the previous run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly the lockfile
+      # and fails if the two have drifted, so a dependency cannot change
+      # underneath the build without somebody noticing.
+      - run: npm ci
+
+      - name: Types
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
+      # `npm run build` runs tsc again, but it is the only thing that proves
+      # the app actually bundles — a broken dynamic import or a bad asset path
+      # passes a typecheck and fails a deploy.
+      - name: Build
+        run: npm run build
+
+      - name: Check nothing secret got committed
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # Look for a real key, not for the words describing one. Several
+          # files legitimately say "service_role" — the guard in supabase.ts
+          # exists precisely to reject such a key — so matching the word only
+          # produces false alarms. A Supabase key is a JWT, and no JWT of
+          # either kind belongs in the repository: even the anon key, which is
+          # public by design, is read from the environment so that a different
+          # deployment can point somewhere else.
+          if git grep -nIE 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{40,}' -- . ':!*.example'; then
+            echo "^ that looks like a hardcoded JWT." >&2
+            fail=1
+          fi
+
+          # .env.example is the committed template; any other .env is a leak.
+          if git ls-files | grep -E '(^|/)\.env' | grep -vx '.env.example'; then
+            echo "^ an environment file is tracked." >&2
+            fail=1
+          fi
+
+          [ "$fail" -eq 0 ] && echo "clean"
+          exit $fail

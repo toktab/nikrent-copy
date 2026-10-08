@@ -5,6 +5,16 @@ export type Category = 'panel' | 'waler' | 'corner' | 'post' | 'filler' | 'rod' 
 export type Shape = 'rect' | 'L' | 'line';
 
 /**
+ * What the 3D view does with edges that are behind other pieces:
+ * drop them entirely, draw them dashed, or show everything (x-ray, handy for
+ * checking ties buried inside a column).
+ */
+export type HiddenLineMode = 'hide' | 'dashed' | 'show';
+
+/** The inspector's three working views. */
+export type InspectorTab = 'recommend' | 'bom' | 'inventory';
+
+/**
  * Stock is held per warehouse: `{ [warehouseId]: quantity }`. Companies that
  * only ever use one store see a single number in the UI and never meet the
  * concept. See `lib/inventory.ts` for the helpers.
@@ -34,17 +44,21 @@ export interface Material {
    */
   depth: number;
   shape: Shape;
+  /**
+   * An L-profile's leg thickness in cm, when it is not the panel's 9 cm - a
+   * გარე კუთხე is a thin 0.1 cm angle. Absent: the panel-thickness rule in
+   * `cornerLeg`. Means nothing for any other shape.
+   */
+  leg?: number;
   /** hex colour; defaults to the category colour */
   color: string;
   /** true for the original 41 Du materials, false for user-created ones */
   builtin: boolean;
   /** inventory: how many the company owns, per warehouse */
   stock: StockByWarehouse;
-  /** unit price in the project currency (0 = not priced yet) */
-  price: number;
   /** unit weight in kg (0 = unknown) — drives crane and truck loads */
   weight: number;
-  /** supplier article / catalogue number */
+  /** supplier's own designation for the part (აღნიშვნა) */
   article: string;
   supplier: string;
 }
@@ -56,8 +70,17 @@ export interface Piece {
   /** cm, top-left of the un-rotated box in world coordinates */
   x: number;
   y: number;
-  /** 0 | 90 | 180 | 270 */
+  /** rotation in degrees, any angle */
   rot: number;
+  /**
+   * Elevation of the piece's underside in cm, 0 = on the ground.
+   *
+   * The 2D surface is a plan view and ignores this entirely — two pieces at
+   * different heights sit on top of each other in plan, which is correct. It
+   * exists so stacked courses and waler rings are real, counted pieces rather
+   * than a multiplier, and so the 3D view can show them at the right height.
+   */
+  z?: number;
 }
 
 /** Everything a material needs except its identity flags. */
@@ -73,12 +96,66 @@ export interface Warehouse {
  * A named drawing. The catalog and stock are company-wide and shared across
  * drawings; only the placed pieces belong to a document.
  */
+/**
+ * A drawn reference line: the wall layout, before any formwork exists.
+ *
+ * Right angles only, which is not a shortcut. Formwork is built square, the
+ * catalog's corner profiles are 90°, and a junction at any other angle has no
+ * component that closes it — so an angled sketch would be drawing something
+ * the tool could never tell you how to build. Consecutive points therefore
+ * always share an x or a y.
+ *
+ * Kept in plan world centimetres, like everything else on the surface. It is
+ * reference geometry and never appears in the bill of materials: nobody
+ * delivers a line.
+ */
+export interface SketchPath {
+  id: string;
+  /** orthogonal polyline, plan world cm */
+  points: Array<{ x: number; y: number }>;
+  /** the last point joins back to the first - a closed room outline */
+  closed?: boolean;
+  /**
+   * Which face of the pour this line is, and therefore which way the formwork
+   * stands off it.
+   *
+   * A wall is two lines. The outer one has the concrete on the inside of it and
+   * the panels outside; the inner one - the void, the room, the lift shaft -
+   * has the concrete outside it and the panels standing in the hole. The
+   * geometry alone cannot tell the two apart: an L drawn for a wall's outer
+   * face and an L drawn for its inner face are the same six numbers.
+   *
+   * So the pen asks, once, which kind of line is being drawn, and the answer
+   * lives on the line for good. Absent means outer, which is what every line
+   * drawn before this existed was taken to be.
+   */
+  perimeter?: 'outer' | 'inner';
+}
+
+/**
+ * A measured line the user put on the drawing: "from here to there is this far".
+ *
+ * Free in direction, unlike a sketch leg - a check dimension is taken wherever
+ * the question is, across a corner or on a diagonal. Annotation only: it never
+ * reaches the bill of materials and the fill never builds against it. Plan
+ * world centimetres, like everything else on the surface.
+ */
+export interface MeasureLine {
+  id: string;
+  a: { x: number; y: number };
+  b: { x: number; y: number };
+}
+
 export interface DrawingDoc {
   id: string;
   name: string;
   /** epoch ms of the last edit */
   updatedAt: number;
   pieces: Piece[];
+  /** the layout the formwork is being set out to — see SketchPath */
+  sketch: SketchPath[];
+  /** measured check lines placed with the measure tool — see MeasureLine */
+  measures: MeasureLine[];
   /** title-block fields for the printable drawing */
   projectName: string;
   revision: string;
@@ -90,6 +167,8 @@ export interface DrawingDoc {
 export interface DocSnapshot {
   materials: Material[];
   pieces: Piece[];
+  sketch: SketchPath[];
+  measures: MeasureLine[];
   removedBuiltins: string[];
 }
 
@@ -98,7 +177,11 @@ export interface ArrayOptions {
   count: number;
   /** centre-to-centre spacing in cm */
   pitch: number;
-  axis: 'x' | 'y';
+  /**
+   * 'z' stacks the copies upward instead of across the plan — how a column is
+   * built course by course without the wizard.
+   */
+  axis: 'x' | 'y' | 'z';
 }
 
 /** Input for the column formwork assembly generator. */
@@ -118,6 +201,26 @@ export interface ColumnSpec {
   includeCorners: boolean;
 }
 
+/**
+ * Input for the straight-wall shortcut.
+ *
+ * Not a second way of building a wall — it draws a two-point run and fills it,
+ * so the one generator does the work. What is left here is only what a straight
+ * run needs that a drawn one already knows: how long it is, and where to put
+ * it. No corner option, because a straight run has none.
+ */
+export interface WallRunSpec {
+  /** wall run in cm */
+  length: number;
+  /** concrete thickness in cm, centred on the run */
+  thickness: number;
+  /** pour height in cm */
+  height: number;
+  /** where the run starts, world cm */
+  originX: number;
+  originY: number;
+}
+
 /** Shape of an exported catalog file (materials + stock, no drawing). */
 export interface CatalogFile {
   app: 'du-formwork';
@@ -128,13 +231,30 @@ export interface CatalogFile {
   warehouses?: Warehouse[];
 }
 
-/** Shape of an exported layout file (placed pieces, no catalog). */
+/**
+ * Shape of an exported drawing file.
+ *
+ * Version 3 carries the whole drawing, not just the panels: a file taken to
+ * another computer has to open as the same drawing, and before it did the
+ * setting-out lines, the title block and any material that machine's catalog
+ * lacked were all quietly left behind. Materials travel as definitions only,
+ * for the ones the pieces use - stock is company data and stays at home.
+ */
 export interface LayoutFile {
   app: 'du-formwork';
   kind: 'layout';
   version: number;
   exportedAt: string;
+  name?: string;
+  projectName?: string;
+  revision?: string;
+  scale?: number;
   pieces: Piece[];
+  /** `legs` - each leg's length, cm - only when the export was asked for lengths */
+  sketch?: Array<SketchPath & { legs?: number[] }>;
+  /** `length` in cm, likewise only when asked for */
+  measures?: Array<MeasureLine & { length?: number }>;
+  materials?: Material[];
 }
 
 /** Modal currently open (kept out of persisted state). */
@@ -143,9 +263,21 @@ export type DialogState =
   | { kind: 'sheet-import' }
   | { kind: 'array' }
   | { kind: 'column-wizard' }
+  | { kind: 'wall-wizard' }
+  | { kind: 'sketch-fill'; pathIds: string[] }
+  | { kind: 'templates' }
   | { kind: 'warehouses' }
   | { kind: 'title-block' }
   | { kind: 'documents' }
+  | { kind: 'users' }
+  | { kind: 'errors' }
+  | { kind: 'password' }
+  | { kind: 'display-settings' }
+  | { kind: 'remaining' }
+  | { kind: 'export'; tab: 'pdf' | 'json' }
+  | { kind: 'shortcuts' }
+  | { kind: 'command' }
+  | { kind: 'tour' }
   | {
       kind: 'confirm';
       title: string;

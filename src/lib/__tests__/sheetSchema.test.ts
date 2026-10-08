@@ -14,7 +14,6 @@ const existing: Material[] = [
     color: '#c9a36a',
     builtin: true,
     stock: { main: 0 },
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',
@@ -81,12 +80,11 @@ describe('validateRows', () => {
     expect(odd.warnings.join()).toMatch(/ფორმა/);
   });
 
-  it('reads price, weight, article and supplier', () => {
+  it('reads weight, article and supplier', () => {
     const draft = validateRows(
-      [row({ price: '340.5', weight: 46.5, article: 'DU-1', supplier: 'Du' })],
+      [row({ weight: 46.5, article: 'DU-1', supplier: 'Du' })],
       existing,
     ).rows[0].draft!;
-    expect(draft.price).toBe(340.5);
     expect(draft.weight).toBe(46.5);
     expect(draft.article).toBe('DU-1');
     expect(draft.supplier).toBe('Du');

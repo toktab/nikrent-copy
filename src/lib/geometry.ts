@@ -148,6 +148,22 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
   return hits;
 }
 
+/**
+ * A box to align, plus any line inside it that is worth aligning to.
+ *
+ * The bounding box is not the whole story for every piece. An L-profile's legs
+ * lie nine centimetres inside two of its four edges, and those leg faces are
+ * exactly what has to end up flush with a panel or with another corner — so
+ * aligning one corner to another by its box alone is impossible from the two
+ * sides where the box is not the piece.
+ */
+export interface SnapRect extends Rect {
+  /** extra vertical lines to align on, in world cm */
+  xLines?: number[];
+  /** extra horizontal lines to align on */
+  yLines?: number[];
+}
+
 export interface EdgeSnap {
   dx: number;
   dy: number;
@@ -162,16 +178,20 @@ export interface EdgeSnap {
  * landing 2 cm apart. Grid snapping alone cannot do this because panel widths
  * are not multiples of the grid step.
  */
-export function computeEdgeSnap(moving: Rect, targets: Rect[], tolerance: number): EdgeSnap {
-  const movingX = [moving.x, moving.x + moving.w / 2, moving.x + moving.w];
-  const movingY = [moving.y, moving.y + moving.h / 2, moving.y + moving.h];
+export function computeEdgeSnap(
+  moving: SnapRect,
+  targets: SnapRect[],
+  tolerance: number,
+): EdgeSnap {
+  const movingX = [moving.x, moving.x + moving.w / 2, moving.x + moving.w, ...(moving.xLines ?? [])];
+  const movingY = [moving.y, moving.y + moving.h / 2, moving.y + moving.h, ...(moving.yLines ?? [])];
 
   let bestX: { delta: number; line: number } | null = null;
   let bestY: { delta: number; line: number } | null = null;
 
   for (const t of targets) {
-    const targetX = [t.x, t.x + t.w / 2, t.x + t.w];
-    const targetY = [t.y, t.y + t.h / 2, t.y + t.h];
+    const targetX = [t.x, t.x + t.w / 2, t.x + t.w, ...(t.xLines ?? [])];
+    const targetY = [t.y, t.y + t.h / 2, t.y + t.h, ...(t.yLines ?? [])];
 
     for (const mx of movingX) {
       for (const tx of targetX) {
@@ -225,6 +245,41 @@ export function lengthCm(m: Material): number {
   return Math.max(m.w, m.h);
 }
 
+/** The heavy grid line, in cm. A metre, so the squares can be counted. */
+export const GRID_MAJOR_CM = 100;
+
+/**
+ * The finest the layout is ever drawn to, in cm.
+ *
+ * Five is enough for any scheme: it is the module the catalog steps in, the
+ * square the surface is ruled in, and therefore the square the pen lands on.
+ * Anything finer was only ever a way to end up with a 180.2 leg and a joint
+ * that does not close, so there is no longer an option for it.
+ */
+export const DRAW_STEP_CM = 5;
+
+/** The step the pen and the layout's own handles move in - never finer. */
+export function drawStep(snap: boolean, snapStep: number): number {
+  return Math.max(snap ? snapStep : 0, DRAW_STEP_CM);
+}
+
+/**
+ * The fine grid square, in cm, at the current zoom.
+ *
+ * Five where five will read, because five is what the drawing snaps to and a
+ * square you cannot land on is a square in the way: three out of every four
+ * snap positions had no line under them on the old fixed 20 cm grid, so setting
+ * a corner out meant counting in the head instead of counting squares.
+ *
+ * It steps up as the drawing is zoomed out, at the point where the lines would
+ * be closer together than they are wide and the surface would go grey.
+ */
+export function gridStep(zoom: number): number {
+  const steps = [DRAW_STEP_CM, 10, 20, 50, GRID_MAJOR_CM, 200, 500];
+  const target = 4.5 / zoom;
+  return steps.find((s) => s >= target) ?? 500;
+}
+
 /** Ruler step that keeps ticks ≈70 px apart at the current zoom. */
 export function niceStep(zoom: number): number {
   const target = 70 / zoom;
@@ -235,4 +290,37 @@ export function niceStep(zoom: number): number {
 /** Drop trailing ".0" from computed cm values. */
 export function fmtCm(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
+}
+
+/**
+ * Where to drop a freshly generated assembly, in world cm.
+ *
+ * The wizards used to place their output at the world point behind the stage's
+ * top-left pixel, plus 40 cm. Three things were wrong with that: the top-left
+ * pixel is under the ruler gutter, 40 cm is 8 px at 20% zoom and 224 px at
+ * 560%, and a column is built *outwards* from its origin — the walers sit at
+ * origin − panelDepth − walerDepth — so the assembly reached back past the
+ * corner it was measured from and off the screen.
+ *
+ * The middle of what the user is looking at has none of those problems, and it
+ * is where anyone would expect a thing they just asked for to appear. The
+ * caller passes the assembly's own plan size so the box is centred rather than
+ * hung off its corner.
+ */
+export function dropOrigin(
+  view: { panX: number; panY: number; zoom: number; stageW: number; stageH: number },
+  sizeX: number,
+  sizeY: number,
+): { x: number; y: number } {
+  const { panX, panY, zoom, stageW, stageH } = view;
+  // A zero stage means the canvas has not been measured yet — on the very
+  // first render, before the ResizeObserver reports. The world origin is a
+  // better answer than dividing by nothing.
+  if (!(zoom > 0) || !(stageW > 0) || !(stageH > 0)) return { x: 0, y: 0 };
+  const centreX = (stageW / 2 - panX) / zoom;
+  const centreY = (stageH / 2 - panY) / zoom;
+  return {
+    x: Math.round(centreX - (Number.isFinite(sizeX) ? sizeX : 0) / 2),
+    y: Math.round(centreY - (Number.isFinite(sizeY) ? sizeY : 0) / 2),
+  };
 }

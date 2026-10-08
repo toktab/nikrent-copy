@@ -1,6 +1,34 @@
 import * as XLSX from 'xlsx';
 import type { Bom } from './bom';
 import { fmtNum, sizeLabel } from './bom';
+import type { Remaining } from './remaining';
+import { buildArchitectWorkbook, type WorkbookInput } from './architectWorkbook';
+
+/**
+ * The architect's own workbook, filled in from the open drawing - see
+ * `buildArchitectWorkbook`. Formula cells carry his formulas and the values
+ * they come to, so the file reads right in anything and recalculates in Excel
+ * the moment he changes a count.
+ */
+export function exportArchitectWorkbook(input: WorkbookInput): void {
+  const wb = XLSX.utils.book_new();
+  for (const sheet of buildArchitectWorkbook(input)) {
+    const values = sheet.rows.map((row) =>
+      row.map((cell) => (cell && typeof cell === 'object' ? cell.v : (cell ?? ''))),
+    );
+    const ws = XLSX.utils.aoa_to_sheet(values);
+    ws['!cols'] = sheet.widths.map((wch) => ({ wch }));
+    sheet.rows.forEach((row, r) =>
+      row.forEach((cell, c) => {
+        if (cell && typeof cell === 'object') {
+          ws[XLSX.utils.encode_cell({ r, c })] = { t: 'n', v: cell.v, f: cell.f };
+        }
+      }),
+    );
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+  }
+  XLSX.writeFile(wb, stampedName('du-workbook', 'xlsx'));
+}
 import { downloadText, stampedName } from './files';
 
 /** Ordering-sheet columns (Georgian first, English kept for shared use). */
@@ -8,12 +36,11 @@ const HEADERS = [
   'კომპონენტი / Component',
   'კატეგორია / Category',
   'ზომა (სმ) / Size (cm)',
-  'არტიკული / Article',
+  'აღნიშვნა / Designation',
   'რაოდენობა / Quantity',
+  'სიგრძე (მ) / Length (m)',
   'მარაგი / In stock',
   'ნაშთი / Remaining',
-  'ერთ. ფასი / Unit price',
-  'ჯამი / Line total',
   'წონა კგ / Weight kg',
 ];
 
@@ -30,23 +57,21 @@ function bomRows(bom: Bom): Cell[][] {
         sizeLabel(row.material),
         row.material.article,
         row.used,
+        Number(fmtNum(row.lengthM)),
         row.stock,
         row.remaining,
-        row.material.price,
-        Number(fmtNum(row.cost)),
         Number(fmtNum(row.weightKg)),
       ]);
     }
     aoa.push([
-      `ჯამი — ${group.label}`,
+      `ჯამი - ${group.label}`,
       '',
       '',
       '',
       group.pieces,
+      Number(fmtNum(group.lengthM)),
       '',
       '',
-      '',
-      Number(fmtNum(group.cost)),
       Number(fmtNum(group.weightKg)),
     ]);
     aoa.push([]);
@@ -58,19 +83,15 @@ function bomRows(bom: Bom): Cell[][] {
     '',
     '',
     bom.totalPieces,
+    Number(fmtNum(bom.totalLengthM)),
     '',
     '',
-    '',
-    Number(fmtNum(bom.totalCost)),
     Number(fmtNum(bom.totalWeightKg)),
   ]);
 
-  if (bom.unpricedRows > 0) {
-    aoa.push([]);
-    aoa.push([`⚠ ${bom.unpricedRows} პოზიციას ფასი არ აქვს — ჯამი არასრულია.`]);
-  }
   if (bom.unweighedRows > 0) {
-    aoa.push([`⚠ ${bom.unweighedRows} პოზიციას წონა არ აქვს — წონის ჯამი არასრულია.`]);
+    aoa.push([]);
+    aoa.push([`⚠ ${bom.unweighedRows} პოზიციას წონა არ აქვს - წონის ჯამი არასრულია.`]);
   }
   return aoa;
 }
@@ -82,7 +103,6 @@ function summaryRows(bom: Bom): Cell[][] {
       'ელემენტი / Pieces',
       'სიგრძე (მ) / Length (m)',
       'ფართობი (მ²) / Area (m²)',
-      'ღირებულება / Cost',
       'წონა კგ / Weight kg',
       'დეფიციტი / Shortages',
     ],
@@ -93,7 +113,6 @@ function summaryRows(bom: Bom): Cell[][] {
       g.pieces,
       Number(fmtNum(g.lengthM)),
       Number(fmtNum(g.areaM2)),
-      Number(fmtNum(g.cost)),
       Number(fmtNum(g.weightKg)),
       g.shortages,
     ]);
@@ -103,7 +122,6 @@ function summaryRows(bom: Bom): Cell[][] {
     bom.totalPieces,
     Number(fmtNum(bom.totalLengthM)),
     Number(fmtNum(bom.totalAreaM2)),
-    Number(fmtNum(bom.totalCost)),
     Number(fmtNum(bom.totalWeightKg)),
     bom.shortageCount,
   ]);
@@ -121,7 +139,7 @@ export function exportBomToExcel(bom: Bom): void {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
     wb,
-    makeSheet(bomRows(bom), [34, 22, 15, 16, 12, 11, 11, 13, 13, 13]),
+    makeSheet(bomRows(bom), [34, 22, 15, 16, 12, 14, 11, 11, 13, 13, 13]),
     'უწყისი',
   );
   XLSX.utils.book_append_sheet(wb, makeSheet(summaryRows(bom), [24, 12, 16, 16, 15, 14, 12]), 'შეჯამება');
@@ -134,6 +152,38 @@ export function exportBomToCsv(bom: Bom): void {
   downloadText(XLSX.utils.sheet_to_csv(ws), stampedName('du-bom', 'csv'), 'text/csv');
 }
 
+/**
+ * The ნაშთი sheet as .xlsx: stock, used in this drawing, left. Replaces the
+ * architect's own ნაშთი and პრინტ sheets for the drawing that is open.
+ */
+export function exportRemainingToExcel(remaining: Remaining, drawingName: string): void {
+  const aoa: Cell[][] = [
+    [`ნაშთი - ${drawingName}`],
+    [],
+    [
+      'კომპონენტი / Component',
+      'ზომა (სმ) / Size (cm)',
+      'სულ მარაგი / In stock',
+      'ამ ნახაზში გამოყენებული / Used in this drawing',
+      'დარჩა მარაგი / Left',
+    ],
+  ];
+  for (const group of remaining.groups) {
+    aoa.push([group.label]);
+    for (const row of group.rows) {
+      aoa.push([row.material.name, sizeLabel(row.material), row.stock, row.used, row.left]);
+    }
+    aoa.push([]);
+  }
+  aoa.push(['სულ გამოყენებული / Total used', '', '', remaining.used, '']);
+  if (remaining.shortages > 0) {
+    aoa.push([`⚠ ${remaining.shortages} პოზიციას მარაგი არ ჰყოფნის.`]);
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, makeSheet(aoa, [34, 15, 14, 24, 14]), 'ნაშთი');
+  XLSX.writeFile(wb, stampedName('du-remaining', 'xlsx'));
+}
+
 export interface CatalogExportRow {
   name: string;
   category: string;
@@ -141,7 +191,6 @@ export interface CatalogExportRow {
   shape: string;
   article: string;
   supplier: string;
-  price: number;
   weight: number;
   /** stock per warehouse, in the same order as `warehouseNames` */
   stockPerWarehouse: number[];
@@ -156,9 +205,8 @@ export function exportCatalogToExcel(rows: CatalogExportRow[], warehouseNames: s
     'კატეგორია / Category',
     'ზომა (სმ) / Size (cm)',
     'ფორმა / Shape',
-    'არტიკული / Article',
+    'აღნიშვნა / Designation',
     'მომწოდებელი / Supplier',
-    'ერთ. ფასი / Unit price',
     'წონა კგ / Weight kg',
     ...warehouseNames.map((n) => `მარაგი: ${n}`),
     'სულ მარაგი / Total stock',
@@ -176,7 +224,6 @@ export function exportCatalogToExcel(rows: CatalogExportRow[], warehouseNames: s
         r.shape,
         r.article,
         r.supplier,
-        r.price,
         r.weight,
         ...r.stockPerWarehouse,
         r.totalStock,
@@ -186,7 +233,7 @@ export function exportCatalogToExcel(rows: CatalogExportRow[], warehouseNames: s
     ),
   ];
 
-  const widths = [34, 22, 15, 10, 16, 18, 12, 12, ...warehouseNames.map(() => 14), 14, 14, 14];
+  const widths = [34, 22, 15, 10, 16, 18, 12, ...warehouseNames.map(() => 14), 14, 14, 14];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, makeSheet(aoa, widths), 'კატალოგი');
   XLSX.writeFile(wb, stampedName('du-catalog', 'xlsx'));

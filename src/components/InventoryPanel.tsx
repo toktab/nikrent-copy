@@ -1,8 +1,11 @@
+import { keepWheelOffNumber } from '../lib/numberField';
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER, categoryLabel } from '../data/categories';
-import { fmtMoney, sizeLabel } from '../lib/bom';
+import { sizeLabel } from '../lib/bom';
 import { commitmentsByMaterial, emptyCommitment, stockIn, totalStock } from '../lib/inventory';
+import { Icon } from './Icon';
 
 /**
  * Stock per component. Shows what the company owns, what every drawing has
@@ -14,6 +17,7 @@ export function InventoryPanel() {
   const activeDocId = useEditorStore((s) => s.activeDocId);
   const warehouses = useEditorStore((s) => s.warehouses);
   const setStock = useEditorStore((s) => s.setStock);
+  const canManage = useCanManageCatalog();
   const openDialog = useEditorStore((s) => s.openDialog);
 
   const [query, setQuery] = useState('');
@@ -50,15 +54,13 @@ export function InventoryPanel() {
   const totals = useMemo(() => {
     let stock = 0;
     let shortages = 0;
-    let value = 0;
     for (const m of materials) {
       const owned = totalStock(m);
       const c = commitments.get(m.id) ?? emptyCommitment();
       stock += owned;
-      value += owned * m.price;
       if (owned - c.committed < 0) shortages++;
     }
-    return { stock, shortages, value, count: materials.length };
+    return { stock, shortages, count: materials.length };
   }, [materials, commitments]);
 
   const exportXlsx = async () => {
@@ -74,7 +76,6 @@ export function InventoryPanel() {
           shape: m.shape,
           article: m.article,
           supplier: m.supplier,
-          price: m.price,
           weight: m.weight,
           stockPerWarehouse: warehouses.map((w) => stockIn(m, w.id)),
           totalStock: totalStock(m),
@@ -96,10 +97,6 @@ export function InventoryPanel() {
           <span>სულ მარაგი</span>
           <b>{totals.stock}</b>
         </div>
-        <div className="sc-item">
-          <span>მარაგის ღირებულება</span>
-          <b>{fmtMoney(totals.value)}</b>
-        </div>
         <div className={`sc-item${totals.shortages ? ' warn' : ''}`}>
           <span>არ ჰყოფნის</span>
           <b>{totals.shortages}</b>
@@ -114,16 +111,57 @@ export function InventoryPanel() {
             </option>
           ))}
         </select>
-        <button className="btn small" onClick={() => openDialog({ kind: 'warehouses' })}>
+        <button
+          className="btn small"
+          disabled={!canManage}
+          title={canManage ? undefined : ADMIN_ONLY_TITLE}
+          onClick={() => openDialog({ kind: 'warehouses' })}
+        >
           საწყობები…
         </button>
+        {/* A stand-in figure until real counts are entered, so recommendations
+            and the ნაშთი sheet have something to count against. Asked first:
+            it writes over every count in the store, real ones included. */}
+        {canManage && editing && (
+          <button
+            className="btn small"
+            title="ყველა კომპონენტის მარაგი ამ საწყობში - 500"
+            onClick={() =>
+              openDialog({
+                kind: 'confirm',
+                title: 'მარაგი: ყველას 500',
+                message: `„${editing.name}“-ში ყველა კომპონენტის (${materials.length}) მარაგი გახდება 500. ამჟამინდელი რაოდენობები ჩაანაცვლდება. გავაგრძელო?`,
+                confirmLabel: 'ყველას 500',
+                danger: true,
+                onConfirm: () => useEditorStore.getState().setAllStock(editing.id, 500),
+              })
+            }
+          >
+            ყველას 500 (ტესტი)
+          </button>
+        )}
+        {/* The office's own weights, for the BOM's weight column. Only where a
+            weight is still 0: a figure somebody typed is never written over. */}
+        {canManage && (
+          <button
+            className="btn small"
+            title="კომპანიის Excel-ის წონები - მხოლოდ იქ, სადაც წონა ჯერ 0-ა"
+            onClick={() => {
+              const s = useEditorStore.getState();
+              const n = s.fillMissingWeights();
+              s.setToast(n ? `წონა ჩაიწერა ${n} კომპონენტს.` : 'ყველა კომპონენტს წონა უკვე აქვს.');
+            }}
+          >
+            წონები (Excel-იდან)
+          </button>
+        )}
       </div>
 
       <input
         className="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="🔍 კომპონენტი ან არტიკული..."
+        placeholder="კომპონენტი ან აღნიშვნა…"
       />
       <label className="check-row">
         <input
@@ -134,8 +172,7 @@ export function InventoryPanel() {
         მხოლოდ დეფიციტი (ყველა ნახაზის გათვალისწინებით)
       </label>
       <div className="export-row">
-        <button className="btn small" onClick={() => void exportXlsx()}>
-          ⤓ კატალოგი Excel-ში
+        <button className="btn small" onClick={() => void exportXlsx()}><Icon name="download" /> კატალოგი Excel-ში
         </button>
       </div>
 
@@ -174,7 +211,8 @@ export function InventoryPanel() {
                     <td>
                       <button
                         className="link-name"
-                        title="რედაქტირება"
+                        disabled={!canManage}
+                        title={canManage ? 'რედაქტირება' : ADMIN_ONLY_TITLE}
                         onClick={() => openDialog({ kind: 'material', materialId: m.id })}
                       >
                         {m.name}
@@ -192,17 +230,19 @@ export function InventoryPanel() {
                     <td className="num">
                       <input
                         className={`stock-input${shortage ? ' bad' : ''}`}
+                        onWheel={keepWheelOffNumber}
                         type="number"
                         min={0}
                         step={1}
                         value={stockIn(m, editingId)}
+                        disabled={!canManage}
                         onChange={(e) => setStock(m.id, editingId, Number(e.target.value))}
                       />
                       {multi && <span className="bom-size">სულ {owned}</span>}
                     </td>
                     <td className="num">
                       {free}
-                      {shortage && <span className="warn-badge">⚠</span>}
+                      {shortage && <span className="warn-badge"><Icon name="warning" /></span>}
                     </td>
                   </tr>
                 );

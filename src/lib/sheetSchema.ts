@@ -31,7 +31,6 @@ export const SHEET_TEMPLATE_HEADERS = [
   'shape',
   'color',
   'stock',
-  'price',
   'weight',
   'article',
   'supplier',
@@ -46,11 +45,11 @@ const HEADER_ALIASES: Record<keyof MaterialDraft | 'w' | 'h', string[]> = {
   h: ['heightcm', 'height', 'h', 'სიმაღლე', 'სიგრძე', 'length', 'lengthcm'],
   depth: ['depthcm', 'depth', 'thickness', 'სისქე', 'სიღრმე'],
   shape: ['shape', 'form', 'ფორმა'],
+  leg: ['leg', 'legcm', 'legthickness', 'ფეხისსისქე', 'ფეხი'],
   color: ['color', 'colour', 'ფერი'],
   stock: ['stock', 'qty', 'quantity', 'inventory', 'მარაგი', 'რაოდენობა'],
-  price: ['price', 'cost', 'unitprice', 'ფასი', 'ღირებულება'],
   weight: ['weight', 'kg', 'weightkg', 'წონა'],
-  article: ['article', 'articleno', 'code', 'sku', 'artno', 'არტიკული', 'კოდი'],
+  article: ['article', 'articleno', 'code', 'sku', 'artno', 'არტიკული', 'აღნიშვნა', 'კოდი'],
   supplier: ['supplier', 'vendor', 'manufacturer', 'მომწოდებელი'],
 };
 
@@ -152,7 +151,7 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
     if (shapeRaw) {
       const mapped = SHAPE_ALIASES[shapeRaw];
       if (mapped) shape = mapped;
-      else warnings.push(`უცნობი ფორმა "${String(pick(raw, 'shape'))}" — გამოყენდება rect`);
+      else warnings.push(`უცნობი ფორმა "${String(pick(raw, 'shape'))}" - გამოყენდება rect`);
     }
 
     const colorRaw = String(pick(raw, 'color') ?? '').trim();
@@ -160,16 +159,16 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
     if (colorRaw) {
       const withHash = colorRaw.startsWith('#') ? colorRaw : `#${colorRaw}`;
       if (/^#[0-9a-fA-F]{6}$/.test(withHash)) color = withHash;
-      else warnings.push(`ფერი "${colorRaw}" არავალიდურია — გამოყენდება კატეგორიის ფერი`);
+      else warnings.push(`ფერი "${colorRaw}" არავალიდურია - გამოყენდება კატეგორიის ფერი`);
     }
 
     /** Optional non-negative number column; warns and falls back to 0. */
-    const optionalNumber = (field: 'stock' | 'price' | 'weight' | 'depth', label: string): number => {
+    const optionalNumber = (field: 'stock' | 'weight' | 'depth' | 'leg', label: string): number => {
       const value = pick(raw, field);
       if (value === undefined || String(value).trim() === '') return 0;
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0) {
-        warnings.push(`${label} არავალიდურია — დაყენდება 0`);
+        warnings.push(`${label} არავალიდურია - დაყენდება 0`);
         return 0;
       }
       return field === 'stock' ? Math.round(n) : n;
@@ -177,7 +176,8 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
 
     const stock = optionalNumber('stock', 'მარაგი');
     const depth = optionalNumber('depth', 'სისქე');
-    const price = optionalNumber('price', 'ფასი');
+    // Only an L has a leg; blank keeps the panel-thickness rule.
+    const leg = optionalNumber('leg', 'ფეხის სისქე');
     const weight = optionalNumber('weight', 'წონა');
     const article = String(pick(raw, 'article') ?? '').trim();
     const supplier = String(pick(raw, 'supplier') ?? '').trim();
@@ -196,9 +196,9 @@ export function validateRows(rows: RawRow[], existing: Material[]): ParseSummary
             h,
             depth: depth > 0 ? depth : defaultDepth(category, w, h),
             shape,
+            ...(shape === 'L' && leg > 0 ? { leg } : {}),
             color,
             stock: { [DEFAULT_WAREHOUSE.id]: stock },
-            price,
             weight,
             article,
             supplier,

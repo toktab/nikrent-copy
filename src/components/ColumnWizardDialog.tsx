@@ -1,3 +1,4 @@
+import { dropOrigin } from '../lib/geometry';
 import { useMemo, useState } from 'react';
 import type { ColumnSpec } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
@@ -30,19 +31,22 @@ export function ColumnWizardDialog() {
 
   const n = (v: string) => Number(String(v).replace(',', '.'));
 
-  // Drop the assembly near the top-left of what the user is currently looking at.
+  // Centred on what the user is looking at — see `dropOrigin`.
   const spec: ColumnSpec = useMemo(
-    () => ({
+    () => {
+      const at = dropOrigin({ panX, panY, zoom, stageW, stageH }, n(sectionX), n(sectionY));
+      return {
       sectionX: n(sectionX),
       sectionY: n(sectionY),
       height: n(height),
       walerSpacing: n(walerSpacing),
-      originX: Math.round((0 - panX) / zoom + 40),
-      originY: Math.round((0 - panY) / zoom + 40),
+      originX: at.x,
+      originY: at.y,
       includeWalers,
       includeTies,
       includeCorners,
-    }),
+      };
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sectionX, sectionY, height, walerSpacing, includeWalers, includeTies, includeCorners, panX, panY, zoom, stageW, stageH],
   );
@@ -52,7 +56,7 @@ export function ColumnWizardDialog() {
   if (!Number.isFinite(spec.sectionY) || spec.sectionY <= 0) errors.push('კვეთის Y სავალდებულოა.');
   if (!Number.isFinite(spec.height) || spec.height <= 0) errors.push('სიმაღლე სავალდებულოა.');
   if (includeWalers && (!Number.isFinite(spec.walerSpacing) || spec.walerSpacing <= 0)) {
-    errors.push('ვალერების ბიჯი დადებითი უნდა იყოს.');
+    errors.push('ვოლერების ბიჯი დადებითი უნდა იყოს.');
   }
 
   // Live preview of exactly what will be placed, warnings included.
@@ -66,7 +70,7 @@ export function ColumnWizardDialog() {
     if (errors.length) return;
     const result = generateColumn(spec);
     if (!result.added) {
-      setToast('კოლონა ვერ აიწყო — შეამოწმე კატალოგი და ზომები.');
+      setToast('კოლონა ვერ აიწყო - შეამოწმე კატალოგი და ზომები.');
     } else {
       setToast(
         result.warnings.length
@@ -93,7 +97,7 @@ export function ColumnWizardDialog() {
       }
     >
       <p className="hint-note" style={{ marginTop: 0 }}>
-        ოთხივე მხარე განლაგდება <b>გაშლილად, გვერდიგვერდ</b> — როგორც ფორმვორკის სამუშაო
+        ოთხივე მხარე განლაგდება <b>გაშლილად, გვერდიგვერდ</b> - როგორც ფორმვორკის სამუშაო
         ნახაზზე. რაოდენობები პირდაპირ გადადის უწყისში.
       </p>
 
@@ -130,7 +134,7 @@ export function ColumnWizardDialog() {
           />
         </label>
         <label className="field">
-          <span>ვალერების ბიჯი (სმ)</span>
+          <span>ვოლერების ბიჯი (სმ)</span>
           <input
             type="number"
             min={1}
@@ -157,7 +161,7 @@ export function ColumnWizardDialog() {
             checked={includeWalers}
             onChange={(e) => setIncludeWalers(e.target.checked)}
           />
-          ვალერები
+          ვოლერები
         </label>
         <label className="check-row">
           <input
@@ -181,8 +185,14 @@ export function ColumnWizardDialog() {
               <span>კუთხე</span>
               <b>{plan.summary.corners}</b>
             </div>
+            {plan.summary.fillers > 0 && (
+              <div className="sc-item">
+                <span>ჩაკერება</span>
+                <b>{plan.summary.fillers}</b>
+              </div>
+            )}
             <div className="sc-item">
-              <span>ვალერი</span>
+              <span>ვოლერი</span>
               <b>{plan.summary.walers}</b>
             </div>
             <div className="sc-item">

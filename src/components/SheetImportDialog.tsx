@@ -4,6 +4,7 @@ import { useEditorStore } from '../store/useEditorStore';
 import { SHEET_TEMPLATE_HEADERS, validateRows, type ParseSummary } from '../lib/sheetSchema';
 import { categoryLabel } from '../data/categories';
 import { Modal } from './Modal';
+import { Icon } from './Icon';
 
 /** Bulk-add components from an Excel/CSV file or pasted text, with a preview. */
 export function SheetImportDialog() {
@@ -18,7 +19,7 @@ export function SheetImportDialog() {
 
   const parse = (rows: Record<string, unknown>[], label: string) => {
     if (!rows.length) {
-      setError('მონაცემები ვერ წავიკითხე — ფაილი ან ტექსტი ცარიელია.');
+      setError('მონაცემები ვერ წავიკითხე - ფაილი ან ტექსტი ცარიელია.');
       setSummary(null);
       return;
     }
@@ -76,8 +77,7 @@ export function SheetImportDialog() {
       onClose={closeDialog}
       footer={
         <>
-          <button className="btn" onClick={() => void onTemplate()}>
-            ⤓ ნიმუშის ჩამოტვირთვა
+          <button className="btn" onClick={() => void onTemplate()}><Icon name="download" /> ნიმუშის ჩამოტვირთვა
           </button>
           <span className="flex-spacer" />
           <button className="btn" onClick={closeDialog}>
@@ -94,13 +94,12 @@ export function SheetImportDialog() {
       }
     >
       <p className="hint-note">
-        სვეტები: <code>{SHEET_TEMPLATE_HEADERS.join(', ')}</code> — <code>shape</code>,{' '}
+        სვეტები: <code>{SHEET_TEMPLATE_HEADERS.join(', ')}</code> - <code>shape</code>,{' '}
         <code>color</code> და <code>stock</code> არასავალდებულოა.
       </p>
 
       <div className="import-sources">
-        <label className="btn">
-          📂 ფაილის არჩევა (.xlsx / .csv)
+        <label className="btn"><Icon name="folder" /> ფაილის არჩევა (.xlsx / .csv)
           <input
             type="file"
             accept=".xlsx,.xls,.csv,text/csv"
@@ -154,14 +153,14 @@ export function SheetImportDialog() {
                 {summary.rows.map((r) => (
                   <tr key={r.row} className={r.draft ? '' : 'bad-row'}>
                     <td className="muted">{r.row}</td>
-                    <td>{r.draft?.name ?? String(r.raw.name ?? '—')}</td>
-                    <td>{r.draft ? categoryLabel(r.draft.category) : '—'}</td>
+                    <td>{r.draft?.name ?? String(r.raw.name ?? '-')}</td>
+                    <td>{r.draft ? categoryLabel(r.draft.category) : '-'}</td>
                     <td className="num">
-                      {r.draft ? `${r.draft.w} × ${r.draft.h}` : '—'}
+                      {r.draft ? `${r.draft.w} × ${r.draft.h}` : '-'}
                     </td>
-                    <td>{r.draft?.shape ?? '—'}</td>
+                    <td>{r.draft?.shape ?? '-'}</td>
                     <td className="num">
-                      {r.draft ? Object.values(r.draft.stock).reduce((a, b) => a + b, 0) : '—'}
+                      {r.draft ? Object.values(r.draft.stock).reduce((a, b) => a + b, 0) : '-'}
                     </td>
                     <td className="status-cell">
                       {r.errors.map((m) => (
@@ -175,7 +174,7 @@ export function SheetImportDialog() {
                         </span>
                       ))}
                       {r.draft && r.errors.length === 0 && r.warnings.length === 0 && (
-                        <span className="msg ok">✓</span>
+                        <span className="msg ok"><Icon name="check" /></span>
                       )}
                     </td>
                   </tr>

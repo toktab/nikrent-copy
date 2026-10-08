@@ -1,8 +1,16 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './store/useEditorStore';
+import { legacyBritaniaToV1, schemaToSketchPaths } from './lib/detectImport';
+import { takeTraceImport, TRACE_IMPORT_KEY } from './lib/trace/handoff';
+import { uid } from './lib/ids';
+import type { LegacyDetectedDoc } from './lib/detection/types';
 import { Header } from './components/Header';
+import { StatusBar } from './components/StatusBar';
+import { OfflineBanner } from './components/OfflineBanner';
+import { SyncBanner } from './components/SyncBanner';
 import { Palette } from './components/Palette';
 import { StageCanvas } from './components/StageCanvas';
+import { View3D } from './components/View3D';
 import { SidePanel } from './components/SidePanel';
 import { MaterialFormDialog } from './components/MaterialFormDialog';
 import { SheetImportDialog } from './components/SheetImportDialog';
@@ -10,14 +18,30 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { ArrayDialog } from './components/ArrayDialog';
 import { DocumentsDialog } from './components/DocumentsDialog';
 import { ColumnWizardDialog } from './components/ColumnWizardDialog';
+import { WallWizardDialog } from './components/WallWizardDialog';
+import { SketchFillDialog } from './components/SketchFillDialog';
+import { TemplatesDialog } from './components/TemplatesDialog';
 import { WarehousesDialog } from './components/WarehousesDialog';
 import { TitleBlockDialog } from './components/TitleBlockDialog';
+import { UsersDialog } from './components/UsersDialog';
+import { ErrorLogDialog } from './components/ErrorLogDialog';
+import { PasswordDialog } from './components/PasswordDialog';
+import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
+import { RemainingDialog } from './components/RemainingDialog';
+import { ExportDialog } from './components/ExportDialog';
+import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { CommandPalette } from './components/CommandPalette';
+import { TourDialog } from './components/TourDialog';
+import { GlobalShortcuts } from './components/GlobalShortcuts';
+import { PenTyping } from './components/PenTyping';
+import { Icon } from './components/Icon';
 
 export default function App() {
   const dialog = useEditorStore((s) => s.dialog);
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const toast = useEditorStore((s) => s.toast);
   const setToast = useEditorStore((s) => s.setToast);
+  const viewMode = useEditorStore((s) => s.viewMode);
   const paletteOpen = useEditorStore((s) => s.paletteOpen);
   const inspectorOpen = useEditorStore((s) => s.inspectorOpen);
   const setPaletteOpen = useEditorStore((s) => s.setPaletteOpen);
@@ -29,9 +53,66 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast, setToast]);
 
+  // Import detection results from /detection page via sessionStorage.
+  // Runs after data has loaded to avoid hydrateFromServer overwriting the paths.
+  const dataLoaded = useEditorStore((s) => s.dataLoaded);
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const raw = sessionStorage.getItem('detect-import');
+    if (!raw) return;
+    try {
+      const doc: LegacyDetectedDoc = JSON.parse(raw);
+      const schema = legacyBritaniaToV1(doc, doc.source?.pdf);
+      const paths = schemaToSketchPaths(schema);
+      // Through the store's own action, so the lines land in the drawing that
+      // is saved and synced, and one undo takes the whole import back out.
+      useEditorStore.getState().appendSketch(paths);
+      setToast(`დეტექციიდან ${paths.length} მონახაზი ჩაიტვირთა.`);
+    } catch (e) {
+      setToast('დეტექციის შედეგების ჩატვირთვა ვერ მოხერხდა.');
+    } finally {
+      sessionStorage.removeItem('detect-import');
+    }
+  }, [dataLoaded]);
+
+  /**
+   * Walls traced off a PDF in the /trace tab.
+   *
+   * That tab hands them over through localStorage rather than sessionStorage,
+   * because it is a different tab - so this listens as well as looking once on
+   * load: with the editor already open beside the tracing page, "send to the
+   * editor" lands here while the user watches, instead of on a later reload.
+   */
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const take = () => {
+      const handed = takeTraceImport();
+      if (!handed) return;
+      const paths = handed.paths.map((p) => ({
+        id: uid('sk'),
+        points: p.points,
+        ...(p.closed ? { closed: true } : {}),
+        perimeter: 'outer' as const,
+      }));
+      useEditorStore.getState().appendSketch(paths);
+      useEditorStore.getState().fitToContent();
+      setToast(
+        `PDF-დან ჩაიტვირთა ${paths.length} ხაზი${handed.fileName ? ` - ${handed.fileName}` : ''}.`,
+      );
+    };
+    take();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === TRACE_IMPORT_KEY && e.newValue) take();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [dataLoaded, setToast]);
+
   return (
     <div className="app">
       <Header />
+      <SyncBanner />
+      <OfflineBanner />
 
       <div className="body">
         {paletteOpen ? (
@@ -41,12 +122,11 @@ export default function App() {
             className="rail rail-left"
             onClick={() => setPaletteOpen(true)}
             title="მასალების პანელი"
-          >
-            ▸ მასალები
+          ><Icon name="chevron-right" /> მასალები
           </button>
         )}
 
-        <StageCanvas />
+        {viewMode === '3d' ? <View3D /> : <StageCanvas />}
 
         {inspectorOpen ? (
           <SidePanel />
@@ -55,45 +135,20 @@ export default function App() {
             className="rail rail-right"
             onClick={() => setInspectorOpen(true)}
             title="უწყისი და მარაგი"
-          >
-            ◂ უწყისი
+          ><Icon name="chevron-left" /> უწყისი
           </button>
         )}
       </div>
 
-      <footer className="footer">
-        <span>
-          <kbd>თრევა</kbd> გადაადგილება
-        </span>
-        <span>
-          <kbd>R</kbd> მოტრიალება
-        </span>
-        <span>
-          <kbd>Del</kbd> წაშლა
-        </span>
-        <span>
-          <kbd>⌘Z</kbd> დაბრუნება
-        </span>
-        <span>
-          <kbd>⌘D</kbd> დუბლირება
-        </span>
-        <span>
-          <kbd>ისრები</kbd> გადაწევა
-        </span>
-        <span>
-          <kbd>Shift</kbd>+კლიკი — მონიშვნის დამატება
-        </span>
-        <span>
-          <kbd>Space</kbd>+თრევა ან შუა ღილაკი — ხედის გადაწევა
-        </span>
-        <span>
-          <kbd>ორი თითი</kbd> ხედის გადაწევა
-        </span>
-        <span>
-          <kbd>⌘/Ctrl</kbd>+სქროლი ან პინჩი — მასშტაბი
-        </span>
-      </footer>
+      <StatusBar />
 
+      {/* App-wide keys (?, Ctrl+K), the first-visit tour, and typed leg lengths. */}
+      <GlobalShortcuts />
+      <PenTyping />
+
+      {dialog?.kind === 'shortcuts' && <ShortcutsDialog />}
+      {dialog?.kind === 'command' && <CommandPalette />}
+      {dialog?.kind === 'tour' && <TourDialog />}
       {dialog?.kind === 'material' && (
         <MaterialFormDialog key={dialog.materialId ?? 'new'} materialId={dialog.materialId} />
       )}
@@ -101,8 +156,17 @@ export default function App() {
       {dialog?.kind === 'array' && <ArrayDialog />}
       {dialog?.kind === 'documents' && <DocumentsDialog />}
       {dialog?.kind === 'column-wizard' && <ColumnWizardDialog />}
+      {dialog?.kind === 'wall-wizard' && <WallWizardDialog />}
+      {dialog?.kind === 'sketch-fill' && <SketchFillDialog pathIds={dialog.pathIds} />}
+      {dialog?.kind === 'templates' && <TemplatesDialog />}
       {dialog?.kind === 'warehouses' && <WarehousesDialog />}
       {dialog?.kind === 'title-block' && <TitleBlockDialog />}
+      {dialog?.kind === 'users' && <UsersDialog />}
+      {dialog?.kind === 'errors' && <ErrorLogDialog />}
+      {dialog?.kind === 'password' && <PasswordDialog />}
+      {dialog?.kind === 'display-settings' && <DisplaySettingsDialog />}
+      {dialog?.kind === 'remaining' && <RemainingDialog />}
+      {dialog?.kind === 'export' && <ExportDialog key={dialog.tab} tab={dialog.tab} />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}

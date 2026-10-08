@@ -32,6 +32,10 @@ function esc(value: unknown): string {
 function buildPrintableHtml({ bom, title }: PdfOptions): string {
   const date = new Date().toLocaleDateString('ka-GE');
 
+  // A blank rather than "0" where the quantity does not apply: accessories have
+  // no length, linear members have no face area.
+  const q = (value: number, unit: string) => (value > 0 ? `${fmtNum(value)} ${unit}` : '-');
+
   const groups = bom.groups
     .map(
       (g) => `
@@ -41,29 +45,36 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
       ${g.rows
         .map(
           (r) => `
-        <tr class="${r.shortage ? 'short' : ''}">
+        <tr>
           <td>${esc(r.material.name)}</td>
           <td class="num">${esc(sizeLabel(r.material))}</td>
           <td class="num">${r.used}</td>
-          <td class="num">${r.stock}</td>
-          <td class="num">${r.remaining}${r.shortage ? ' ⚠' : ''}</td>
+          <td class="num">${q(r.lengthM, 'მ')}</td>
+          <td class="num">${r.weightMissing ? '-' : q(r.weightKg, 'კგ')}</td>
         </tr>`,
         )
         .join('')}
       <tr class="sub">
-        <td>ჯამი — ${esc(g.label)}</td>
-        <td class="num">${g.lengthM > 0 ? `${fmtNum(g.lengthM)} მ` : `${fmtNum(g.areaM2)} მ²`}</td>
+        <td>ჯამი - ${esc(g.label)}</td>
+        <td class="num">${q(g.areaM2, 'მ²')}</td>
         <td class="num">${g.pieces}</td>
-        <td></td>
-        <td></td>
+        <td class="num">${q(g.lengthM, 'მ')}</td>
+        <td class="num">${q(g.weightKg, 'კგ')}</td>
       </tr>`,
     )
     .join('');
 
+  // Weight drives crane and truck loads, so an incomplete total has to say so
+  // rather than look like a real figure.
+  const weightNote =
+    bom.unweighedRows > 0
+      ? `<p class="note">* წონის ჯამი არასრულია - ${bom.unweighedRows} პოზიციას წონა არ აქვს მითითებული.</p>`
+      : '';
+
   return `
   <div class="doc">
     <header>
-      <h1>${esc(title ?? 'Du ფორმვორკი — მასალების უწყისი')}</h1>
+      <h1>${esc(title ?? 'კუბი - მასალების უწყისი')}</h1>
       <div class="meta">თარიღი: ${esc(date)}</div>
     </header>
 
@@ -71,23 +82,28 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
       <div class="card"><span>სულ ელემენტი</span><b>${bom.totalPieces}</b></div>
       <div class="card"><span>სულ სიგრძე</span><b>${fmtNum(bom.totalLengthM)} მ</b></div>
       <div class="card"><span>სულ ფართობი</span><b>${fmtNum(bom.totalAreaM2)} მ²</b></div>
-      <div class="card ${bom.shortageCount ? 'warn' : ''}"><span>დეფიციტი</span><b>${bom.shortageCount}</b></div>
+      <div class="card"><span>სულ წონა${bom.unweighedRows > 0 ? ' *' : ''}</span><b>${fmtNum(bom.totalWeightKg)} კგ</b></div>
     </section>
 
     <table>
       <thead>
         <tr>
           <th>კომპონენტი</th><th class="num">ზომა (სმ)</th><th class="num">რაოდ.</th>
-          <th class="num">მარაგი</th><th class="num">ნაშთი</th>
+          <th class="num">სიგრძე</th><th class="num">წონა</th>
         </tr>
       </thead>
       <tbody>
         ${groups || '<tr><td colspan="5" class="empty">ზედაპირზე ელემენტები არ არის.</td></tr>'}
         <tr class="total">
-          <td>სულ</td><td></td><td class="num">${bom.totalPieces}</td><td></td><td></td>
+          <td>სულ</td>
+          <td class="num">${q(bom.totalAreaM2, 'მ²')}</td>
+          <td class="num">${bom.totalPieces}</td>
+          <td class="num">${q(bom.totalLengthM, 'მ')}</td>
+          <td class="num">${q(bom.totalWeightKg, 'კგ')}</td>
         </tr>
       </tbody>
     </table>
+    ${weightNote}
   </div>`;
 }
 
@@ -105,7 +121,6 @@ const PRINT_CSS = `
   .doc .card{flex:1;border:1px solid #dfe4ea;border-radius:8px;padding:9px 12px;background:#f7f9fb;}
   .doc .card span{display:block;font-size:10px;color:#6b7480;text-transform:uppercase;letter-spacing:.5px;}
   .doc .card b{font-size:17px;}
-  .doc .card.warn{background:#fdecec;border-color:#f0b4b4;}
   .doc table{width:100%;border-collapse:collapse;font-size:12px;}
   .doc th{background:#eef1f5;text-align:left;padding:7px 9px;border-bottom:1px solid #c9ced6;font-size:11px;}
   .doc td{padding:6px 9px;border-bottom:1px solid #eceff3;}
@@ -114,12 +129,20 @@ const PRINT_CSS = `
   .doc .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;}
   .doc tr.sub td{font-weight:600;background:#fafbfc;color:#404853;}
   .doc tr.total td{font-weight:700;border-top:2px solid #1b1f24;background:#eef1f5;}
-  .doc tr.short td{background:#fdecec;color:#8e1f1f;font-weight:600;}
   .doc .empty{color:#7a8492;text-align:center;padding:22px;}
+  .doc .note{font-size:11px;color:#7a8492;margin:9px 0 0;}
 `;
 
-/** Builds the printable table off-screen, rasterises it and paginates onto A4. */
-export async function exportBomToPdf(options: PdfOptions): Promise<void> {
+/**
+ * Lays the bill of materials onto A4 portrait pages of an existing PDF.
+ *
+ * Its own function so the drawing export can put the list after the sheet in
+ * the same file: one PDF for the site and the yard, instead of two to keep
+ * together. `newPage` starts on a fresh page; without it the list begins on the
+ * document's current, still-empty first page. Every page it adds is A4 portrait
+ * whatever the document started as - a drawing sheet is A3 or A4 landscape.
+ */
+export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: boolean): Promise<void> {
   // The stylesheet goes in <head> so html2canvas's document clone definitely has it.
   const style = document.createElement('style');
   style.textContent = PRINT_CSS;
@@ -140,7 +163,7 @@ export async function exportBomToPdf(options: PdfOptions): Promise<void> {
 
     if (!canvas.width || !canvas.height) throw new Error('ცხრილის რენდერი ცარიელია');
 
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    if (newPage) pdf.addPage('a4', 'portrait');
     const margin = 10;
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
@@ -187,14 +210,21 @@ export async function exportBomToPdf(options: PdfOptions): Promise<void> {
 
       y += h;
       if (y < canvas.height) {
-        pdf.addPage();
+        // Named, not the default: the default is whatever the document was
+        // opened as, and a landscape drawing sheet would turn the list sideways.
+        pdf.addPage('a4', 'portrait');
         startY = margin;
       }
     }
-
-    pdf.save(stampedName('du-bom', 'pdf'));
   } finally {
     host.remove();
     style.remove();
   }
+}
+
+/** Builds the printable table off-screen, rasterises it and paginates onto A4. */
+export async function exportBomToPdf(options: PdfOptions): Promise<void> {
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  await appendBomPages(pdf, options, false);
+  pdf.save(stampedName('du-bom', 'pdf'));
 }

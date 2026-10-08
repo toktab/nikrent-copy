@@ -1,0 +1,12 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    კუბი — the app's own geometry. An isometric cube is three rhombi meeting
+    at a corner, which is exactly how the 3D view projects a panel.
+
+    A single silhouette rather than the three-facet mark: at 16px the internal
+    seams close up into mush, so the favicon drops to the outline the facets
+    add up to. The tile is self-contained so it holds on any browser theme.
+  -->
+  <rect x="4" y="4" width="92" height="92" rx="18" fill="#1e2228"></rect>
+  <path d="M50,18 L80,35 L80,69 L50,86 L20,69 L20,35 Z" fill="#e6e9ee"></path>
+</svg>

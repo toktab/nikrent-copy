@@ -4,6 +4,8 @@ import {
   computeEdgeSnap,
   contentBounds,
   findOverlaps,
+  drawStep,
+  gridStep,
   niceStep,
   normalizeRot,
   pieceBounds,
@@ -29,7 +31,6 @@ function material(over: Partial<Material> = {}): Material {
     color: '#fff',
     builtin: false,
     stock: {},
-    price: 0,
     weight: 0,
     article: '',
     supplier: '',
@@ -243,5 +244,42 @@ describe('niceStep', () => {
 
   it('stays within the ladder', () => {
     expect([10, 20, 50, 100, 200, 500, 1000, 2000]).toContain(niceStep(0.5));
+  });
+});
+
+describe('drawStep', () => {
+  // Five is enough for any scheme, and anything finer was only ever a way to
+  // end up with a 180.2 leg. There is no option for it any more, so the floor
+  // holds even with snapping turned off.
+  it('never goes finer than five, however the grid is set', () => {
+    expect(drawStep(true, 5)).toBe(5);
+    expect(drawStep(true, 1)).toBe(5);
+    expect(drawStep(false, 1)).toBe(5);
+    expect(drawStep(false, 30)).toBe(5);
+  });
+
+  it('follows a coarser grid when one is chosen', () => {
+    expect(drawStep(true, 15)).toBe(15);
+    expect(drawStep(true, 30)).toBe(30);
+  });
+});
+
+describe('gridStep', () => {
+  // Five is what the drawing snaps to, so five is what it should be ruled in
+  // wherever five will read: a snap position with no line under it is a corner
+  // you have to count to instead of land on.
+  it('rules the surface in fives at normal working zooms', () => {
+    expect(gridStep(1)).toBe(5);
+    expect(gridStep(4)).toBe(5);
+    expect(gridStep(8)).toBe(5);
+  });
+
+  it('opens the squares out rather than letting them go grey', () => {
+    expect(gridStep(0.4)).toBeGreaterThan(5);
+    expect(gridStep(0.08)).toBeGreaterThan(gridStep(0.4));
+    // Whatever the zoom, the lines stay further apart than they are wide.
+    for (const zoom of [0.08, 0.2, 0.5, 1, 2, 8]) {
+      expect(gridStep(zoom) * zoom).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

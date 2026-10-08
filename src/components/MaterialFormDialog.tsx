@@ -5,6 +5,7 @@ import { CATEGORY_OPTIONS } from '../lib/catalogFile';
 import { categoryColor } from '../data/categories';
 import { defaultDepth, PANEL_DEPTH_CM } from '../data/seedCatalog';
 import { DEFAULT_WAREHOUSE, stockIn, withStockIn } from '../lib/inventory';
+import { legThickness } from '../lib/shapePath';
 import { Modal } from './Modal';
 import { PiecePreview } from './ShapeSvg';
 
@@ -34,9 +35,11 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const [depth, setDepth] = useState(String(existing?.depth ?? PANEL_DEPTH_CM));
   // Thickness follows the category default until the user overrides it.
   const [depthTouched, setDepthTouched] = useState(Boolean(existing));
+  // An L's leg thickness. Empty means the panel rule, so an inside corner that
+  // never had one does not quietly get a fixed number just by being opened.
+  const [leg, setLeg] = useState(existing?.leg !== undefined ? String(existing.leg) : '');
   const [color, setColor] = useState(existing?.color ?? categoryColor('panel'));
   const [stock, setStock] = useState(String(existing ? stockIn(existing, primaryWarehouse) : 0));
-  const [price, setPrice] = useState(String(existing?.price ?? 0));
   const [weight, setWeight] = useState(String(existing?.weight ?? 0));
   const [article, setArticle] = useState(existing?.article ?? '');
   const [supplier, setSupplier] = useState(existing?.supplier ?? '');
@@ -47,37 +50,48 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
   const wNum = decimal(w);
   const hNum = decimal(h);
   const stockNum = Number(stock);
-  const priceNum = decimal(price);
   const weightNum = decimal(weight);
   const depthNum = decimal(depth);
+  const legNum = leg.trim() === '' ? undefined : decimal(leg);
+  const legFor = shape === 'L' ? legNum : undefined;
+  // What an empty field draws with, shown as its placeholder.
+  const ruleLeg =
+    Math.round(
+      legThickness(
+        Number.isFinite(wNum) && wNum > 0 ? wNum : 45,
+        Number.isFinite(depthNum) && depthNum > 0 ? depthNum : PANEL_DEPTH_CM,
+      ) * 10,
+    ) / 10;
 
   const errors: string[] = [];
   if (!name.trim()) errors.push('დასახელება სავალდებულოა.');
   if (!Number.isFinite(wNum) || wNum <= 0) errors.push('სიგანე უნდა იყოს დადებითი რიცხვი.');
   if (!Number.isFinite(hNum) || hNum <= 0) errors.push('სიმაღლე უნდა იყოს დადებითი რიცხვი.');
   if (!Number.isFinite(stockNum) || stockNum < 0) errors.push('მარაგი არ შეიძლება იყოს უარყოფითი.');
-  if (!Number.isFinite(priceNum) || priceNum < 0) errors.push('ფასი არ შეიძლება იყოს უარყოფითი.');
   if (!Number.isFinite(weightNum) || weightNum < 0) errors.push('წონა არ შეიძლება იყოს უარყოფითი.');
   if (!Number.isFinite(depthNum) || depthNum <= 0) errors.push('სისქე უნდა იყოს დადებითი რიცხვი.');
+  if (legFor !== undefined && (!Number.isFinite(legFor) || legFor <= 0)) {
+    errors.push('ფეხის სისქე უნდა იყოს დადებითი რიცხვი (ან ცარიელი).');
+  }
 
   const preview = useMemo(
     () => ({
       id: 'preview',
-      name: name || '—',
+      name: name || '-',
       category,
       w: Number.isFinite(wNum) && wNum > 0 ? wNum : 45,
       h: Number.isFinite(hNum) && hNum > 0 ? hNum : 300,
       depth: Number.isFinite(depthNum) && depthNum > 0 ? depthNum : PANEL_DEPTH_CM,
       shape,
+      ...(legFor !== undefined && Number.isFinite(legFor) && legFor > 0 ? { leg: legFor } : {}),
       color,
       builtin: false,
       stock: {},
-      price: 0,
       weight: 0,
       article: '',
       supplier: '',
     }),
-    [name, category, wNum, hNum, shape, color],
+    [name, category, wNum, hNum, depthNum, shape, legFor, color],
   );
 
   const submit = () => {
@@ -91,9 +105,11 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
       h: hNum,
       depth: depthNum,
       shape,
+      // Always present, even as undefined: the store merges the draft over the
+      // old material, and a leg left out would survive a switch to the rule.
+      leg: legFor,
       color,
       stock: nextStock,
-      price: priceNum || 0,
       weight: weightNum || 0,
       article: article.trim(),
       supplier: supplier.trim(),
@@ -111,7 +127,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
 
   return (
     <Modal
-      title={existing ? `რედაქტირება — ${existing.name}` : 'ახალი კომპონენტი'}
+      title={existing ? `რედაქტირება - ${existing.name}` : 'ახალი კომპონენტი'}
       onClose={closeDialog}
       footer={
         <>
@@ -180,10 +196,28 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
             }}
           />
           <small className="field-hint">
-            ნახაზი გეგმაშია — ჩანს <b>სიგანე × სისქე</b>. სიმაღლე ვერტიკალურია და არ ჩანს.
+            ნახაზი გეგმაშია - ჩანს <b>სიგანე × სისქე</b>. სიმაღლე ვერტიკალურია და არ ჩანს.
             Du-ს პანელები ყოველთვის {PANEL_DEPTH_CM} სმ სისქისაა.
           </small>
         </label>
+
+        {shape === 'L' && (
+          <label className="field span2">
+            <span>ფეხის სისქე (სმ)</span>
+            <input
+              type="number"
+              min={0.1}
+              step="any"
+              value={leg}
+              placeholder={`${ruleLeg} - პანელის სისქეით`}
+              onChange={(e) => setLeg(e.target.value)}
+            />
+            <small className="field-hint">
+              L-კუთხის ფეხის სისქე. გარე კუთხე თხელი კუთხოვანაა - 0.1 სმ. ცარიელი = პანელის
+              სისქეით ({ruleLeg} სმ).
+            </small>
+          </label>
+        )}
 
         <label className="field">
           <span>ფერი</span>
@@ -210,7 +244,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
 
         <label className="field">
           <span>
-            მარაგი (ცალი){warehouses.length > 1 ? ` — ${warehouses[0].name}` : ''}
+            მარაგი (ცალი){warehouses.length > 1 ? ` - ${warehouses[0].name}` : ''}
           </span>
           <input
             type="number"
@@ -218,17 +252,6 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
             step={1}
             value={stock}
             onChange={(e) => setStock(e.target.value)}
-          />
-        </label>
-
-        <label className="field">
-          <span>ერთეულის ფასი</span>
-          <input
-            type="number"
-            min={0}
-            step="any"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
           />
         </label>
 
@@ -244,7 +267,7 @@ export function MaterialFormDialog({ materialId }: { materialId?: string }) {
         </label>
 
         <label className="field">
-          <span>არტიკული</span>
+          <span>აღნიშვნა</span>
           <input value={article} onChange={(e) => setArticle(e.target.value)} placeholder="DU-…" />
         </label>
 

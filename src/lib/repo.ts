@@ -1,0 +1,425 @@
+import type { DrawingDoc, Material, Piece, StockByWarehouse, Warehouse } from '../types';
+import { requireSupabase } from './supabase';
+import type { DataSnapshot, SyncPlan } from './syncDiff';
+
+/**
+ * Every read and write of company data. The rest of the app talks to this,
+ * never to the Supabase client directly, so the row shapes stay in one file.
+ */
+
+/** Thrown when a drawing was saved by someone else since we last read it. */
+export class ConflictError extends Error {
+  constructor(public readonly documentId: string) {
+    super(`document ${documentId} was changed by someone else`);
+    this.name = 'ConflictError';
+  }
+}
+
+/**
+ * Thrown when the server refused a write because of the user's role.
+ *
+ * Distinct from an ordinary failure because retrying cannot help: the change
+ * will be refused every time, so the sync engine must stop rather than queue
+ * it forever, and the user has to be told what was refused instead of seeing
+ * a permanent "saving failed".
+ */
+export class PermissionError extends Error {
+  constructor(public readonly what: string) {
+    super(`not allowed to change ${what}`);
+    this.name = 'PermissionError';
+  }
+}
+
+interface PostgrestLikeError {
+  message: string;
+  code?: string;
+}
+
+/**
+ * Turn a Postgrest error into ours, keeping the distinction between "try
+ * again" and "you will never be allowed to do this".
+ *
+ * 42501 is Postgres's insufficient_privilege, which covers both a missing
+ * table grant and a row-level security policy refusing the row. The message
+ * text is checked too, because the RPCs raise their own exceptions.
+ */
+function wrapError(what: string, error: PostgrestLikeError): Error {
+  const text = error.message.toLowerCase();
+  const denied =
+    error.code === '42501' ||
+    text.includes('permission denied') ||
+    text.includes('row-level security') ||
+    text.includes('only an admin');
+  if (denied) return new PermissionError(what);
+  return new Error(`${what}: ${error.message}`);
+}
+
+/**
+ * Server version of each drawing we have seen, used for optimistic locking.
+ *
+ * Deliberately not in the editor store: it is bookkeeping about the server,
+ * not user data, and putting it in the store would drag it into undo history
+ * and the persisted snapshot.
+ */
+const versions = new Map<string, number>();
+
+export function knownVersion(id: string): number | undefined {
+  return versions.get(id);
+}
+
+export function forgetVersions(): void {
+  versions.clear();
+}
+
+// ── row shapes ─────────────────────────────────────────────────────────────
+
+interface MaterialRow {
+  id: string;
+  name: string;
+  category: Material['category'];
+  w: number;
+  h: number;
+  depth: number;
+  shape: Material['shape'];
+  /** absent from the row entirely while migration 0012 has not been run */
+  leg?: number | null;
+  color: string;
+  builtin: boolean;
+  weight: number;
+  article: string;
+  supplier: string;
+}
+
+interface DocumentRow {
+  id: string;
+  name: string;
+  project_name: string;
+  revision: string;
+  scale: number;
+  pieces: Piece[];
+  sketch?: unknown;
+  measures?: unknown;
+  version: number;
+  updated_at: string;
+}
+
+/** Stock lives in its own table, so it is stripped on the way out. */
+function materialToRow(m: Material): MaterialRow {
+  const row: MaterialRow = {
+    id: m.id,
+    name: m.name,
+    category: m.category,
+    w: m.w,
+    h: m.h,
+    depth: m.depth,
+    shape: m.shape,
+    color: m.color,
+    builtin: m.builtin,
+    weight: m.weight,
+    article: m.article,
+    supplier: m.supplier,
+  };
+  // Sent as null, not left out, so clearing the field in the form clears it on
+  // the server too.
+  return legUnsupported ? row : { ...row, leg: m.leg ?? null };
+}
+
+function rowToMaterial(row: MaterialRow, stock: StockByWarehouse): Material {
+  const leg = Number(row.leg);
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    w: Number(row.w),
+    h: Number(row.h),
+    depth: Number(row.depth),
+    shape: row.shape,
+    ...(row.leg != null && leg > 0 ? { leg } : {}),
+    color: row.color,
+    builtin: row.builtin,
+    weight: Number(row.weight),
+    article: row.article,
+    supplier: row.supplier,
+    stock,
+  };
+}
+
+/**
+ * Set once the server has said it has no `materials.leg` column - migration
+ * 0012 has not been run yet.
+ *
+ * Same reasoning as the measures column below: one missing column must not fail
+ * every catalog save. Materials go up without their leg instead. The built-in
+ * outer corner gets its 0.1 back from `applySizeFixes` on every load, so what is
+ * lost meanwhile is only a leg someone typed into the form.
+ */
+let legUnsupported = false;
+
+/** The server's two ways of saying `materials.leg` is not there. Narrow, as below. */
+export function isMissingLegColumn(error: PostgrestLikeError): boolean {
+  const text = error.message ?? '';
+  return (
+    (error.code === 'PGRST204' && text.includes("'leg'")) ||
+    /column "leg"( of relation "materials")? does not exist/i.test(text)
+  );
+}
+
+/**
+ * Set once the server has said it has no `measures` column - migration 0011
+ * has not been run yet.
+ *
+ * Every drawing save would otherwise fail on that one column and take the
+ * pieces and the layout down with it. So the drawing is saved without its
+ * measured lines instead, and the sync engine tells the user why they are not
+ * reaching the server. An older app that does not send the column at all
+ * leaves it alone on update: PostgREST only writes the columns it is given.
+ */
+let measuresUnsupported = false;
+
+export function measuresSaveUnsupported(): boolean {
+  return measuresUnsupported;
+}
+
+/**
+ * The server's two ways of saying the column is not there: PostgREST's schema
+ * cache ("Could not find the 'measures' column of 'documents'") and Postgres
+ * itself (`column "measures" of relation "documents" does not exist`). Narrow on
+ * purpose - anything looser would switch measured lines off for the session on
+ * an unrelated error that happened to mention them.
+ */
+export function isMissingMeasuresColumn(error: PostgrestLikeError): boolean {
+  const text = error.message ?? '';
+  return (
+    (error.code === 'PGRST204' && text.includes("'measures'")) ||
+    /column "measures"( of relation "documents")? does not exist/i.test(text)
+  );
+}
+
+/**
+ * Ask whether the column has arrived. True means it has, and measured lines are
+ * saved again from here on. Never throws: a failed check is just "not yet".
+ */
+export async function recheckMeasuresColumn(): Promise<boolean> {
+  try {
+    const { error } = await requireSupabase().from('documents').select('measures').limit(1);
+    if (error) return false;
+    measuresUnsupported = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Which of these material ids the server already has.
+ *
+ * A drawing file can carry a material this screen lacks only because the tab
+ * is out of date - someone created it after the catalog loaded. Adding the
+ * file's copy would overwrite theirs on the server, so the import asks first.
+ */
+export async function materialIdsOnServer(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const { data, error } = await requireSupabase().from('materials').select('id').in('id', ids);
+  if (error) throw wrapError('მასალები', error);
+  return new Set((data ?? []).map((row) => (row as { id: string }).id));
+}
+
+function documentToRow(d: DrawingDoc) {
+  const row = {
+    id: d.id,
+    name: d.name,
+    project_name: d.projectName,
+    revision: d.revision,
+    scale: d.scale,
+    pieces: d.pieces,
+    sketch: d.sketch ?? [],
+  };
+  return measuresUnsupported ? row : { ...row, measures: d.measures ?? [] };
+}
+
+function rowToDocument(row: DocumentRow): DrawingDoc {
+  return {
+    id: row.id,
+    name: row.name,
+    projectName: row.project_name,
+    revision: row.revision,
+    scale: row.scale,
+    pieces: Array.isArray(row.pieces) ? row.pieces : [],
+    // A drawing saved before the pen existed has no sketch column value.
+    sketch: Array.isArray(row.sketch) ? row.sketch : [],
+    // Nor any measured lines; the column arrives with migration 0011.
+    measures: Array.isArray(row.measures) ? (row.measures as DrawingDoc['measures']) : [],
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
+
+// ── reads ──────────────────────────────────────────────────────────────────
+
+export async function fetchAll(): Promise<DataSnapshot> {
+  const supabase = requireSupabase();
+
+  const [materialsRes, warehousesRes, stockRes, documentsRes] = await Promise.all([
+    supabase.from('materials').select('*').order('name'),
+    supabase.from('warehouses').select('*').order('name'),
+    supabase.from('stock').select('material_id, warehouse_id, quantity'),
+    supabase.from('documents').select('*').order('updated_at', { ascending: false }),
+  ]);
+
+  const failed = [materialsRes, warehousesRes, stockRes, documentsRes].find((r) => r.error);
+  if (failed?.error) throw new Error(failed.error.message);
+
+  const stockByMaterial = new Map<string, StockByWarehouse>();
+  for (const row of (stockRes.data ?? []) as Array<{
+    material_id: string;
+    warehouse_id: string;
+    quantity: number;
+  }>) {
+    const map = stockByMaterial.get(row.material_id) ?? {};
+    map[row.warehouse_id] = row.quantity;
+    stockByMaterial.set(row.material_id, map);
+  }
+
+  const documents = ((documentsRes.data ?? []) as DocumentRow[]).map((row) => {
+    versions.set(row.id, row.version);
+    return rowToDocument(row);
+  });
+
+  return {
+    materials: ((materialsRes.data ?? []) as MaterialRow[]).map((row) =>
+      rowToMaterial(row, stockByMaterial.get(row.id) ?? {}),
+    ),
+    warehouses: (warehousesRes.data ?? []) as Warehouse[],
+    documents,
+  };
+}
+
+/** True when the backend has no company data yet, so an import is offered. */
+export async function isServerEmpty(): Promise<boolean> {
+  const supabase = requireSupabase();
+  const [materials, documents] = await Promise.all([
+    supabase.from('materials').select('id', { count: 'exact', head: true }),
+    supabase.from('documents').select('id', { count: 'exact', head: true }),
+  ]);
+  if (materials.error) throw new Error(materials.error.message);
+  if (documents.error) throw new Error(documents.error.message);
+  return (materials.count ?? 0) === 0 && (documents.count ?? 0) === 0;
+}
+
+// ── writes ─────────────────────────────────────────────────────────────────
+
+/**
+ * Push one plan.
+ *
+ * Ordering is load-bearing: warehouses and materials must exist before stock
+ * can reference them, stock must be written before a warehouse it points at is
+ * removed, and deletes come last so nothing is dropped that a later step in
+ * the same plan still needs.
+ */
+export async function applyPlan(plan: SyncPlan): Promise<void> {
+  const supabase = requireSupabase();
+
+  if (plan.warehousesUpsert.length) {
+    const { error } = await supabase.from('warehouses').upsert(plan.warehousesUpsert);
+    if (error) throw wrapError('საწყობები', error);
+  }
+
+  if (plan.materialsUpsert.length) {
+    let { error } = await supabase
+      .from('materials')
+      .upsert(plan.materialsUpsert.map(materialToRow));
+    if (error && !legUnsupported && isMissingLegColumn(error)) {
+      legUnsupported = true;
+      ({ error } = await supabase
+        .from('materials')
+        .upsert(plan.materialsUpsert.map(materialToRow)));
+    }
+    if (error) throw wrapError('მასალები', error);
+  }
+
+  for (const change of plan.stockSet) {
+    const { error } = await supabase.rpc('set_stock', {
+      p_material_id: change.materialId,
+      p_warehouse_id: change.warehouseId,
+      p_quantity: change.quantity,
+      p_note: '',
+    });
+    if (error) throw wrapError('მარაგი', error);
+  }
+
+  for (const doc of plan.documentsUpsert) {
+    await saveDocument(doc);
+  }
+
+  if (plan.documentsDelete.length) {
+    const { error } = await supabase.from('documents').delete().in('id', plan.documentsDelete);
+    if (error) throw wrapError('ნახაზები', error);
+    for (const id of plan.documentsDelete) versions.delete(id);
+  }
+
+  if (plan.materialsDelete.length) {
+    const { error } = await supabase.from('materials').delete().in('id', plan.materialsDelete);
+    if (error) throw wrapError('მასალები', error);
+  }
+
+  if (plan.warehousesDelete.length) {
+    const { error } = await supabase.from('warehouses').delete().in('id', plan.warehousesDelete);
+    if (error) throw wrapError('საწყობები', error);
+  }
+}
+
+/**
+ * Insert or update one drawing.
+ *
+ * The update is conditional on the version we last read. If someone else saved
+ * in the meantime the row no longer matches, nothing is written, and a
+ * ConflictError is raised rather than their work being overwritten.
+ */
+export async function saveDocument(doc: DrawingDoc): Promise<number> {
+  const supabase = requireSupabase();
+  const expected = versions.get(doc.id);
+
+  if (expected === undefined) {
+    const { data, error } = await supabase
+      .from('documents')
+      .insert(documentToRow(doc))
+      .select('version')
+      .single();
+    if (error && !measuresUnsupported && isMissingMeasuresColumn(error)) {
+      measuresUnsupported = true;
+      return saveDocument(doc);
+    }
+    if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
+    const version = (data as { version: number }).version;
+    versions.set(doc.id, version);
+    return version;
+  }
+
+  const { data, error } = await supabase
+    .from('documents')
+    .update(documentToRow(doc))
+    .eq('id', doc.id)
+    .eq('version', expected)
+    .select('version');
+
+  if (error && !measuresUnsupported && isMissingMeasuresColumn(error)) {
+    measuresUnsupported = true;
+    return saveDocument(doc);
+  }
+  if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
+  if (!data || data.length === 0) throw new ConflictError(doc.id);
+
+  const version = (data[0] as { version: number }).version;
+  versions.set(doc.id, version);
+  return version;
+}
+
+/** Re-read one drawing, e.g. after a conflict, and adopt the server's version. */
+export async function reloadDocument(id: string): Promise<DrawingDoc | null> {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.from('documents').select('*').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  const row = data as DocumentRow;
+  versions.set(row.id, row.version);
+  return rowToDocument(row);
+}

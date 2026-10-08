@@ -1,10 +1,21 @@
+import { keepWheelOffNumber } from '../lib/numberField';
 import { useMemo } from 'react';
-import type { Material } from '../types';
+import type { Category, Material } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
+import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { usageByMaterial } from '../lib/bom';
 import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
 import { Swatch } from './ShapeSvg';
+import { Menu, MenuItem } from './Menu';
+import { Icon } from './Icon';
+
+/**
+ * Simple mode lists only what gets drawn - panels, fillers, corners. Walers,
+ * ties and hardware are never placed on a drawing, and in simple mode neither
+ * is stock edited or the catalog changed from here.
+ */
+const SIMPLE_CATEGORIES: ReadonlySet<Category> = new Set<Category>(['panel', 'filler', 'corner']);
 
 /** Left-hand material palette: search, grouped list, drag source, inline stock. */
 export function Palette() {
@@ -13,18 +24,22 @@ export function Palette() {
   const query = useEditorStore((s) => s.paletteQuery);
   const setQuery = useEditorStore((s) => s.setPaletteQuery);
   const openDialog = useEditorStore((s) => s.openDialog);
+  const simple = useEditorStore((s) => s.simpleMode);
+  const canManage = useCanManageCatalog();
 
   const used = useMemo(() => usageByMaterial(pieces), [pieces]);
 
   const groups = useMemo(() => {
     const f = query.trim().toLowerCase();
-    return CATEGORY_ORDER.map((category) => ({
-      category,
-      items: materials.filter(
-        (m) => m.category === category && (!f || m.name.toLowerCase().includes(f)),
-      ),
-    })).filter((g) => g.items.length > 0);
-  }, [materials, query]);
+    return CATEGORY_ORDER.filter((category) => !simple || SIMPLE_CATEGORIES.has(category))
+      .map((category) => ({
+        category,
+        items: materials.filter(
+          (m) => m.category === category && (!f || m.name.toLowerCase().includes(f)),
+        ),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [materials, query, simple]);
 
   const setPaletteOpen = useEditorStore((s) => s.setPaletteOpen);
 
@@ -32,28 +47,35 @@ export function Palette() {
     <aside className="palette">
       <div className="panel-head">
         <span>მასალები</span>
-        <button className="btn icon" title="დაკეცვა" onClick={() => setPaletteOpen(false)}>
-          ◂
+        <button className="btn icon" title="დაკეცვა" onClick={() => setPaletteOpen(false)}><Icon name="chevron-left" />
         </button>
       </div>
       <div className="palette-top">
-        <button className="btn primary full" onClick={() => openDialog({ kind: 'material' })}>
-          ＋ ახალი კომპონენტი
-        </button>
-        <button className="btn full" onClick={() => openDialog({ kind: 'sheet-import' })}>
-          📊 იმპორტი ცხრილიდან
-        </button>
+        {!simple && (
+          <>
+            <button
+              className="btn primary full"
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_TITLE}
+              onClick={() => openDialog({ kind: 'material' })}
+            ><Icon name="plus" /> ახალი კომპონენტი
+            </button>
+            <button
+              className="btn full"
+              disabled={!canManage}
+              title={canManage ? undefined : ADMIN_ONLY_TITLE}
+              onClick={() => openDialog({ kind: 'sheet-import' })}
+            ><Icon name="sheet" /> იმპორტი ცხრილიდან
+            </button>
+          </>
+        )}
         <input
           className="search"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="🔍 მასალის ძებნა..."
+          placeholder="მასალის ძებნა…"
         />
-      </div>
-
-      <div className="hint">
-        გადმოათრიე მასალა ზედაპირზე. ზომები დაახლოებით სწორ მასშტაბშია (სმ).
       </div>
 
       <div className="matlist">
@@ -65,7 +87,7 @@ export function Palette() {
               <span className="cat-count">{g.items.length}</span>
             </div>
             {g.items.map((m) => (
-              <PaletteRow key={m.id} material={m} used={used.get(m.id) ?? 0} />
+              <PaletteRow key={m.id} material={m} used={used.get(m.id) ?? 0} simple={simple} />
             ))}
           </div>
         ))}
@@ -75,8 +97,9 @@ export function Palette() {
   );
 }
 
-function PaletteRow({ material: m, used }: { material: Material; used: number }) {
+function PaletteRow({ material: m, used, simple }: { material: Material; used: number; simple: boolean }) {
   const setStock = useEditorStore((s) => s.setStock);
+  const canManage = useCanManageCatalog();
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteMaterial = useEditorStore((s) => s.deleteMaterial);
   const warehouses = useEditorStore((s) => s.warehouses);
@@ -110,7 +133,7 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
   };
 
   return (
-    <div className={`mat${shortage ? ' shortage' : ''}`}>
+    <div className={`mat${shortage && !simple ? ' shortage' : ''}`}>
       {/* Only this part is draggable, so the stock input stays clickable. */}
       <div
         className="mat-drag"
@@ -123,7 +146,7 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
           setDraggingMaterial(m.id);
         }}
         onDragEnd={() => setDraggingMaterial(null)}
-        title={`${m.name} — ${m.w} × ${m.h} სმ`}
+        title={`${m.name} - ${m.w} × ${m.h} სმ`}
       >
         <Swatch material={m} />
         <div className="info">
@@ -135,27 +158,83 @@ function PaletteRow({ material: m, used }: { material: Material; used: number })
         </div>
       </div>
 
-      <div className="mat-actions">
-        <input
-          className={`stock-input${shortage ? ' bad' : ''}`}
-          type="number"
-          min={0}
-          step={1}
-          value={stockIn(m, primaryWarehouse)}
-          title={
-            warehouses.length > 1
-              ? `მარაგი: ${warehouses[0].name} (სულ ${stock})`
-              : 'მარაგი (ცალი)'
-          }
-          onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
-        />
-        <button className="btn icon" title="რედაქტირება" onClick={() => openDialog({ kind: 'material', materialId: m.id })}>
-          ✎
-        </button>
-        <button className="btn icon danger" title="წაშლა" onClick={askDelete}>
-          🗑
-        </button>
-      </div>
+      {/* Simple mode is the parts and nothing else: stock and catalog edits
+          stay in full mode, and the ნაშთი window still says what is short. */}
+      {!simple && (
+        <>
+          {/* How short, before the stock number - the size of the gap is the
+              thing worth acting on, not the count that happens to be in the yard. */}
+          {shortage && (
+            <span className="short-delta" title={`${used - stock} ცალი აკლია`}>
+              −{used - stock}
+            </span>
+          )}
+
+          <input
+            className={`stock-input${shortage ? ' bad' : ''}`}
+            onWheel={keepWheelOffNumber}
+            type="number"
+            min={0}
+            step={1}
+            value={stockIn(m, primaryWarehouse)}
+            title={
+              warehouses.length > 1
+                ? `მარაგი: ${warehouses[0].name} (სულ ${stock})`
+                : 'მარაგი (ცალი)'
+            }
+            disabled={!canManage}
+            onChange={(e) => setStock(m.id, primaryWarehouse, Number(e.target.value))}
+          />
+
+          {/* One menu, in flow, always holding its 26px.
+
+              These were two buttons revealed on hover, floating over the right of
+              the row — which put them exactly on top of the stock field, so the
+              number could not be typed at all: reaching for the input summoned the
+              thing covering it. Stock is entered every time a delivery lands;
+              editing a component happens once a month. The frequent one keeps its
+              place and the rare ones move behind a menu. */}
+          <Menu
+            align="right"
+            trigger={(open) => (
+              <button
+                className={`btn icon ghost small mat-menu${open ? ' active' : ''}`}
+                aria-label={`${m.name} - მოქმედებები`}
+              >
+                <Icon name="more" size={14} />
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                <MenuItem
+                  icon="pencil"
+                  disabled={!canManage}
+                  title={canManage ? undefined : ADMIN_ONLY_TITLE}
+                  onClick={() => {
+                    openDialog({ kind: 'material', materialId: m.id });
+                    close();
+                  }}
+                >
+                  რედაქტირება
+                </MenuItem>
+                <MenuItem
+                  icon="trash"
+                  danger
+                  disabled={!canManage}
+                  title={canManage ? undefined : ADMIN_ONLY_TITLE}
+                  onClick={() => {
+                    askDelete();
+                    close();
+                  }}
+                >
+                  წაშლა
+                </MenuItem>
+              </>
+            )}
+          </Menu>
+        </>
+      )}
     </div>
   );
 }

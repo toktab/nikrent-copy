@@ -3,43 +3,220 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ArrayOptions,
   ColumnSpec,
+  WallRunSpec,
   DialogState,
   DocSnapshot,
   DrawingDoc,
+  HiddenLineMode,
+  InspectorTab,
   Material,
   MaterialDraft,
+  MeasureLine,
   Piece,
+  SketchPath,
   Warehouse,
 } from '../types';
-import { SEED_MATERIALS, createSeedMaterials } from '../data/seedCatalog';
-import { sanitizeMaterial } from '../lib/catalogFile';
+import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
+import { withCompanyWeights } from '../data/companyWeights';
+import { normalizeWallThickness, wallPartner } from '../lib/wallPen';
+import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
   computeEdgeSnap,
-  contentBounds,
+  DRAW_STEP_CM,
+  drawStep,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
-  pieceBounds,
   snapValue,
   unionRect,
 } from '../lib/geometry';
 import { makeMaterialId, uid } from '../lib/ids';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
+import {
+  insertVertex,
+  moveSegment,
+  moveVertex,
+  segments,
+  removeVertex,
+  setLegAngle,
+  setLegLength as setLegLengthOn,
+  sketchSnapTargets,
+  translatePath,
+  type Point,
+  type SegmentHit,
+} from '../lib/sketch';
+import {
+  legDir,
+  planSketchFillAll,
+  wallFaces,
+  type SketchFillSpec,
+} from '../lib/sketchFill';
+import { faceBands } from '../lib/gap';
+import { choiceFromVariant, type Variant } from '../lib/fillOptions';
+import {
+  isElevation,
+  projectPiece,
+  projectedContentBounds,
+  unprojectDelta,
+  type ViewAxis,
+} from '../lib/projection';
+import { isConfigured } from '../lib/supabase';
+import type { DataSnapshot } from '../lib/syncDiff';
+import {
+  DEFAULT_LENGTH_VISIBILITY,
+  DEFAULT_PDF_VISIBILITY,
+  LENGTH_KINDS,
+  normalizeLengthVisibility,
+  normalizePdfVisibility,
+  type LengthKind,
+  type LengthVisibility,
+  type PdfVisibility,
+} from '../lib/dimensions';
+import {
+  DEFAULT_MEASURE_STYLE,
+  normalizeMeasureStyle,
+  type MeasureAnchor,
+  type MeasureStyle,
+} from '../lib/measure';
+import { patchUnderlay, type Underlay } from '../lib/underlay';
+import {
+  DEFAULT_JSON_EXPORT,
+  normalizeJsonExport,
+  normalizeSheetSize,
+  type JsonExportOptions,
+  type SheetSize,
+} from '../lib/exportOptions';
 
 export const STORAGE_KEY = 'du-formwork-v2';
+
+/**
+ * Where preferences go once the backend is in use.
+ *
+ * Deliberately a different key from `STORAGE_KEY`. With a server, company data
+ * is no longer persisted locally, so writing preferences back to the old key
+ * would overwrite the saved catalog and drawings with a file containing
+ * nothing but zoom and toggle states — destroying the very data the migration
+ * exists to import. Leaving that key untouched also keeps it as an on-disk
+ * backup of everything from before the move.
+ */
+export const PREFS_KEY = 'du-formwork-prefs';
+
 const HISTORY_LIMIT = 80;
+
+/**
+ * How far the pointer has to travel before it counts as having gone somewhere.
+ *
+ * The same figure the stage uses to tell a click from a drag, and it means the
+ * same thing here — see `penAddPoint`.
+ */
+const DRAG_THRESHOLD_PX = 3;
+
+/**
+ * How close an edge has to come before the drag latches onto it, in screen px.
+ *
+ * Generous on purpose. This is the only thing that puts a piece exactly against
+ * another one, and being a few pixels out is not a decision anybody made — it
+ * is a hand on a mouse. Too wide and a piece refuses to sit near a neighbour
+ * without touching it; twelve pixels leaves plenty of room to mean it.
+ */
+const EDGE_SNAP_PX = 12;
+
+/** Settings that belong to one person on one machine, not to the company. */
+const PREF_KEYS = [
+  'zoom',
+  'panX',
+  'panY',
+  'snap',
+  'snapStep',
+  'orthoLock',
+  'edgeSnap',
+  'showLengths',
+  'lengthVisibility',
+  'pdfVisibility',
+  'pdfSheet',
+  'jsonExport',
+  'showNames',
+  'forceLabels',
+  'showOverlaps',
+  'showGaps',
+  'showSketch',
+  'measureStyle',
+  'viewMode',
+  'surfaceView',
+  'hiddenLines',
+  'paletteOpen',
+  'inspectorOpen',
+  'inspectorTab',
+  'simpleMode',
+  'fillDefaults',
+  'wallThickness',
+  'tourSeen',
+] as const;
+
+/**
+ * One-off corrections to built-in sizes that were wrong in the v1 port.
+ *
+ * Applied only where the stored value still matches the wrong one, so a company
+ * that has already entered its own size keeps it. Without this, a saved catalog
+ * would carry the broken dimension forever — stored materials always win over
+ * the seed, which is what makes user edits stick.
+ *
+ * Must stay ABOVE `create()`: rehydration runs while the store is being built,
+ * so anything it reaches has to be initialised by then. A `const` declared
+ * further down the file is still in its temporal dead zone at that moment, and
+ * the ReferenceError is swallowed by the persist middleware — the saved drawing
+ * is silently dropped and then overwritten with an empty one.
+ */
+const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; leg?: number }> = [
+  // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
+  // concrete face. The mismatch left a hole beside every corner and made the
+  // column wizard lay panels that did not reach the corner profile.
+  { id: 'corner-outer-300', fromW: 15, toW: 24 },
+  // ...and the 24 was still a guess. The architect's drawing: a thin angle,
+  // two 10 cm legs 0.1 cm thick. Listed after the 15 → 24 fix so a catalog
+  // saved before either goes all the way in one load.
+  { id: 'corner-outer-300', fromW: 24, toW: 10, leg: 0.1 },
+];
+
+/** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
+export function applySizeFixes(materials: Material[]): void {
+  for (const fix of BUILTIN_SIZE_FIXES) {
+    const m = materials.find((x) => x.id === fix.id);
+    if (!m || !m.builtin) continue;
+    if (m.w === fix.fromW) {
+      m.w = fix.toW;
+      m.depth = defaultDepth(m.category, m.w, m.h);
+      if (fix.leg !== undefined) m.leg = fix.leg;
+    } else if (m.w === fix.toW && fix.leg !== undefined && m.leg === undefined) {
+      // Already resized, but the leg did not survive: a server one migration
+      // behind saves the 10 and drops the 0.1, and without this the corner
+      // would come back on the next load with the 4.5 cm panel-rule leg.
+      m.leg = fix.leg;
+    }
+  }
+}
 
 export interface EditorState {
   // ── data ──
   materials: Material[];
   /** placed pieces of the active drawing (mirrored into `documents`) */
   pieces: Piece[];
+  /** the drawn layout the formwork is being set out to (also mirrored) */
+  sketch: SketchPath[];
+  /** measured check lines of the active drawing (also mirrored) */
+  measures: MeasureLine[];
   removedBuiltins: string[];
   documents: DrawingDoc[];
   activeDocId: string;
   warehouses: Warehouse[];
+  /**
+   * False until the server's data has been loaded. The sync engine watches
+   * this: pushing before it is true would upload the seed catalog and the
+   * empty starter drawing over whatever the company actually has.
+   */
+  dataLoaded: boolean;
 
   // ── history ──
   past: DocSnapshot[];
@@ -57,19 +234,104 @@ export interface EditorState {
   snapStep: number;
   /** snap dragged pieces to the edges of nearby pieces, not just the grid */
   edgeSnap: boolean;
-  showDims: boolean;
+  /**
+   * Hold the pen to right angles.
+   *
+   * On by default, because formwork is built square and a layout that is not
+   * describes something the catalog cannot close. Off for the wall that does
+   * not obey — a splayed bay, a site boundary — which the tool should be able
+   * to draw even though it cannot fill it.
+   */
+  orthoLock: boolean;
+  /** The master switch for every length on screen (D). */
+  showLengths: boolean;
+  /**
+   * When each kind of thing shows its length: always, on hover, on click, or
+   * never. One mode for everything gave a busy layout nothing in between.
+   */
+  lengthVisibility: Record<LengthKind, LengthVisibility>;
+  /** what the printed sheet shows - see `PdfVisibility` */
+  pdfVisibility: PdfVisibility;
+  /** the paper the drawing is exported on */
+  pdfSheet: SheetSize;
+  /** what the exported drawing file carries - see `JsonExportOptions` */
+  jsonExport: JsonExportOptions;
   showNames: boolean;
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
   showOverlaps: boolean;
-  /** what a plain wheel / two-finger scroll does; the modifier does the other */
-  wheelMode: 'pan' | 'zoom';
+  /** 2D plan editor, or the read-only 3D visualisation */
+  viewMode: '2d' | '3d';
+  /** Which orthographic view the 2D surface is showing. */
+  surfaceView: ViewAxis;
+  /** what the 3D view does with edges that sit behind other pieces */
+  hiddenLines: HiddenLineMode;
   /** side panels can be folded away to give the canvas room on small screens */
   paletteOpen: boolean;
   inspectorOpen: boolean;
+  /** which inspector tab is showing — in the store so the shortage bar can
+      open the drawing's bill of materials on the row that is short */
+  inspectorTab: InspectorTab;
+  /** mark every open gap, not only the one beside the selection */
+  showGaps: boolean;
+  /**
+   * Simple mode: only what drawing and filling need stays on screen - drawing,
+   * measuring, the parts, the recommendation tab. Everything else comes back
+   * when it is switched off.
+   */
+  simpleMode: boolean;
+  /** the pour height and corner setting fills open with - see `lib/fillDefaults` */
+  fillDefaults: { height: number; includeCorners: boolean };
+  /** the pen draws both faces of a wall this thick apart; null draws single lines */
+  wallThickness: number | null;
+  /** the first-visit tour has been seen (or closed) */
+  tourSeen: boolean;
+  /**
+   * Show the drawn layout.
+   *
+   * Off hides it completely: not drawn, not snapped to, not clickable. A line
+   * you cannot see must not grab the pointer or pull a panel towards itself —
+   * that is a layout haunting the drawing rather than guiding it.
+   */
+  showSketch: boolean;
 
   // ── transient UI ──
   selectedIds: string[];
+  /** selected reference lines — kept apart from `selectedIds`, which is pieces */
+  selectedSketchIds: string[];
+  /**
+   * The one part of a run being worked on: a leg, or a junction.
+   *
+   * Separate from `selectedSketchIds`, which is whole runs. Both are real
+   * selections and they answer different questions — "which walls am I moving"
+   * against "which wall am I dimensioning" — so collapsing them into one would
+   * mean picking a leg could not also mean picking up the run it belongs to.
+   */
+  selectedSketchPart: { pathId: string; kind: 'leg' | 'vertex'; index: number } | null;
+  /**
+   * What a press on the surface does. The pen draws the layout; select does
+   * everything else. Deliberately not persisted: reopening the app in a mode
+   * that swallows clicks would be baffling.
+   */
+  tool: 'select' | 'pen' | 'measure';
+  /** the measure tool's first click, while the second is being placed */
+  measureFirst: MeasureAnchor | null;
+  /** a measured line picked out on its own - kept apart from pieces and runs */
+  selectedMeasureId: string | null;
+  /** how measured lines look; a per-person preference, not part of the drawing */
+  measureStyle: MeasureStyle;
+  /**
+   * Which face of the pour the pen is drawing — see `SketchPath.perimeter`.
+   *
+   * Asked at the pen rather than at the fill because it is known at the pen and
+   * guessed at the fill: the person chalking a layout knows they are round the
+   * outside of the slab or inside a lift shaft, and the coordinates that come
+   * out are identical either way. Starts on the outside every time, which is
+   * the order a layout is actually drawn in.
+   */
+  penPerimeter: 'outer' | 'inner';
+  /** vertices of the path being drawn, before it is committed */
+  penPoints: Array<{ x: number; y: number }>;
   clipboard: Piece[];
   paletteQuery: string;
   dialog: DialogState;
@@ -80,6 +342,24 @@ export interface EditorState {
   guideY: number | null;
   /** material being dragged in from the palette, for the drop preview */
   draggingMaterialId: string | null;
+  /**
+   * Pieces a recommendation would place, drawn faint on the surface while it is
+   * being looked at. Never part of the drawing, its history or what is saved.
+   */
+  recommendPreview: Piece[] | null;
+  /**
+   * The architect's PDF, faint under the drawing, to draw on top of - see
+   * `lib/underlay.ts`. Session only, like the preview above: it is a backdrop
+   * to work against, not part of the drawing, and a rendered page is a
+   * thousand times the size of the drawing it would be saved with.
+   */
+  underlay: Underlay | null;
+
+  // ── actions: data ──
+  /** Replace all company data with what the server holds. */
+  hydrateFromServer: (snapshot: DataSnapshot) => void;
+  /** Mark the local-only path as ready, when there is no server to wait for. */
+  markLoadedOffline: () => void;
 
   // ── actions: view ──
   setStageSize: (w: number, h: number) => void;
@@ -96,12 +376,60 @@ export interface EditorState {
   selectAll: () => void;
 
   // ── actions: pieces ──
-  addPiece: (materialId: string, worldX: number, worldY: number) => void;
+  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number) => void;
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
-  moveSelectionBy: (dxCm: number, dyCm: number, baseline: Piece[]) => void;
+  /**
+   * Live drag on the 2D surface, in surface centimetres. Which world axes
+   * those are is `surfaceView`'s business, not the caller's.
+   */
+  /**
+   * Move the selection, whatever is in it.
+   *
+   * Pieces and drawn runs travel on ONE delta, computed once and applied to
+   * both. Moving them separately — even by the same drag — is how they drift
+   * apart: the pieces snap to a neighbour's edge and the layout rounds to the
+   * grid, and the wall ends up a centimetre off the line it was set out to.
+   */
+  moveSelectionBy: (
+    duCm: number,
+    dvCm: number,
+    baseline: Piece[],
+    sketchBaseline?: SketchPath[],
+    /**
+     * Put the piece exactly where the pointer is, snapping to nothing.
+     *
+     * The way out of a snap that is being helpful at the wrong moment. Making
+     * an edge win its axis is right nearly always and wrong when the whole job
+     * is to sit one centimetre off one — turning a 4 cm leftover the catalog
+     * cannot close into a 5 cm one it can.
+     */
+    freehand?: boolean,
+  ) => void;
+  /** Arrow-key nudge, also in surface centimetres. */
+  nudgeSelection: (duCm: number, dvCm: number) => void;
+  /** Live drag from the 3D view, which can also move a piece up and down. */
+  moveSelectionSpatially: (
+    dxCm: number,
+    dyCm: number,
+    dzCm: number,
+    baseline: Piece[],
+  ) => void;
   endDrag: () => void;
-  nudgeSelection: (dxCm: number, dyCm: number) => void;
+  /** Put the selection at an exact elevation, from the inspector field. */
+  setElevation: (zCm: number) => void;
+  /**
+   * Put the one selected piece at an exact spot.
+   *
+   * Rotation and elevation could both be typed and position could not, which
+   * left the most ordinary precise instruction there is — "a centimetre that
+   * way, so the leftover beside it becomes a size the catalog stocks" — with no
+   * way to say it. Dragging cannot: a snap that is right nearly always is
+   * wrong exactly when the point is to sit just off something.
+   */
+  setPosition: (x: number, y: number) => void;
+  /** Raise or lower the selection, from a keyboard nudge. */
+  nudgeElevation: (dzCm: number) => void;
   rotateSelected: (step?: number) => void;
   setRotation: (deg: number) => void;
   deleteSelected: () => void;
@@ -110,8 +438,49 @@ export interface EditorState {
   pasteClipboard: () => void;
   arraySelection: (options: ArrayOptions) => void;
   generateColumn: (spec: ColumnSpec) => { added: number; warnings: string[] };
+  /**
+   * A straight wall, drawn and filled in one step.
+   *
+   * The line goes onto the layout as well as the panels, so a wall typed in as
+   * a length still leaves the setting-out behind it — and it is built by the
+   * same generator as everything else, rather than by a second one that would
+   * quietly disagree with it.
+   */
+  generateWallRun: (spec: WallRunSpec) => { added: number; warnings: string[] };
+  /** Drop a saved assembly's pieces onto the surface, already positioned. */
+  insertPieces: (pieces: Piece[]) => void;
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
+  /**
+   * Open a drawing file as a new drawing, exactly as it was exported.
+   *
+   * A new drawing rather than a replacement, so nothing already on screen is
+   * at risk. Materials the file uses and this catalog lacks are added under
+   * their own ids when the caller may change the catalog; otherwise the pieces
+   * that need them are dropped and counted, never silently.
+   */
+  importDrawing: (
+    parsed: ParsedLayout,
+    options: { addMissingMaterials: boolean },
+  ) => {
+    created: boolean;
+    added: number;
+    droppedPieces: number;
+    addedMaterials: number;
+    mismatched: number;
+  };
+  /** Add drawn runs to the active drawing as one undoable step (detection import). */
+  appendSketch: (paths: SketchPath[]) => void;
+  /**
+   * Take the server's copy of a drawing after a conflict, or drop the drawing
+   * when the server no longer has it.
+   *
+   * All three mirrors move with it. Setting only `pieces` left the rejected
+   * lines and measurements on screen, and the next edit wrote them back over
+   * the version that had just been accepted - silently, since that write then
+   * matched the server's version number.
+   */
+  adoptServerDocument: (docId: string, fresh: DrawingDoc | null) => void;
 
   // ── actions: history ──
   undo: () => void;
@@ -134,13 +503,34 @@ export interface EditorState {
   setSnap: (on: boolean) => void;
   setSnapStep: (step: number) => void;
   setEdgeSnap: (on: boolean) => void;
-  setShowDims: (on: boolean) => void;
+  setOrthoLock: (on: boolean) => void;
+  setShowLengths: (on: boolean) => void;
+  setLengthVisibility: (kind: LengthKind, visibility: LengthVisibility) => void;
+  setPdfVisibility: (patch: Partial<PdfVisibility>) => void;
+  /** the screen table, the master switch and the measured-line settings */
+  resetScreenDisplay: () => void;
+  resetPdfVisibility: () => void;
+  setPdfSheet: (sheet: SheetSize) => void;
+  setJsonExport: (patch: Partial<JsonExportOptions>) => void;
+  resetJsonExport: () => void;
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
-  setWheelMode: (mode: 'pan' | 'zoom') => void;
+  setShowGaps: (on: boolean) => void;
+  /** switch simple mode; switching it on also brings the view back to the plan */
+  setSimpleMode: (on: boolean) => void;
+  setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
+  /** a wall thickness for the pen to draw both faces with, or null for single lines */
+  setWallThickness: (thickness: number | null) => void;
+  setTourSeen: (seen: boolean) => void;
+  setShowSketch: (on: boolean) => void;
+  setViewMode: (mode: '2d' | '3d') => void;
+  /** Switch the surface between plan, front and side, reframing as it goes. */
+  setSurfaceView: (view: ViewAxis) => void;
+  setHiddenLines: (mode: HiddenLineMode) => void;
   setPaletteOpen: (on: boolean) => void;
   setInspectorOpen: (on: boolean) => void;
+  setInspectorTab: (tab: InspectorTab) => void;
   setPaletteQuery: (q: string) => void;
 
   // ── actions: catalog ──
@@ -148,6 +538,10 @@ export interface EditorState {
   updateMaterial: (id: string, draft: MaterialDraft) => void;
   deleteMaterial: (id: string, cascade: boolean) => void;
   setStock: (id: string, warehouseId: string, quantity: number) => void;
+  /** one quantity for every material in one warehouse - the admin's test "500 each" */
+  setAllStock: (warehouseId: string, quantity: number) => void;
+  /** the company's own weights onto built-ins that still have none; returns how many */
+  fillMissingWeights: () => number;
   importMaterials: (drafts: MaterialDraft[]) => number;
   replaceCatalog: (materials: Material[], warehouses?: Warehouse[]) => number;
   resetCatalog: () => void;
@@ -156,6 +550,99 @@ export interface EditorState {
   openDialog: (dialog: DialogState) => void;
   closeDialog: () => void;
   setToast: (message: string | null) => void;
+  setRecommendPreview: (pieces: Piece[] | null) => void;
+  /** Put a rendered PDF page behind the drawing, or `null` to take it away. */
+  setUnderlay: (underlay: Underlay | null) => void;
+  /** Move it, scale it, fade it, turn the page - see `lib/underlay.ts`. */
+  changeUnderlay: (patch: Partial<Underlay>) => void;
+
+  // ── actions: the drawn layout ──
+  /** Pick up the pen. The second argument also sets which face it draws. */
+  setTool: (tool: 'select' | 'pen' | 'measure', perimeter?: 'outer' | 'inner') => void;
+  /** First click of a measured line, already snapped by the caller. */
+  measureStart: (first: MeasureAnchor) => void;
+  /** Second click: save the line, as one undoable step. */
+  measureFinish: (b: Point) => void;
+  /** Drop a half-placed line, keeping the tool out. */
+  measureCancel: () => void;
+  selectMeasure: (id: string | null) => void;
+  deleteMeasure: (id: string) => void;
+  setMeasureStyle: (patch: Partial<MeasureStyle>) => void;
+  resetMeasureStyle: () => void;
+  /** Switch the pen between the outside and the inside of the pour. */
+  setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
+  /** Change which face already-drawn runs are, and so which way they fill. */
+  setSketchPerimeter: (pathIds: string[], perimeter: 'outer' | 'inner') => void;
+  /** Add a vertex to the path in progress, already snapped by the caller. */
+  penAddPoint: (x: number, y: number) => void;
+  /** Drop the last vertex — the pen's own undo, mid-path. */
+  penUndoPoint: () => void;
+  /** Commit the path in progress. `closed` joins the last point to the first. */
+  penFinish: (closed?: boolean) => void;
+  /** Abandon the path in progress, keeping the tool active. */
+  penCancel: () => void;
+  selectSketch: (id: string | null, additive?: boolean) => void;
+  /**
+   * Live drag of one leg, or of one end of an open run.
+   *
+   * Takes the path as it was when the drag started rather than an incremental
+   * delta, so a drag that wanders and comes back lands exactly where it began
+   * instead of accumulating rounding — the same reason piece dragging works
+   * from a baseline.
+   */
+  dragSketch: (
+    hit: SegmentHit,
+    dx: number,
+    dy: number,
+    baseline: SketchPath,
+    /** slide the whole run instead of the one part that was grabbed */
+    whole?: boolean,
+  ) => void;
+  /** Slide every selected run at once, from the shapes they had when the drag began. */
+  dragSketchAll: (dx: number, dy: number, baselines: SketchPath[]) => void;
+  /** Replace the sketch selection outright — used by the rubber band. */
+  selectSketchMany: (ids: string[], additive?: boolean) => void;
+  /** Pick out one leg or one junction of a run. */
+  selectSketchPart: (part: EditorState['selectedSketchPart']) => void;
+  /** Put a new junction on an existing leg, at a point already on it. */
+  insertSketchVertex: (pathId: string, index: number, at: Point) => void;
+  /** Swing one leg of an open run to an exact bearing, in degrees. */
+  setLegAngle: (pathId: string, index: number, deg: number) => void;
+  /** Take out the selected junction, joining the two legs it divided. */
+  removeSketchVertex: (pathId: string, index: number) => void;
+  /** Join a run's last point back to its first, making it a closed outline. */
+  closeSketchPath: (pathId: string, closed: boolean) => void;
+  /**
+   * Set one leg to an exact length, in cm.
+   *
+   * A wall is specified as 4.27 m, not as a number of grid squares, and no
+   * amount of careful dragging gets you there. The rest of the run travels with
+   * the leg so the corners it already has survive; a closed room has no free
+   * end for the slack to go to, so it is left alone.
+   */
+  setLegLength: (pathId: string, index: number, cm: number) => void;
+  /**
+   * Build the formwork for one drawn run, or for every run selected.
+   *
+   * Takes a list because a layout is rarely one unbroken line — a building is a
+   * few runs that happen to meet — and filling them one at a time meant
+   * retyping the same thickness and height for each, then adding the summaries
+   * up by hand to know what to order.
+   */
+  fillSketch: (pathIds: string[], spec: SketchFillSpec) => { added: number; warnings: string[] };
+  /**
+   * Fill with recommendations picked per run (`FillPlan.runs[].key`), as one
+   * undo step.
+   *
+   * Every run in one fill stands the same courses, so the first pick's stack is
+   * the job's; a pick for a course height the job does not stand is ignored and
+   * that run is filled the usual way, as is any run with no pick at all.
+   */
+  applyFillVariants: (
+    pathIds: string[],
+    spec: SketchFillSpec,
+    picks: Array<{ runKey: string; variant: Variant }>,
+  ) => { added: number; warnings: string[] };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -166,6 +653,8 @@ function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
     name,
     updatedAt: Date.now(),
     pieces,
+    sketch: [],
+    measures: [],
     projectName: '',
     revision: 'A',
     scale: 50,
@@ -174,7 +663,13 @@ function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
 
 /** The slice of state that undo/redo restores. */
 function snap(s: EditorState): DocSnapshot {
-  return { materials: s.materials, pieces: s.pieces, removedBuiltins: s.removedBuiltins };
+  return {
+    materials: s.materials,
+    pieces: s.pieces,
+    sketch: s.sketch,
+    measures: s.measures,
+    removedBuiltins: s.removedBuiltins,
+  };
 }
 
 /**
@@ -198,7 +693,7 @@ const safeStorage = createJSONStorage(() => ({
       const quota = e instanceof DOMException && e.name === 'QuotaExceededError';
       onStorageFailure(
         quota
-          ? 'ავტოშენახვა ვერ მოხერხდა — ბრაუზერის მეხსიერება გადაივსო. გააკეთე ექსპორტი და წაშალე ძველი ნახაზები.'
+          ? 'ავტოშენახვა ვერ მოხერხდა - ბრაუზერის მეხსიერება გადაივსო. გააკეთე ექსპორტი და წაშალე ძველი ნახაზები.'
           : 'ავტოშენახვა ვერ მოხერხდა. გააკეთე ექსპორტი, რომ სამუშაო არ დაიკარგოს.',
       );
     }
@@ -212,17 +707,85 @@ const safeStorage = createJSONStorage(() => ({
   },
 }));
 
+/**
+ * Upgrades preferences saved by an older version. Exported so the upgrade can
+ * be tested directly, without persisting a store.
+ *
+ * Above `create()` for the same reason as `BUILTIN_SIZE_FIXES`: rehydration
+ * calls it while the store is still being built.
+ */
+export function migratePersisted(persisted: unknown): Partial<EditorState> {
+  type Legacy = Partial<EditorState> & { showDims?: boolean; dimMode?: string };
+  const state = persisted as Legacy | undefined;
+  if (!state) return {};
+  let next: Legacy = state;
+
+  // v3 offered 10 cm and 25 cm grid steps. The panels are 30/45/60/75/90,
+  // whose common module is 15: a 25 cm grid lands one of those five on a
+  // grid line and 10 lands three, so both spent most of their time
+  // pulling panels off the joints they were meant to butt against. The
+  // 1 cm step went the same way later, for the opposite reason — it put
+  // nothing on a joint and produced legs like 180.2. Anyone still on one
+  // of them moves to the nearest step the catalog divides into.
+  const remap: Record<number, number> = { 1: DRAW_STEP_CM, 10: 15, 25: 30 };
+  const step = next.snapStep;
+  if (typeof step === 'number' && remap[step]) {
+    next = { ...next, snapStep: remap[step] };
+  }
+
+  // v4's on/off lengths switch and v5's three modes both become the master
+  // switch and the per-kind table. Off stays off, "all" stays every length,
+  // everyone else gets the default table.
+  if (next.lengthVisibility === undefined) {
+    const { showDims, dimMode, ...rest } = next;
+    const old = dimMode ?? (showDims === false ? 'off' : undefined);
+    next = {
+      ...rest,
+      showLengths: old !== 'off',
+      lengthVisibility:
+        old === 'all'
+          ? (Object.fromEntries(LENGTH_KINDS.map((k) => [k, 'always'])) as Record<
+              LengthKind,
+              LengthVisibility
+            >)
+          : { ...DEFAULT_LENGTH_VISIBILITY },
+    };
+  }
+
+  if (next.inspectorTab !== undefined) {
+    next = { ...next, inspectorTab: normalizeInspectorTab(next.inspectorTab) };
+  }
+  return next;
+}
+
+/**
+ * A saved inspector tab that still exists, or რეკომენდაცია.
+ *
+ * The დეტალები tab was folded into რეკომენდაცია and ნაშთი moved out to its own
+ * window, so a tab saved before either change names nothing - and the panel
+ * opened with no tab and an empty body. Applied in `merge` as well as here:
+ * `migrate` only runs when the persist version changes, and these tabs went
+ * away without one.
+ */
+export function normalizeInspectorTab(value: unknown): InspectorTab {
+  return value === 'recommend' || value === 'bom' || value === 'inventory' ? value : 'recommend';
+}
+
 export const useEditorStore = create<EditorState>()(
   persist(
     (set, get) => {
-      /** Mirror the working pieces back into the active document. */
+      /** Mirror the working pieces and sketch back into the active document. */
       const syncDoc = (s: EditorState, patch: Partial<EditorState>): Partial<EditorState> => {
-        if (!patch.pieces) return patch;
-        const pieces = patch.pieces;
+        if (!patch.pieces && !patch.sketch && !patch.measures) return patch;
+        const pieces = patch.pieces ?? s.pieces;
+        const sketch = patch.sketch ?? s.sketch;
+        const measures = patch.measures ?? s.measures;
         return {
           ...patch,
           documents: s.documents.map((d) =>
-            d.id === s.activeDocId ? { ...d, pieces, updatedAt: Date.now() } : d,
+            d.id === s.activeDocId
+              ? { ...d, pieces, sketch, measures, updatedAt: Date.now() }
+              : d,
           ),
         };
       };
@@ -231,13 +794,24 @@ export const useEditorStore = create<EditorState>()(
       const apply = (fn: (s: EditorState) => Partial<EditorState>) =>
         set((s) => syncDoc(s, fn(s)));
 
-      /** Mutation that starts a new undo step. */
+      /**
+       * Mutation that starts a new undo step.
+       *
+       * An action with nothing to do returns `{}`, and that must stay nothing: it
+       * used to push an empty undo step and clear redo, so a Delete with nothing
+       * selected quietly threw away every step that could have been redone.
+       * Opening a step deliberately, for a drag, is `beginDrag`'s job.
+       */
       const commit = (fn: (s: EditorState) => Partial<EditorState>) =>
-        set((s) => ({
-          ...syncDoc(s, fn(s)),
-          past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
-          future: [],
-        }));
+        set((s) => {
+          const patch = fn(s);
+          if (!Object.keys(patch).length) return {};
+          return {
+            ...syncDoc(s, patch),
+            past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
+            future: [],
+          };
+        });
 
       const snapPoint = (s: EditorState, x: number, y: number) => ({
         x: snapValue(x, s.snapStep, s.snap),
@@ -249,10 +823,21 @@ export const useEditorStore = create<EditorState>()(
       return {
         materials: SEED_MATERIALS,
         pieces: [],
+        sketch: [],
+        measures: [],
+        selectedSketchIds: [],
+        selectedSketchPart: null,
+        tool: 'select',
+        measureFirst: null,
+        selectedMeasureId: null,
+        penPerimeter: 'outer',
+        penPoints: [],
         removedBuiltins: [],
         documents: [firstDoc],
         activeDocId: firstDoc.id,
         warehouses: [{ ...DEFAULT_WAREHOUSE }],
+        // With a server, nothing here is real until it has been loaded.
+        dataLoaded: !isConfigured,
 
         past: [],
         future: [],
@@ -262,16 +847,31 @@ export const useEditorStore = create<EditorState>()(
         stageH: 700,
 
         snap: true,
-        snapStep: 5,
+        snapStep: DRAW_STEP_CM,
         edgeSnap: true,
-        showDims: true,
+        orthoLock: true,
+        showLengths: true,
+        lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
+        pdfVisibility: { ...DEFAULT_PDF_VISIBILITY },
+        pdfSheet: 'A4',
+        jsonExport: { ...DEFAULT_JSON_EXPORT },
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
-        wheelMode: 'pan',
+        viewMode: '2d',
+        surfaceView: 'plan',
+        hiddenLines: 'hide',
         // Start folded on a phone-ish window so the canvas is usable at all.
         paletteOpen: typeof window === 'undefined' || window.innerWidth > 900,
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
+        inspectorTab: 'bom',
+        showGaps: false,
+        simpleMode: false,
+        fillDefaults: { height: 300, includeCorners: true },
+        wallThickness: null,
+        tourSeen: false,
+        showSketch: true,
+        measureStyle: { ...DEFAULT_MEASURE_STYLE },
 
         selectedIds: [],
         clipboard: [],
@@ -282,6 +882,60 @@ export const useEditorStore = create<EditorState>()(
         guideX: null,
         guideY: null,
         draggingMaterialId: null,
+        recommendPreview: null,
+        underlay: null,
+
+        // ── data ──────────────────────────────────────────────────────────
+        /**
+         * Adopt the server's data wholesale.
+         *
+         * Gaps are filled rather than left empty so a brand-new project is
+         * usable immediately: no warehouse means the default store, no catalog
+         * means the built-in Du materials, no drawings means one blank sheet.
+         * Whatever is filled in here is pushed up by the next sync, so the
+         * server ends up holding it too.
+         */
+        hydrateFromServer: (snapshot) =>
+          set((s) => {
+            const materials = snapshot.materials.length
+              ? snapshot.materials
+              : createSeedMaterials();
+            applySizeFixes(materials);
+
+            const warehouses = snapshot.warehouses.length
+              ? snapshot.warehouses
+              : [{ ...DEFAULT_WAREHOUSE }];
+
+            const documents = snapshot.documents.length
+              ? snapshot.documents
+              : [newDoc('ნახაზი 1')];
+
+            // Stay on the same drawing across a reload where possible.
+            const active =
+              documents.find((d) => d.id === s.activeDocId) ?? documents[0];
+
+            return {
+              materials,
+              warehouses,
+              documents,
+              activeDocId: active.id,
+              pieces: active.pieces,
+              sketch: active.sketch,
+              measures: active.measures ?? [],
+              removedBuiltins: [],
+              dataLoaded: true,
+              selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
+              past: [],
+              future: [],
+            };
+          }),
+
+        markLoadedOffline: () => set({ dataLoaded: true }),
 
         // ── view ──────────────────────────────────────────────────────────
         setStageSize: (w, h) => set({ stageW: w, stageH: h }),
@@ -307,7 +961,9 @@ export const useEditorStore = create<EditorState>()(
         fitToContent: () =>
           set((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
-            const b = contentBounds(s.pieces, byId);
+            // In an elevation the model sits above the ground line, at negative
+            // surface y — the plan's bounds would frame empty floor.
+            const b = projectedContentBounds(s.pieces, byId, s.surfaceView);
             if (!b) return { ...DEFAULT_VIEW };
             const pad = 60;
             const zoom = Math.min(
@@ -327,15 +983,25 @@ export const useEditorStore = create<EditorState>()(
         resetView: () => set({ ...DEFAULT_VIEW }),
 
         // ── selection ─────────────────────────────────────────────────────
-        select: (id) => set({ selectedIds: id ? [id] : [] }),
+        select: (id) =>
+          set(id ? { selectedIds: [id], selectedMeasureId: null } : { selectedIds: [] }),
         toggleSelect: (id) =>
           set((s) => ({
             selectedIds: s.selectedIds.includes(id)
               ? s.selectedIds.filter((x) => x !== id)
               : [...s.selectedIds, id],
           })),
-        setSelection: (ids) => set({ selectedIds: ids }),
-        selectAll: () => set((s) => ({ selectedIds: s.pieces.map((p) => p.id) })),
+        // Also the "clear everything" path (Escape, a press on empty surface,
+        // the rubber band), so a picked measured line lets go here too.
+        setSelection: (ids) => set({ selectedIds: ids, selectedMeasureId: null }),
+        // Everything means everything: the layout is part of the drawing, and
+        // "select all, move it over" is the commonest reason to want either.
+        selectAll: () =>
+          set((s) => ({
+            selectedIds: s.pieces.map((p) => p.id),
+            selectedSketchIds: s.sketch.map((k) => k.id),
+            selectedSketchPart: null,
+          })),
 
         // ── pieces ────────────────────────────────────────────────────────
         /**
@@ -343,10 +1009,17 @@ export const useEditorStore = create<EditorState>()(
          * caller's job (see `dropPosition` in StageCanvas) so that the drop
          * preview and the placed piece can never disagree.
          */
-        addPiece: (materialId, worldX, worldY) =>
+        addPiece: (materialId, worldX, worldY, worldZ = 0) =>
           commit((s) => {
             if (!s.materials.some((m) => m.id === materialId)) return {};
-            const piece: Piece = { id: uid(), materialId, x: worldX, y: worldY, rot: 0 };
+            const piece: Piece = {
+              id: uid(),
+              materialId,
+              x: worldX,
+              y: worldY,
+              rot: 0,
+              z: Math.max(0, worldZ),
+            };
             return { pieces: [...s.pieces, piece], selectedIds: [piece.id] };
           }),
 
@@ -360,35 +1033,91 @@ export const useEditorStore = create<EditorState>()(
           })),
 
         /**
-         * Live drag. `baseline` is the piece list as it was when the drag
-         * started, so the delta always applies to the original positions and
-         * repeated snapping cannot creep.
+         * Live drag on the surface, whichever view it is showing.
+         *
+         * `baseline` is the piece list as it was when the drag started, so the
+         * delta always applies to the original positions and repeated snapping
+         * cannot creep.
+         *
+         * The snapping runs entirely in surface coordinates and only becomes
+         * world movement at the very end. That is what lets one path serve all
+         * three views — and it means edge snapping, which is what actually
+         * makes panels butt together, works in an elevation too: courses land
+         * on each other instead of near each other.
          */
-        moveSelectionBy: (dxCm, dyCm, baseline) =>
+        moveSelectionBy: (duCm, dvCm, baseline, sketchBaseline, freehand) =>
           apply((s) => {
             const selected = new Set(s.selectedIds);
             const origin = new Map(baseline.map((p) => [p.id, p]));
             const byId = new Map(s.materials.map((m) => [m.id, m]));
+            const view = s.surfaceView;
 
             // 1. grid snap, applied to the drag delta so repeated snapping
-            //    cannot creep away from the original positions
-            const gridDx = snapValue(dxCm, s.snapStep, s.snap);
-            const gridDy = snapValue(dyCm, s.snapStep, s.snap);
+            //    cannot creep away from the original positions. Only used where
+            //    nothing better is in reach — see below.
+            const gridDu = snapValue(duCm, s.snapStep, s.snap && !freehand);
+            const gridDv = snapValue(dvCm, s.snapStep, s.snap && !freehand);
 
-            // 2. edge snap: nudge the whole selection so its bounding box lines
-            //    up with a nearby piece. Panel widths are not grid multiples,
-            //    so this is what actually makes panels butt together.
-            let extraDx = 0;
-            let extraDy = 0;
+            /**
+             * 2. edge snap: line the selection up with a piece already placed.
+             *
+             * Measured from where the pointer actually is, not from where the
+             * grid has just put it, and it WINS the axis it catches on.
+             *
+             * It used to be a nudge applied on top of grid snapping, and that
+             * worked by luck: panels are 30 to 90 in fifteens, so the grid left
+             * them within a few millimetres of flush and the nudge finished the
+             * job. Nothing else in the system is on the grid. A corner profile
+             * has a 24 cm leg standing off a 9 cm panel, and the faces it has to
+             * meet sit 10 and 19 either side of a centreline — so the grid drags
+             * it up to half a step away from where it belongs and the nudge
+             * cannot reach back. Corners could be aligned only by eye, one pixel
+             * at a time, which is what a snap is supposed to spare you.
+             *
+             * Object beats grid is what every drawing tool does, and it is the
+             * right way round: the grid is a convenience, another piece's edge
+             * is the answer.
+             */
             let guideX: number | null = null;
             let guideY: number | null = null;
+            let snapDu: number | null = null;
+            let snapDv: number | null = null;
 
-            if (s.edgeSnap) {
+            if (s.edgeSnap && !freehand) {
+              const shift = unprojectDelta(duCm, dvCm, view);
+              /**
+               * The faces a piece presents, as lines to align on.
+               *
+               * A corner profile's legs are inside its bounding box, and they
+               * are what has to finish up flush — with a panel, or with the leg
+               * of the corner across from it. Aligning by the box alone works
+               * from two sides of an L and is impossible from the other two.
+               */
+              const snapLines = (rect: ReturnType<typeof projectPiece>, m: Material, rot: number) => {
+                const bands = faceBands(rect, m, rot, isElevation(view));
+                if (!bands?.length) return {};
+                const xLines: number[] = [];
+                const yLines: number[] = [];
+                for (const b of bands) {
+                  if (b.axis === 'v') xLines.push(b.from, b.to);
+                  else yLines.push(b.from, b.to);
+                }
+                return { xLines, yLines };
+              };
+
               const movingRects = baseline
                 .filter((p) => selected.has(p.id))
                 .map((p) => {
                   const m = byId.get(p.materialId);
-                  return m ? pieceBounds({ ...p, x: p.x + gridDx, y: p.y + gridDy }, m) : null;
+                  if (!m) return null;
+                  const moved: Piece = {
+                    ...p,
+                    x: p.x + shift.dx,
+                    y: p.y + shift.dy,
+                    z: (p.z ?? 0) + shift.dz,
+                  };
+                  const rect = projectPiece(moved, m, view);
+                  return { ...rect, ...snapLines(rect, m, p.rot) };
                 })
                 .filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -398,20 +1127,58 @@ export const useEditorStore = create<EditorState>()(
                   .filter((p) => !selected.has(p.id))
                   .map((p) => {
                     const m = byId.get(p.materialId);
-                    return m ? pieceBounds(p, m) : null;
+                    if (!m) return null;
+                    const rect = projectPiece(p, m, view);
+                    return { ...rect, ...snapLines(rect, m, p.rot) };
                   })
                   .filter((r): r is NonNullable<typeof r> => r !== null);
 
-                // tolerance in cm, ~8 screen px so it feels the same at any zoom
-                const snapResult = computeEdgeSnap(movingBox, targets, 8 / s.zoom);
-                extraDx = snapResult.dx;
-                extraDy = snapResult.dy;
+                // The drawn layout snaps too. This is the whole point of
+                // keeping the sketch: a panel butts to the line the wall was
+                // set out on, so the formwork lands on the layout rather than
+                // near it. Plan only — the lines are a plan, and in an
+                // elevation their coordinates mean something else entirely.
+                if (view === 'plan' && s.showSketch) {
+                  targets.push(...sketchSnapTargets(s.sketch));
+                }
+
+                // In cm, but held at a constant number of screen pixels so the
+                // pull feels the same however far in you are zoomed.
+                const snapResult = computeEdgeSnap(movingBox, targets, EDGE_SNAP_PX / s.zoom);
+                // An axis that caught takes the raw drag plus its correction,
+                // landing exactly on the edge it found. An axis that caught
+                // nothing falls back to the grid.
+                if (snapResult.guideX !== null) snapDu = duCm + snapResult.dx;
+                if (snapResult.guideY !== null) snapDv = dvCm + snapResult.dy;
                 guideX = snapResult.guideX;
                 guideY = snapResult.guideY;
               }
             }
 
+            const move = unprojectDelta(snapDu ?? gridDu, snapDv ?? gridDv, view);
+
+            /**
+             * The drawn layout comes along, on the same delta the pieces got.
+             *
+             * Plan only: in an elevation the lines are not what is on screen,
+             * and a delta that means "sideways and up" there would move them
+             * somewhere that has nothing to do with the drag.
+             */
+            const carried =
+              sketchBaseline?.length && !isElevation(view)
+                ? (() => {
+                    const was = new Map(sketchBaseline.map((k) => [k.id, k]));
+                    return {
+                      sketch: s.sketch.map((k) => {
+                        const base = was.get(k.id);
+                        return base ? translatePath(base, move.dx, move.dy) : k;
+                      }),
+                    };
+                  })()
+                : null;
+
             return {
+              ...carried,
               guideX,
               guideY,
               pieces: s.pieces.map((p) => {
@@ -419,8 +1186,45 @@ export const useEditorStore = create<EditorState>()(
                 const base = origin.get(p.id) ?? p;
                 return {
                   ...p,
-                  x: base.x + gridDx + extraDx,
-                  y: base.y + gridDy + extraDy,
+                  x: base.x + move.dx,
+                  y: base.y + move.dy,
+                  // Nothing sits below the slab it is poured on.
+                  z: Math.max(0, (base.z ?? 0) + move.dz),
+                };
+              }),
+            };
+          }),
+
+        /**
+         * Live drag from the 3D view.
+         *
+         * Deliberately simpler than `moveSelectionBy`: no edge snapping. That
+         * aid works off a tolerance in 2D screen pixels and lines up bounding
+         * boxes in plan, neither of which means anything while orbiting in 3D.
+         * The grid still applies, per axis, against the drag baseline so
+         * repeated snapping cannot creep.
+         *
+         * Elevation is clamped at the ground — formwork does not hang in a pit,
+         * and a piece dragged below zero would vanish under the grid.
+         */
+        moveSelectionSpatially: (dxCm, dyCm, dzCm, baseline) =>
+          apply((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const origin = new Map(baseline.map((p) => [p.id, p]));
+            const gridDx = snapValue(dxCm, s.snapStep, s.snap);
+            const gridDy = snapValue(dyCm, s.snapStep, s.snap);
+            const gridDz = snapValue(dzCm, s.snapStep, s.snap);
+
+            return {
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const base = origin.get(p.id) ?? p;
+                return {
+                  ...p,
+                  x: base.x + gridDx,
+                  y: base.y + gridDy,
+                  z: Math.max(0, (base.z ?? 0) + gridDz),
                 };
               }),
             };
@@ -428,13 +1232,54 @@ export const useEditorStore = create<EditorState>()(
 
         endDrag: () => set({ guideX: null, guideY: null }),
 
-        nudgeSelection: (dxCm, dyCm) =>
+        setPosition: (x, y) =>
+          commit((s) => {
+            if (s.selectedIds.length !== 1) return {};
+            const id = s.selectedIds[0];
+            return { pieces: s.pieces.map((p) => (p.id === id ? { ...p, x, y } : p)) };
+          }),
+
+        setElevation: (zCm) =>
+          commit((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const z = Math.max(0, zCm);
+            return {
+              pieces: s.pieces.map((p) => (selected.has(p.id) ? { ...p, z } : p)),
+            };
+          }),
+
+        /**
+         * Relative, so a selection spanning several courses keeps its spacing
+         * instead of collapsing onto one level.
+         */
+        nudgeElevation: (dzCm) =>
           commit((s) => {
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
             return {
               pieces: s.pieces.map((p) =>
-                selected.has(p.id) ? { ...p, x: p.x + dxCm, y: p.y + dyCm } : p,
+                selected.has(p.id) ? { ...p, z: Math.max(0, (p.z ?? 0) + dzCm) } : p,
+              ),
+            };
+          }),
+
+        /** Arrow keys, in surface centimetres — so they follow the view too. */
+        nudgeSelection: (duCm, dvCm) =>
+          commit((s) => {
+            const selected = new Set(s.selectedIds);
+            if (!selected.size) return {};
+            const move = unprojectDelta(duCm, dvCm, s.surfaceView);
+            return {
+              pieces: s.pieces.map((p) =>
+                selected.has(p.id)
+                  ? {
+                      ...p,
+                      x: p.x + move.dx,
+                      y: p.y + move.dy,
+                      z: Math.max(0, (p.z ?? 0) + move.dz),
+                    }
+                  : p,
               ),
             };
           }),
@@ -466,9 +1311,26 @@ export const useEditorStore = create<EditorState>()(
 
         deleteSelected: () =>
           commit((s) => {
-            const selected = new Set(s.selectedIds);
-            if (!selected.size) return {};
-            return { pieces: s.pieces.filter((p) => !selected.has(p.id)), selectedIds: [] };
+            // Delete means "remove what is selected", and a reference line is
+            // a thing that can be selected. Two lists rather than one, because
+            // everything else about a piece — the bill, the gap check, the
+            // inspector — would be wrong if a line could get into `selectedIds`.
+            const pieceIds = new Set(s.selectedIds);
+            const sketchIds = new Set(s.selectedSketchIds);
+            // Only a line that is still there counts as selected.
+            const measureId =
+              s.selectedMeasureId && s.measures.some((m) => m.id === s.selectedMeasureId)
+                ? s.selectedMeasureId
+                : null;
+            if (!pieceIds.size && !sketchIds.size && !measureId) return {};
+            return {
+              pieces: pieceIds.size ? s.pieces.filter((p) => !pieceIds.has(p.id)) : s.pieces,
+              sketch: sketchIds.size ? s.sketch.filter((k) => !sketchIds.has(k.id)) : s.sketch,
+              measures: measureId ? s.measures.filter((m) => m.id !== measureId) : s.measures,
+              selectedIds: [],
+              selectedSketchIds: [],
+              selectedMeasureId: null,
+            };
           }),
 
         duplicateSelected: () =>
@@ -524,6 +1386,9 @@ export const useEditorStore = create<EditorState>()(
                   id: uid(),
                   x: axis === 'x' ? p.x + pitch * i : p.x,
                   y: axis === 'y' ? p.y + pitch * i : p.y,
+                  // Stacking upward keeps the plan position, so the copies sit
+                  // exactly above the original — the point of a course.
+                  z: axis === 'z' ? Math.max(0, (p.z ?? 0) + pitch * i) : p.z,
                 });
               }
             }
@@ -545,8 +1410,197 @@ export const useEditorStore = create<EditorState>()(
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
 
+        generateWallRun: (spec) => {
+          const state = get();
+          /**
+           * A wall is two faces, so it is two lines - and they are filled in one
+           * call rather than one each, which is what lets the generator see them
+           * as the two sides of a pour and panel them to match.
+           */
+          const faces = wallFaces(spec);
+          const plan = planSketchFillAll(
+            faces,
+            { height: spec.height, includeCorners: true },
+            state.materials,
+          );
+          if (!plan.pieces.length) return { added: 0, warnings: plan.warnings };
+
+          commit((s) => ({
+            sketch: [...s.sketch, ...faces],
+            pieces: [...s.pieces, ...plan.pieces],
+            selectedIds: plan.pieces.map((p) => p.id),
+            selectedSketchIds: [],
+          }));
+          return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        insertPieces: (incoming) => {
+          if (!incoming.length) return;
+          commit((s) => ({
+            pieces: [...s.pieces, ...incoming],
+            selectedIds: incoming.map((p) => p.id),
+          }));
+        },
+
         clearPieces: () => commit(() => ({ pieces: [], selectedIds: [] })),
         replaceLayout: (pieces) => commit(() => ({ pieces, selectedIds: [] })),
+
+        importDrawing: (parsed, { addMissingMaterials }) => {
+          const s = get();
+          const local = new Map(s.materials.map((m) => [m.id, m]));
+          const offered = new Map(parsed.materials.map((m) => [m.id, m]));
+          const additions: Material[] = [];
+          let mismatched = 0;
+
+          for (const id of new Set(parsed.pieces.map((p) => p.materialId))) {
+            const mine = local.get(id);
+            const theirs = offered.get(id);
+            if (mine) {
+              // Same part, different size: this catalog's own figure wins. It
+              // is the one the yard's stock and every other drawing agree on,
+              // but the difference is reported rather than absorbed.
+              if (
+                theirs &&
+                (mine.w !== theirs.w ||
+                  mine.h !== theirs.h ||
+                  mine.depth !== theirs.depth ||
+                  mine.shape !== theirs.shape)
+              ) {
+                mismatched++;
+              }
+            } else if (theirs && addMissingMaterials) {
+              // Kept under its own id, because that is what the pieces point at.
+              // A built-in this company had deleted comes back as a built-in.
+              // Judged against the seed, not `removedBuiltins`, which a server
+              // session never fills in.
+              additions.push({
+                ...theirs,
+                builtin: SEED_MATERIALS.some((m) => m.id === id),
+                stock: {},
+              });
+            }
+          }
+
+          const known = new Set([...local.keys(), ...additions.map((m) => m.id)]);
+          const pieces = parsed.pieces.filter((p) => known.has(p.materialId));
+          const outcome = {
+            added: pieces.length,
+            droppedPieces: parsed.pieces.length - pieces.length,
+            addedMaterials: additions.length,
+            mismatched,
+          };
+          if (!pieces.length && !parsed.sketch.length && !parsed.measures.length) {
+            return { created: false, ...outcome };
+          }
+
+          const doc = newDoc(parsed.meta.name || 'ნახაზი (იმპორტი)', pieces);
+          doc.sketch = parsed.sketch;
+          doc.measures = parsed.measures;
+          doc.projectName = parsed.meta.projectName;
+          if (parsed.meta.revision) doc.revision = parsed.meta.revision;
+          if (parsed.meta.scale !== null) doc.scale = parsed.meta.scale;
+
+          const restored = new Set(additions.map((m) => m.id));
+          set({
+            materials: additions.length ? [...s.materials, ...additions] : s.materials,
+            removedBuiltins: s.removedBuiltins.filter((id) => !restored.has(id)),
+            documents: [...s.documents, doc],
+            activeDocId: doc.id,
+            pieces: doc.pieces,
+            sketch: doc.sketch,
+            measures: doc.measures,
+            selectedIds: [],
+            selectedSketchIds: [],
+            selectedSketchPart: null,
+            penPoints: [],
+            measureFirst: null,
+            selectedMeasureId: null,
+            past: [],
+            future: [],
+          });
+          return { created: true, ...outcome };
+        },
+
+        appendSketch: (paths) => {
+          if (!paths.length) return;
+          commit((s) => ({ sketch: [...s.sketch, ...paths] }));
+        },
+
+        adoptServerDocument: (docId, fresh) =>
+          set((s) => {
+            const replaced = fresh
+              ? s.documents.map((d) => (d.id === docId ? fresh : d))
+              : s.documents.filter((d) => d.id !== docId);
+            // Always keep one drawing, as deleteDocument does.
+            const documents = replaced.length ? replaced : [newDoc('ნახაზი 1')];
+            const active =
+              documents.find((d) => d.id === s.activeDocId) ?? documents[0];
+            const mirrorsChange = s.activeDocId === docId || active.id !== s.activeDocId;
+            return {
+              documents,
+              activeDocId: active.id,
+              ...(mirrorsChange
+                ? {
+                    pieces: active.pieces,
+                    sketch: active.sketch ?? [],
+                    measures: active.measures ?? [],
+                  }
+                : {}),
+              past: [],
+              future: [],
+              selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedMeasureId: null,
+              measureFirst: null,
+              penPoints: [],
+            };
+          }),
+
+        // ── measured lines ────────────────────────────────────────────────
+        measureStart: (first) => set({ measureFirst: first, selectedMeasureId: null }),
+
+        measureFinish: (b) => {
+          const first = get().measureFirst;
+          if (!first) return;
+          // Shorter than the drawing grid is a double click, not a measurement.
+          // The first point stays, so the line can still be finished.
+          if (Math.hypot(b.x - first.point.x, b.y - first.point.y) < DRAW_STEP_CM) return;
+          commit((s) => ({
+            measures: [
+              ...s.measures,
+              { id: uid('ms'), a: { x: first.point.x, y: first.point.y }, b: { x: b.x, y: b.y } },
+            ],
+            measureFirst: null,
+          }));
+        },
+
+        measureCancel: () => set({ measureFirst: null }),
+
+        selectMeasure: (id) =>
+          set(
+            id
+              ? {
+                  selectedMeasureId: id,
+                  selectedIds: [],
+                  selectedSketchIds: [],
+                  selectedSketchPart: null,
+                }
+              : { selectedMeasureId: null },
+          ),
+
+        deleteMeasure: (id) => {
+          if (!get().measures.some((m) => m.id === id)) return;
+          commit((s) => ({
+            measures: s.measures.filter((m) => m.id !== id),
+            selectedMeasureId: s.selectedMeasureId === id ? null : s.selectedMeasureId,
+          }));
+        },
+
+        setMeasureStyle: (patch) =>
+          set((s) => ({ measureStyle: normalizeMeasureStyle({ ...s.measureStyle, ...patch }) })),
+
+        resetMeasureStyle: () => set({ measureStyle: { ...DEFAULT_MEASURE_STYLE } }),
 
         // ── history ───────────────────────────────────────────────────────
         undo: () =>
@@ -556,11 +1610,24 @@ export const useEditorStore = create<EditorState>()(
             return {
               ...previous,
               documents: s.documents.map((d) =>
-                d.id === s.activeDocId ? { ...d, pieces: previous.pieces } : d,
+                d.id === s.activeDocId
+                  ? {
+                      ...d,
+                      pieces: previous.pieces,
+                      sketch: previous.sketch,
+                      measures: previous.measures,
+                    }
+                  : d,
               ),
               past: s.past.slice(0, -1),
               future: [snap(s), ...s.future].slice(0, HISTORY_LIMIT),
               selectedIds: [],
+              // A selection that outlives the thing it picked turns the next
+              // Delete into an edit nobody meant, and that edit wipes redo.
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedMeasureId: null,
+              measureFirst: null,
             };
           }),
 
@@ -571,11 +1638,17 @@ export const useEditorStore = create<EditorState>()(
             return {
               ...next,
               documents: s.documents.map((d) =>
-                d.id === s.activeDocId ? { ...d, pieces: next.pieces } : d,
+                d.id === s.activeDocId
+                  ? { ...d, pieces: next.pieces, sketch: next.sketch, measures: next.measures }
+                  : d,
               ),
               past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
               future: s.future.slice(1),
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedMeasureId: null,
+              measureFirst: null,
             };
           }),
 
@@ -587,7 +1660,17 @@ export const useEditorStore = create<EditorState>()(
               documents: [...s.documents, doc],
               activeDocId: doc.id,
               pieces: [],
+              // The mirrors have to empty too. Leaving the previous drawing's
+              // lines in `sketch` showed them on the new sheet, and the first
+              // edit there wrote them into it for good.
+              sketch: [],
+              measures: [],
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -600,7 +1683,14 @@ export const useEditorStore = create<EditorState>()(
             return {
               activeDocId: id,
               pieces: target.pieces,
+              sketch: target.sketch,
+              measures: target.measures ?? [],
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -621,11 +1711,23 @@ export const useEditorStore = create<EditorState>()(
               `${source.name} (ასლი)`,
               source.pieces.map((p) => ({ ...p, id: uid() })),
             );
+            copy.sketch = source.sketch.map((k) => ({ ...k, id: uid('sk') }));
+            copy.measures = (source.measures ?? []).map((m) => ({ ...m, id: uid('ms') }));
+            copy.projectName = source.projectName;
+            copy.revision = source.revision;
+            copy.scale = source.scale;
             return {
               documents: [...s.documents, copy],
               activeDocId: copy.id,
               pieces: copy.pieces,
+              sketch: copy.sketch,
+              measures: copy.measures,
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -642,7 +1744,14 @@ export const useEditorStore = create<EditorState>()(
               documents: remaining,
               activeDocId: active.id,
               pieces: active.pieces,
+              sketch: active.sketch,
+              measures: active.measures ?? [],
               selectedIds: [],
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              penPoints: [],
+              measureFirst: null,
+              selectedMeasureId: null,
               past: [],
               future: [],
             };
@@ -698,13 +1807,70 @@ export const useEditorStore = create<EditorState>()(
         setSnap: (on) => set({ snap: on }),
         setSnapStep: (step) => set({ snapStep: step }),
         setEdgeSnap: (on) => set({ edgeSnap: on }),
-        setShowDims: (on) => set({ showDims: on }),
+        setOrthoLock: (on) => set({ orthoLock: on }),
+        setShowLengths: (on) => set({ showLengths: on }),
+        setLengthVisibility: (kind, visibility) =>
+          set((s) => ({ lengthVisibility: { ...s.lengthVisibility, [kind]: visibility } })),
+        setPdfVisibility: (patch) =>
+          set((s) => ({ pdfVisibility: normalizePdfVisibility({ ...s.pdfVisibility, ...patch }) })),
+        resetScreenDisplay: () =>
+          set({
+            showLengths: true,
+            lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
+            measureStyle: { ...DEFAULT_MEASURE_STYLE },
+          }),
+        resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
+        setPdfSheet: (sheet) => set({ pdfSheet: normalizeSheetSize(sheet) }),
+        setJsonExport: (patch) =>
+          set((s) => ({ jsonExport: normalizeJsonExport({ ...s.jsonExport, ...patch }) })),
+        resetJsonExport: () => set({ jsonExport: { ...DEFAULT_JSON_EXPORT } }),
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
-        setWheelMode: (mode) => set({ wheelMode: mode }),
+        setShowGaps: (on) => set({ showGaps: on }),
+        // Simple mode has no view switcher, so it opens on the plan it works in -
+        // through the view setters, so whatever a view change also resets, it does.
+        setSimpleMode: (on) => {
+          set({ simpleMode: on });
+          if (!on) return;
+          const s = get();
+          if (s.viewMode !== '2d') s.setViewMode('2d');
+          if (s.surfaceView !== 'plan') s.setSurfaceView('plan');
+        },
+        // Preferences, so plain sets: remembered, never undo steps.
+        setFillDefaults: (defaults) => set({ fillDefaults: { ...defaults } }),
+        setWallThickness: (thickness) => set({ wallThickness: thickness }),
+        setTourSeen: (seen) => set({ tourSeen: seen }),
+        setShowSketch: (on) =>
+          set((s) => ({
+            showSketch: on,
+            // Hiding the layout while the pen is out would leave clicks
+            // vanishing into a layer nobody can see.
+            tool: on ? s.tool : 'select',
+            penPoints: on ? s.penPoints : [],
+            measureFirst: on ? s.measureFirst : null,
+            selectedSketchIds: on ? s.selectedSketchIds : [],
+          })),
+        setViewMode: (mode) => set({ viewMode: mode }),
+
+        /**
+         * Switch which orthographic view the surface shows, then reframe.
+         *
+         * The reframe is not a convenience. A plan sits around the origin
+         * while an elevation sits entirely above the ground line, at negative
+         * surface y, so keeping the pan would leave the model off-screen and
+         * the surface looking empty.
+         */
+        setSurfaceView: (view) => {
+          if (get().surfaceView === view) return;
+          set({ surfaceView: view, guideX: null, guideY: null });
+          get().fitToContent();
+        },
+
+        setHiddenLines: (mode) => set({ hiddenLines: mode }),
         setPaletteOpen: (on) => set({ paletteOpen: on }),
         setInspectorOpen: (on) => set({ inspectorOpen: on }),
+        setInspectorTab: (tab) => set({ inspectorTab: tab }),
         setPaletteQuery: (q) => set({ paletteQuery: q }),
 
         // ── catalog ───────────────────────────────────────────────────────
@@ -750,6 +1916,25 @@ export const useEditorStore = create<EditorState>()(
             ),
           })),
 
+        // The same as a stock edit on every row at once: no undo step, and the
+        // sync diff sends each changed row through set_stock, so the server's
+        // stock log records it like any other count.
+        setAllStock: (warehouseId, quantity) =>
+          set((s) => ({
+            materials: s.materials.map((m) => ({
+              ...m,
+              stock: withStockIn(m.stock, warehouseId, quantity),
+            })),
+          })),
+
+        // Catalog data, so it is an undo step like any material edit - and only
+        // ever onto a blank; see COMPANY_WEIGHTS.
+        fillMissingWeights: () => {
+          const { materials, filled } = withCompanyWeights(get().materials);
+          if (filled) commit(() => ({ materials }));
+          return filled;
+        },
+
         importMaterials: (drafts) => {
           if (!drafts.length) return 0;
           const taken = new Set(get().materials.map((m) => m.id));
@@ -789,40 +1974,299 @@ export const useEditorStore = create<EditorState>()(
         openDialog: (dialog) => set({ dialog }),
         closeDialog: () => set({ dialog: null }),
         setToast: (message) => set({ toast: message }),
+        // Plain set: a preview is looked at, not drawn, so it takes no undo step.
+        setRecommendPreview: (pieces) => set({ recommendPreview: pieces }),
+
+        // The backdrop is not drawing data: plain sets, never an undo step.
+        setUnderlay: (underlay) => set({ underlay }),
+        changeUnderlay: (patch) =>
+          set((s) => (s.underlay ? { underlay: patchUnderlay(s.underlay, patch) } : {})),
+
+        // ── the drawn layout ────────────────────────────────────────────────
+        setTool: (tool, perimeter) =>
+          set((s) => ({
+            tool,
+            penPerimeter: perimeter ?? s.penPerimeter,
+            // You cannot draw into, or measure off, a layer you cannot see.
+            showSketch: tool !== 'select' ? true : s.showSketch,
+            // Leaving a tool abandons whatever it was halfway through, rather
+            // than keeping a dangling path or point that reappears next time.
+            penPoints: tool === 'pen' ? s.penPoints : [],
+            measureFirst: tool === 'measure' ? s.measureFirst : null,
+          })),
+
+        setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),
+
+        setSketchPerimeter: (pathIds, perimeter) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) =>
+              pathIds.includes(k.id) ? { ...k, perimeter } : k,
+            ),
+          })),
+
+        penAddPoint: (x, y) =>
+          set((s) => {
+            const last = s.penPoints[s.penPoints.length - 1];
+            /**
+             * A vertex the pointer never really moved to.
+             *
+             * Judged in screen pixels rather than centimetres, because that is
+             * where the intent is: a hand that has not moved has not asked for
+             * a leg, however many centimetres a pixel happens to be worth at
+             * this zoom. Double-clicking to finish a run is the case that made
+             * it necessary — the second click of the pair lands a pixel from
+             * the first and used to plant a 2 cm stub before the run ended.
+             */
+            if (last && Math.hypot(x - last.x, y - last.y) * s.zoom < DRAG_THRESHOLD_PX) {
+              return {};
+            }
+            return { penPoints: [...s.penPoints, { x, y }] };
+          }),
+
+        penUndoPoint: () => set((s) => ({ penPoints: s.penPoints.slice(0, -1) })),
+
+        penCancel: () => set({ penPoints: [] }),
+
+        penFinish: (closed = false) =>
+          commit((s) => {
+            // One point is a dot, not a line. Two coincident points likewise.
+            if (s.penPoints.length < 2) return { penPoints: [] };
+            const path: SketchPath = {
+              id: uid('sk'),
+              points: s.penPoints,
+              ...(closed ? { closed: true } : {}),
+              perimeter: s.penPerimeter,
+            };
+            // With a wall thickness set, the pen draws a wall: the other face of
+            // the pour goes in with the line, as one undo step - see `wallPartner`.
+            const thickness = normalizeWallThickness(s.wallThickness);
+            const added = thickness === null ? [path] : [path, wallPartner(path, thickness)];
+            return { sketch: [...s.sketch, ...added], penPoints: [] };
+          }),
+
+        dragSketch: (hit, dx, dy, baseline, whole = false) =>
+          apply((s) => {
+            const moved = whole
+              ? translatePath(baseline, dx, dy)
+              : hit.vertex !== undefined
+                ? moveVertex(baseline, hit.vertex, dx, dy)
+                : moveSegment(baseline, hit.index, dx, dy);
+            // Snapped after the move, not before: the move is constrained to
+            // one axis, so snapping the raw pointer delta would put the leg on
+            // the grid in a direction it is not allowed to travel in.
+            //
+            // Whole centimetres even with the grid off, for the same reason the
+            // pen rounds: dragging a wall to 180.2 is not a dimension anybody
+            // asked for, and it is the neighbouring legs that inherit it.
+            const step = drawStep(s.snap, s.snapStep);
+            const snapped = {
+              ...moved,
+              points: moved.points.map((p, i) =>
+                baseline.points[i] && p.x === baseline.points[i].x && p.y === baseline.points[i].y
+                  ? p
+                  : { x: snapValue(p.x, step, true), y: snapValue(p.y, step, true) },
+              ),
+            };
+            return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)) };
+          }),
+
+        setLegLength: (pathId, index, cm) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) => (k.id === pathId ? setLegLengthOn(k, index, cm) : k)),
+          })),
+
+        fillSketch: (pathIds, spec) => {
+          const state = get();
+          const paths = state.sketch.filter((k) => pathIds.includes(k.id));
+          if (!paths.length) return { added: 0, warnings: ['ნახაზი ვერ მოიძებნა.'] };
+          const plan = planSketchFillAll(paths, spec, state.materials);
+          if (plan.pieces.length) {
+            commit((s) => ({
+              pieces: [...s.pieces, ...plan.pieces],
+              selectedIds: plan.pieces.map((p) => p.id),
+              // The formwork is what you are working on now, not the line it
+              // was set out to.
+              selectedSketchIds: [],
+            }));
+          }
+          return { added: plan.pieces.length, warnings: plan.warnings };
+        },
+
+        applyFillVariants: (pathIds, spec, picks) => {
+          const choices: NonNullable<SketchFillSpec['choices']> = {};
+          let stack: number[] | undefined;
+          for (const { runKey, variant } of picks) {
+            const choice = choiceFromVariant(variant);
+            stack ??= choice.stack;
+            choices[runKey] = choice.sequences;
+          }
+          return get().fillSketch(pathIds, { ...spec, stack, choices });
+        },
+
+        dragSketchAll: (dx, dy, baselines) =>
+          apply((s) => {
+            const step = drawStep(s.snap, s.snapStep);
+            const sdx = snapValue(dx, step, true);
+            const sdy = snapValue(dy, step, true);
+            if (!sdx && !sdy) return {};
+            const byId = new Map(baselines.map((b) => [b.id, b]));
+            return {
+              sketch: s.sketch.map((k) => {
+                const base = byId.get(k.id);
+                return base ? translatePath(base, sdx, sdy) : k;
+              }),
+            };
+          }),
+
+        selectSketchMany: (ids, additive = false) =>
+          set((s) => ({
+            selectedSketchIds: additive
+              ? [...new Set([...s.selectedSketchIds, ...ids])]
+              : ids,
+            selectedSketchPart: null,
+          })),
+
+        selectSketchPart: (part) =>
+          set((s) => ({
+            selectedSketchPart: part,
+            // Picking a part picks the run it belongs to as well, so the
+            // inspector has something to show and the run can be moved whole
+            // without letting go of the leg first.
+            selectedSketchIds: part
+              ? s.selectedSketchIds.includes(part.pathId)
+                ? s.selectedSketchIds
+                : [part.pathId]
+              : s.selectedSketchIds,
+            selectedIds: part ? [] : s.selectedIds,
+          })),
+
+        insertSketchVertex: (pathId, index, at) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path) return {};
+            const step = drawStep(s.snap, s.snapStep);
+            const on = { x: snapValue(at.x, step, true), y: snapValue(at.y, step, true) };
+            return {
+              sketch: s.sketch.map((k) => (k.id === pathId ? insertVertex(k, index, on) : k)),
+              // The new junction is what you just made, so it is what is selected.
+              selectedSketchPart: { pathId, kind: 'vertex' as const, index: index + 1 },
+              // ...and the pen carries on from it. Putting a junction somewhere
+              // is almost always the first half of "and a wall goes off here";
+              // making that a second, separate gesture would be ceremony.
+              penPoints: [on],
+            };
+          }),
+
+        removeSketchVertex: (pathId, index) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path) return {};
+            const next = removeVertex(path, index);
+            return {
+              // Nothing left worth keeping means the run goes with the junction.
+              sketch: next
+                ? s.sketch.map((k) => (k.id === pathId ? next : k))
+                : s.sketch.filter((k) => k.id !== pathId),
+              selectedSketchPart: null,
+              selectedSketchIds: next ? s.selectedSketchIds : [],
+            };
+          }),
+
+        closeSketchPath: (pathId, closed) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) =>
+              // Two points enclose nothing, so there is no loop to make of them.
+              k.id === pathId && k.points.length > 2 ? { ...k, closed } : k,
+            ),
+          })),
+
+        setLegAngle: (pathId, index, deg) =>
+          commit((s) => ({
+            sketch: s.sketch.map((k) => (k.id === pathId ? setLegAngle(k, index, deg) : k)),
+          })),
+
+        selectSketch: (id, additive = false) =>
+          set((s) => {
+            if (!id) return { selectedSketchIds: [] };
+            if (!additive) {
+              return { selectedSketchIds: [id], selectedIds: [], selectedMeasureId: null };
+            }
+            return {
+              selectedSketchIds: s.selectedSketchIds.includes(id)
+                ? s.selectedSketchIds.filter((x) => x !== id)
+                : [...s.selectedSketchIds, id],
+            };
+          }),
       };
     },
     {
-      name: STORAGE_KEY,
-      version: 3,
+      // With a backend, only preferences are kept locally, and under their own
+      // key — see PREFS_KEY for why sharing the old one would destroy data.
+      name: isConfigured ? PREFS_KEY : STORAGE_KEY,
+      version: 6,
       storage: safeStorage,
       // v2 stored a single top-level `pieces` array instead of named drawings.
-      // `merge` normalises either shape, so migration just passes state through.
-      migrate: (persisted) => persisted as Partial<EditorState>,
-      // Autosave: catalog + inventory + every drawing + settings.
-      // Selection, history and dialogs stay transient.
-      partialize: (s) => ({
-        materials: s.materials,
-        removedBuiltins: s.removedBuiltins,
-        documents: s.documents,
-        activeDocId: s.activeDocId,
-        warehouses: s.warehouses,
-        zoom: s.zoom,
-        panX: s.panX,
-        panY: s.panY,
-        snap: s.snap,
-        snapStep: s.snapStep,
-        edgeSnap: s.edgeSnap,
-        showDims: s.showDims,
-        showNames: s.showNames,
-        forceLabels: s.forceLabels,
-        showOverlaps: s.showOverlaps,
-        wheelMode: s.wheelMode,
-        paletteOpen: s.paletteOpen,
-        inspectorOpen: s.inspectorOpen,
-      }),
+      // `merge` normalises either shape, so migration mostly passes through.
+      migrate: (persisted) => migratePersisted(persisted) as EditorState,
+      /**
+       * The persist middleware swallows anything `merge` throws: the store is
+       * left on its empty defaults and the next autosave writes those over the
+       * user's saved work. That is the worst possible failure mode and it is
+       * completely silent, so it gets reported here instead — loudly, and
+       * before the banner tells the user to export what is left.
+       */
+      onRehydrateStorage: () => (_state, error) => {
+        if (!error) return;
+        console.error('შენახული მონაცემების წაკითხვა ვერ მოხერხდა', error);
+        onStorageFailure(
+          'შენახული ნახაზი ვერ ჩაიტვირთა და შესაძლოა დაიკარგოს. გააკეთე ექსპორტი და გადატვირთე გვერდი.',
+        );
+      },
+      /**
+       * With a backend, company data belongs to the server and only the
+       * per-device preferences are written locally. Without one, everything is
+       * saved exactly as before so the offline path is unchanged.
+       */
+      partialize: (s) => {
+        const prefs = Object.fromEntries(
+          PREF_KEYS.map((key) => [key, s[key]]),
+        ) as Partial<EditorState>;
+        if (isConfigured) return prefs;
+        return {
+          ...prefs,
+          materials: s.materials,
+          removedBuiltins: s.removedBuiltins,
+          documents: s.documents,
+          activeDocId: s.activeDocId,
+          warehouses: s.warehouses,
+        };
+      },
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<EditorState> & { pieces?: Piece[] };
-        const { documents, activeDocId, pieces } = restoreDocuments(saved);
+
+        // Preferences only; the catalog and drawings arrive from the server.
+        if (isConfigured) {
+          return {
+            ...current,
+            ...saved,
+            measureStyle: normalizeMeasureStyle(saved.measureStyle),
+            lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+            pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+            pdfSheet: normalizeSheetSize(saved.pdfSheet),
+            jsonExport: normalizeJsonExport(saved.jsonExport),
+            inspectorTab:
+              saved.inspectorTab === undefined
+                ? current.inspectorTab
+                : normalizeInspectorTab(saved.inspectorTab),
+            dataLoaded: false,
+          };
+        }
+
+        // `sketch` has to come from the restored active drawing for the same
+        // reason `pieces` does: the top-level copy is a mirror, and a reload
+        // that trusts the mirror over the document shows the lines of whichever
+        // drawing happened to be open when the tab was last written.
+        const { documents, activeDocId, pieces, sketch, measures } = restoreDocuments(saved);
         const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
           ...current,
@@ -832,7 +2276,27 @@ export const useEditorStore = create<EditorState>()(
           documents,
           activeDocId,
           pieces,
+          sketch,
+          measures,
+          // See normalizeInspectorTab: a tab that no longer exists opens an
+          // empty panel, and `migrate` does not run within the same version.
+          inspectorTab:
+            saved.inspectorTab === undefined
+              ? current.inspectorTab
+              : normalizeInspectorTab(saved.inspectorTab),
           selectedIds: [],
+          selectedSketchIds: [],
+          // Reopening in a mode that swallows clicks would be baffling.
+          tool: 'select',
+          measureFirst: null,
+          selectedMeasureId: null,
+          measureStyle: normalizeMeasureStyle(saved.measureStyle),
+          lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+          pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
+          pdfSheet: normalizeSheetSize(saved.pdfSheet),
+          jsonExport: normalizeJsonExport(saved.jsonExport),
+          penPerimeter: 'outer',
+          penPoints: [],
           clipboard: [],
           past: [],
           future: [],
@@ -858,10 +2322,12 @@ onStorageFailure = (message) => {
  * Restores the drawing list. Handles state saved before named drawings existed,
  * where a single `pieces` array lived at the top level.
  */
-function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
+export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
   documents: DrawingDoc[];
   activeDocId: string;
   pieces: Piece[];
+  sketch: SketchPath[];
+  measures: MeasureLine[];
 } {
   const stored = Array.isArray(saved.documents) ? saved.documents : [];
   const documents = stored
@@ -871,6 +2337,10 @@ function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
       name: typeof d.name === 'string' && d.name ? d.name : 'ნახაზი',
       updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : Date.now(),
       pieces: Array.isArray(d.pieces) ? d.pieces : [],
+      // and the sketch after those — a drawing made before the pen has none
+      sketch: Array.isArray(d.sketch) ? d.sketch : [],
+      // and the measured lines after the sketch
+      measures: Array.isArray(d.measures) ? d.measures : [],
       // title-block fields arrived after named drawings did
       projectName: typeof d.projectName === 'string' ? d.projectName : '',
       revision: typeof d.revision === 'string' && d.revision ? d.revision : 'A',
@@ -880,18 +2350,30 @@ function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[] }): {
 
   if (!documents.length) {
     const doc = newDoc('ნახაზი 1', Array.isArray(saved.pieces) ? saved.pieces : []);
-    return { documents: [doc], activeDocId: doc.id, pieces: doc.pieces };
+    return {
+      documents: [doc],
+      activeDocId: doc.id,
+      pieces: doc.pieces,
+      sketch: doc.sketch,
+      measures: doc.measures,
+    };
   }
 
   const active = documents.find((d) => d.id === saved.activeDocId) ?? documents[0];
-  return { documents, activeDocId: active.id, pieces: active.pieces };
+  return {
+    documents,
+    activeDocId: active.id,
+    pieces: active.pieces,
+    sketch: active.sketch,
+    measures: active.measures,
+  };
 }
 
 /**
  * Restores the warehouse list, inventing entries for any store id that stock
  * still references — otherwise counted quantities would become unreachable.
  */
-function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[]): Warehouse[] {
+export function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[]): Warehouse[] {
   const warehouses: Warehouse[] = Array.isArray(stored)
     ? stored
         .filter((w): w is Warehouse => !!w && typeof w.id === 'string')
@@ -921,7 +2403,7 @@ function restoreWarehouses(stored: Warehouse[] | undefined, materials: Material[
  *  - re-adds built-ins that a newer app version introduced,
  *  - respects built-ins the user deleted on purpose.
  */
-function mergeCatalog(
+export function mergeCatalog(
   stored: Material[] | undefined,
   removedBuiltins: string[] | undefined,
 ): Material[] {
@@ -935,6 +2417,7 @@ function mergeCatalog(
     taken.add(m.id);
     materials.push(m);
   }
+  applySizeFixes(materials);
 
   const removed = new Set(removedBuiltins ?? []);
   for (const seed of createSeedMaterials()) {

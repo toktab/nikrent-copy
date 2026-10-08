@@ -1,0 +1,457 @@
+================================================================================
+AUTO DETECTION ALGORITHM — Complete Technical Reference
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Overview & Purpose
+2. Origin & History
+3. How It Works (The 5-Signal Probe)
+4. Signal Details (S1-S5)
+5. Routing Logic
+6. Key Parameters & Thresholds
+7. Why Each Parameter Was Chosen
+8. What PDFs It Works Best On
+9. Known Limitations
+10. Example PDFs
+11. How AUTO Relates to Other Algorithms
+12. Adding a New Algorithm to AUTO
+13. The Complete Detection Pipeline
+14. Output Format
+
+================================================================================
+1. OVERVIEW & PURPOSE
+================================================================================
+
+AUTO is not a detection algorithm itself — it is a DISPATCHER that automatically
+selects the best detection algorithm for each page of a PDF.
+
+It decides per page:
+  - BRITANIA: for Britania-style hatched plans
+  - GLASSWORKS: for everything else (mixed plans, sections, outline-only walls)
+
+The decision is made using a cheap 5-signal probe that scores each page for
+Britania-style traits. If ≥ 3 of 5 signals are true, the page goes to
+Britania; otherwise, it goes to GlassWorks.
+
+AUTO also supports:
+  - SUPER: an adaptive algorithm for unknown styles (currently routes to
+    Britania/GlassWorks with SUPER as a first attempt)
+  - Manual algorithm override (user can force a specific algorithm)
+
+Python original: kubi-f12-bridge/py/detector.py
+TypeScript port: src/lib/detection/detector_pdf.ts
+
+================================================================================
+2. ORIGIN & HISTORY
+================================================================================
+
+AUTO was created when the project had two separate algorithms (Britania and
+GlassWorks) and needed a way to automatically select the right one per page.
+
+The problem: Many PDFs contain a mix of drawing styles. One page might be a
+Britania-style plan, while the next is a GlassWorks-style section. Manual
+selection was tedious and error-prone.
+
+The solution: A cheap per-page probe that analyzes vector fills and raster
+characteristics to route each page to the best algorithm.
+
+The probe was ported from Python (detector.py) to TypeScript (detector_pdf.ts)
+as part of the in-browser detection system.
+
+================================================================================
+3. HOW IT WORKS (THE 5-SIGNAL PROBE)
+================================================================================
+
+The probe runs on each page independently. It scores 5 signals, each worth
+1 point. If the total score ≥ 3, the page is routed to Britania.
+
+PROBE DPI: 150
+  - Cheaper than the detection DPIs (200/300)
+  - Fast enough for per-page routing
+  - Sufficient resolution for the probe's needs
+
+SIGNAL S1: Dark Fill Ratio > 0.80
+  What: What fraction of vector fills are dark (normFill < 0.25)?
+  Why: Britania drawings are dominated by dark fills (wall hatches, columns).
+       GlassWorks drawings have a more mixed palette.
+
+SIGNAL S2: More Than 150 Dark Fills
+  What: Are there more than 150 dark-filled vector items?
+  Why: Britania drawings have many small dark rectangles (walls drawn as fills).
+       GlassWorks drawings have fewer, larger fills.
+
+SIGNAL S3: Fewer Than 20 Words in Text Layer
+  What: Does the text layer contain fewer than 20 words?
+  Why: Britania exports are typically text-free (no annotations).
+       GlassWorks drawings have a rich text layer with dimensions, room names, etc.
+
+SIGNAL S4: No Vector Fill Larger Than 3000 pt²
+  What: Are all vector fills smaller than 3000 pt²?
+  Why: Britania drawings use small fills (walls, columns).
+       GlassWorks drawings may have large fills (floor slabs, foundations).
+
+SIGNAL S5: ≥ 5 Grey Square Columns on 150-DPI Raster
+  What: Does a quick 150-DPI raster probe find ≥ 5 grey square columns?
+  How: inRange(gray, 130, 210) → morphological open 5x5 → find contours
+       → filter by area > 400 px², aspect < 2.5 → count
+  Why: Britania plans have many uniform grey columns.
+       GlassWorks plans may have fewer or differently-styled columns.
+
+ROUTING DECISION:
+  score = S1 + S2 + S3 + S4 + S5
+  if score ≥ 3: route to BRITANIA
+  else: route to GLASSWORKS
+
+================================================================================
+4. SIGNAL DETAILS (S1-S5)
+================================================================================
+
+S1: DARK FILL RATIO > 0.80
+  Computation:
+    - Iterate over page.get_drawings()
+    - For each item with a fill color: compute normFill = (r+g+b)/3
+    - Count dark fills (normFill < 0.25) vs total fills
+    - If dark/total > 0.80 → signal = 1
+
+  Why 0.80? Britania drawings are > 80% dark fills. GlassWorks typically
+  has 40-60% dark fills. 0.80 is a clean separator.
+
+  Edge cases:
+  - No fills → dark/total = 0 → signal = 0 (goes to GlassWorks)
+  - All fills dark → dark/total = 1.0 → signal = 1
+
+S2: MORE THAN 150 DARK FILLS
+  Computation:
+    - Same iteration as S1
+    - Count total dark fills (normFill < 0.25)
+    - If count > 150 → signal = 1
+
+  Why 150? Britania plans typically have 200-500 dark fills (many small wall
+  rectangles). GlassWorks plans have 50-150. 150 is a safe threshold.
+
+  Edge cases:
+  - Very simple plans may have < 150 fills → signal = 0
+  - Complex Britania plans may have 500+ fills → signal = 1
+
+S3: FEWER THAN 20 WORDS IN TEXT LAYER
+  Computation:
+    - page.get_text().split().length
+    - If words < 20 → signal = 1
+
+  Why 20? Britania exports typically have 0-5 words (just file names).
+  GlassWorks drawings have 50-200+ words (dimensions, room names, notes).
+  20 is a conservative threshold.
+
+  Edge cases:
+  - PDFs with no text layer → 0 words → signal = 1
+  - PDFs with only a title → 3-5 words → signal = 1
+
+S4: NO VECTOR FILL LARGER THAN 3000 pt²
+  Computation:
+    - Iterate over page.get_drawings()
+    - For each fill: compute area = rect.width * rect.height
+    - If any fill > 3000 pt² → signal = 0; else → signal = 1
+
+  Why 3000? Britania fills are small (walls ~100-500 pt², columns ~100-400 pt²).
+  GlassWorks may have large fills (floor slabs 5000-20000 pt²).
+  3000 pt² ≈ 55pt × 55pt ≈ 19mm × 19mm at 1:150 scale.
+
+  Edge cases:
+  - No fills → no large fills → signal = 1
+  - One large fill (e.g., title block background) → signal = 0
+
+S5: ≥ 5 GREY SQUARE COLUMNS ON 150-DPI RASTER
+  Computation:
+    - Rasterize page at 150 DPI
+    - inRange(gray, 130, 210) → grey_mask
+    - morphological OPEN 5x5 → remove noise
+    - findContours → filter: area > 400 px², aspect < 2.5
+    - Count qualifying contours
+    - If count ≥ 5 → signal = 1
+
+  Why 5? Britania plans typically have 10-30 columns. GlassWorks plans may
+  have 5-20 columns, but they're often not in the 130-210 grey range.
+  5 is a minimum to confirm "yes, this has Britania-style columns."
+
+  Why 150 DPI? Cheaper than detection DPIs. Sufficient for counting columns.
+
+================================================================================
+5. ROUTING LOGIC
+================================================================================
+
+The routing happens in detector_pdf.ts (TypeScript) / detector.py (Python):
+
+  algorithm = user_choice  // 'auto', 'britania', 'glassworks', or 'super'
+
+  for each page:
+    if algorithm == 'auto':
+      score = probe_britania_style(page)
+      if score >= 3:
+        algo = 'britania'
+      else:
+        algo = 'glassworks'
+    else:
+      algo = algorithm  // user forced a specific algorithm
+
+    if algo == 'britania':
+      result = detectBritaniaPage(cv, gray)
+    elif algo == 'glassworks':
+      result = detectGlassworksPage(page, drawing_type, mode)
+    elif algo == 'super':
+      result = detectSuperPage(cv, drawings, rasterAt, options)
+
+SUPER SPECIAL CASE:
+  SUPER has its own internal routing:
+    - Plan: SUPER's vector pass + Otsu raster + Britania hatch-bridge fallback
+    - Section: delegate to unified (GlassWorks) pipeline
+  
+  If SUPER throws, the dialog surfaces "SUPER failed, used GlassWorks"
+  (currently a silent console.error fallback).
+
+================================================================================
+6. KEY PARAMETERS & THRESHOLDS
+================================================================================
+
+PROBE DPI: 150
+  Why: Cheap enough for per-page routing, sufficient for column counting
+
+BRITANIA MIN SCORE: 3 (out of 5)
+  Why: 3/5 = 60% agreement. Conservative enough to avoid mis-routing
+  GlassWorks pages to Britania (which would produce worse results).
+  Liberal enough to catch most Britania pages.
+
+S1 THRESHOLD: 0.80 (dark fill ratio)
+S2 THRESHOLD: 150 (dark fill count)
+S3 THRESHOLD: 20 (word count)
+S4 THRESHOLD: 3000 pt² (max fill area)
+S5 THRESHOLD: 5 (grey column count)
+
+COLUMN GREY RANGE (for S5): 130-210
+  Same as Britania's column detection — consistent across algorithms.
+
+COLUMN MIN AREA (for S5): 400 px²
+COLUMN MAX ASPECT (for S5): 2.5
+  Same as Britania's column filters.
+
+================================================================================
+7. WHY EACH PARAMETER WAS CHOSEN
+================================================================================
+
+PROBE DPI = 150:
+  - 100 DPI was too coarse (missed small columns)
+  - 200 DPI was unnecessarily expensive
+  - 150 DPI is the sweet spot: fast, accurate enough
+
+MIN SCORE = 3:
+  - Score 2: Too aggressive — would route some GlassWorks pages to Britania
+  - Score 3: Conservative — only routes clearly Britania-style pages
+  - Score 4: Too conservative — would miss some Britania pages
+  - Empirically validated on britania.pdf + GlassWorks.pdf
+
+S1 = 0.80:
+  - Britania pages: typically 85-95% dark fills
+  - GlassWorks pages: typically 40-60% dark fills
+  - 0.80 is a clean separator with margin on both sides
+
+S2 = 150:
+  - Britania pages: typically 200-500 dark fills
+  - GlassWorks pages: typically 50-150 dark fills
+  - 150 catches most Britania while excluding most GlassWorks
+
+S3 = 20:
+  - Britania exports: 0-5 words
+  - GlassWorks drawings: 50-200+ words
+  - 20 is very conservative — only text-free pages qualify
+
+S4 = 3000 pt²:
+  - Britania fills: ~100-500 pt² (small wall/column rectangles)
+  - GlassWorks fills: up to 20000 pt² (floor slabs)
+  - 3000 pt² separates "small structural fills" from "large area fills"
+
+S5 = 5:
+  - Britania plans: typically 10-30 grey columns
+  - GlassWorks plans: may have 0-20 columns, but not in the 130-210 range
+  - 5 is a minimum to confirm "yes, Britania-style columns exist"
+
+================================================================================
+8. WHAT PDFs IT WORKS BEST ON
+================================================================================
+
+AUTO works BEST on:
+  ✅ PDFs with clearly distinct Britania-style and GlassWorks-style pages
+  ✅ Multi-page PDFs where different pages use different conventions
+  ✅ PDFs from unknown sources (automatic routing saves manual selection)
+  ✅ Any PDF — it's designed to be the default choice
+
+AUTO works POORLY on:
+  ❌ PDFs that are "in between" styles (score = 2 or 3 — borderline)
+  ❌ PDFs where the probe misroutes (e.g., GlassWorks page with < 20 words)
+  ❌ PDFs with mixed conventions on the same page
+
+Example PDFs:
+  - britania.pdf: All 3 pages → score ≥ 3 → all routed to Britania
+  - GlassWorks.pdf: Score < 3 → routed to GlassWorks
+  - Mixed PDF: Page 1 → Britania, Page 2 → GlassWorks (per-page routing)
+
+================================================================================
+9. KNOWN LIMITATIONS
+================================================================================
+
+BORDERLINE SCORES:
+  - Pages with score = 2 or 3 are on the boundary
+  - A GlassWorks page with < 20 words and > 80% dark fills could score 3
+  - This would misroute to Britania, producing worse results
+  - Mitigation: the thresholds are conservative (3/5 = 60%)
+
+PROBE ACCURACY:
+  - The probe uses 150 DPI, which may miss small columns
+  - Vector analysis depends on the PDF having a parseable vector layer
+  - Raster-only PDFs (scanned drawings) have no vector data → S1-S4 = 0
+
+NO SUPER PROBING:
+  - SUPER is available as a manual choice but not auto-routed
+  - Adding SUPER to the auto probe would require a separate signal set
+  - Currently, SUPER must be explicitly selected by the user
+
+PER-PAGE ROUTING OVERHEAD:
+  - Each page requires a probe (rasterization + vector analysis)
+  - At 150 DPI, this adds ~0.5-1s per page
+  - Total overhead for a 10-page PDF: ~5-10s
+
+================================================================================
+10. EXAMPLE PDFs
+================================================================================
+
+Reference PDF: britania.pdf
+  Page 1: S1=1 (92% dark), S2=1 (340 dark fills), S3=1 (3 words),
+           S4=1 (max fill 800 pt²), S5=1 (18 grey columns)
+           Score = 5/5 → BRITANIA
+
+  Page 2: S1=1, S2=1, S3=1, S4=1, S5=1
+           Score = 5/5 → BRITANIA
+
+  Page 3: S1=1, S2=0 (120 dark fills), S3=1, S4=1, S5=0 (2 grey columns)
+           Score = 3/5 → BRITANIA
+
+Reference PDF: GlassWorks.pdf
+  S1=0 (55% dark), S2=0 (80 dark fills), S3=0 (150 words),
+  S4=0 (fill 12000 pt²), S5=0 (3 grey columns)
+  Score = 0/5 → GLASSWORKS
+
+================================================================================
+11. HOW AUTO RELATES TO OTHER ALGORITHMS
+================================================================================
+
+AUTO is the ENTRY POINT that routes to the actual detectors:
+
+  User clicks "Start Detection"
+    → Worker receives: algorithm='auto', pdf=buffer
+    → detector_pdf.ts processes each page:
+        1. Run 5-signal probe
+        2. Route to Britania or GlassWorks
+        3. Return results with algo='britania' or algo='glassworks'
+    → Results displayed in the UI
+
+If user selects a specific algorithm:
+  - "Britania": all pages go to Britania (no probe)
+  - "GlassWorks": all pages go to GlassWorks (no probe)
+  - "SUPER": all pages go to SUPER (which has its own internal routing)
+
+================================================================================
+12. ADDING A NEW ALGORITHM TO AUTO
+================================================================================
+
+To add a new algorithm (e.g., "myalgorithm") to the auto router:
+
+Step 1: Create the detector
+  - Write detectMyAlgorithmPage(cv, gray, params) in a new file
+  - Must return PageResult (columns + walls)
+
+Step 2: Register in the dispatcher
+  - Add 'myalgorithm' to AlgorithmName in types.ts
+  - Import the detector in detector_pdf.ts
+  - Add a branch in detectPage():
+      if (algo === 'myalgorithm') {
+        return detectMyAlgorithmPage(cv, gray);
+      }
+
+Step 3: Extend the probe (optional)
+  - Add new signals for your algorithm's style
+  - Adjust the routing logic in the 'auto' branch
+  - Keep BRITANIA_MIN_SCORE semantics intact
+
+Step 4: Expose in UI
+  - Add <option value="myalgorithm"> in DetectDialog.tsx
+  - Add description in the help block
+
+Step 5: Test
+  - Unit tests: feed synthetic data, assert boxes
+  - End-to-end: run on real PDFs, compare to reference
+
+================================================================================
+13. THE COMPLETE DETECTION PIPELINE
+================================================================================
+
+Here is the full flow from user action to displayed results:
+
+1. User opens /detection page
+2. User clicks "+" to create a new detection
+3. User drops/selects a PDF file
+4. Worker loads the PDF:
+   - pdf.js opens the PDF
+   - For each page, sends a 'pages' message with page count
+5. User selects pages and algorithm (or leaves as "Auto")
+6. User clicks "Start Detection"
+7. Worker processes each page:
+   a. If algorithm = 'auto':
+      - Probe the page (5 signals at 150 DPI)
+      - Route to Britania or GlassWorks
+   b. Run the selected algorithm:
+      - Britania: raster at 300 DPI → threshold → morphology → contours
+      - GlassWorks: vector-first + raster fallback (200/300 DPI)
+      - SUPER: adaptive Otsu + delegation
+   c. Return results as PageResult
+8. Worker sends 'done' message with all results
+9. App stores results in history (localStorage)
+10. App renders the detected elements on the canvas:
+    - Columns: green rectangles
+    - Walls: orange rectangles
+    - Foundations: magenta rectangles (section only)
+
+================================================================================
+14. OUTPUT FORMAT
+================================================================================
+
+AUTO outputs the same JSON format as the individual algorithms:
+
+LEGACY FORMAT (what the worker produces):
+{
+  "source": { "pdf": "drawing.pdf", "n_pages": 3 },
+  "algorithms": {
+    "page_1": "britania",
+    "page_2": "glassworks",
+    "page_3": "britania"
+  },
+  "all_pages": {
+    "page_1": {
+      "drawing_type": "plan",
+      "columns": [...],
+      "walls": [...]
+    },
+    "page_2": {
+      "drawing_type": "section",
+      "scale": 50,
+      "detectedWalls": [...],
+      "detectedColumns": [...],
+      "foundations": [...]
+    }
+  }
+}
+
+Note: The "algorithms" field records which algorithm was used per page.
+This is useful for debugging and understanding the routing decisions.
+
+================================================================================
+END OF DOCUMENT
+================================================================================
