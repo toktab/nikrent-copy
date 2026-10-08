@@ -74,6 +74,7 @@ import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
 import { GapMark } from './GapMark';
 import { SketchLayer } from './SketchLayer';
+import { UnderlayLayer } from './UnderlayLayer';
 
 /** What the pointer is currently doing on the stage. */
 type Interaction =
@@ -1255,6 +1256,12 @@ export function StageCanvas() {
         {/* Ground level. In an elevation this is the slab everything stands on,
             and the one line that makes a height readable at a glance. */}
         {elevation && <div className="ground-line" style={{ width: WORLD_W }} />}
+
+        {/* The architect's PDF, faint, to draw on top of. Plan only: it is a
+            plan view of a building, and under an elevation it would mean
+            nothing. Above the grid so the ruling does not show through it,
+            below everything that is actually the drawing. */}
+        {!elevation && <UnderlayLayer />}
 
         {/* The drawn layout, under everything: the formwork is set out to it. */}
         {!elevation && showSketch && (

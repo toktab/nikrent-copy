@@ -26,6 +26,7 @@ import { ProblemsButton } from './ProblemsButton';
 import { FillAllButton } from './FillAllButton';
 import { SimpleSteps } from './SimpleSteps';
 import { WallThicknessField } from './WallThicknessField';
+import { UnderlayControls } from './UnderlayControls';
 
 /**
  * Grid steps that match the catalog.
@@ -718,6 +719,11 @@ export function Header() {
             <WallThicknessField />
           </span>
         )}
+
+        {/* The architect's own sheet, faint under the drawing. It belongs
+            beside ხაზვა because that is the only reason it is there: you put
+            it down in order to draw on top of it. */}
+        <UnderlayControls />
 
         {/* Measuring sits beside drawing because it is the same kind of act:
             setting a line out against what is already there. */}
