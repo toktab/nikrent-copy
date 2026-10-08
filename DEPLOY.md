@@ -118,6 +118,17 @@ Build settings are already in `vercel.json` / `netlify.toml`: `npm run build`
 into `dist`, with an SPA rewrite so a password-recovery link does not land on
 the host's 404.
 
+The detection page's AI button needs a serverless function, and both hosts
+have one: `netlify/functions/generate-algorithm.ts` and
+`api/generate-algorithm.ts`, two thin wrappers around the same
+`shared/generateAlgorithm.ts`. The page always calls
+`/.netlify/functions/generate-algorithm` (which is also what the Vite dev
+proxy serves); on Vercel a rewrite in `vercel.json` sends that to `/api`, so
+nothing in the app has to know which host it is on. The function needs
+`GEMINI_API_KEY` in the host's settings, and optionally `GEMINI_MODEL`.
+Without it everything else still works - that one button reports that the AI
+service is not configured.
+
 Set two environment variables on the host, same values as `.env.local`:
 
 - `VITE_SUPABASE_URL`
