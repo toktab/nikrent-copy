@@ -190,6 +190,44 @@ export function extractSegments(
     .sort((p, q) => segLength(q) - segLength(p));
 }
 
+/**
+ * The same segments, moved into another frame.
+ *
+ * This exists because the extracted geometry and the rendered picture are not
+ * always in the same space. `getPageDrawings` reports the content stream's own
+ * coordinates, flipped with the viewport's height; on a page the PDF marks as
+ * rotated - which architects' sheets very often are, A3 landscape stored as
+ * portrait plus `/Rotate 90` - the rendered page is turned a quarter circle
+ * and that flip used the wrong side. The result lands nowhere near the drawing
+ * the user can see, so every line they try to trace misses.
+ *
+ * The page itself knows the transform, so the fix is to ask it rather than to
+ * re-derive it: see `viewportMapper`.
+ */
+export function mapSegments(list: Seg[], map: (p: Pt) => Pt): Seg[] {
+  return list.map((s) => ({ ...s, a: map(s.a), b: map(s.b) }));
+}
+
+/**
+ * Takes a point as `getPageDrawings` reports it and returns where it actually
+ * sits on the rendered page.
+ *
+ * `flipHeight` must be the height that extraction used for its y flip (the
+ * scale-1 viewport height), because undoing that flip is what gets us back to
+ * the content stream's own y-up space; `convert` is the page viewport's own
+ * `convertToViewportPoint`, which then applies the rotation, the flip and any
+ * crop offset exactly as the renderer did.
+ */
+export function viewportMapper(
+  flipHeight: number,
+  convert: (x: number, y: number) => number[],
+): (p: Pt) => Pt {
+  return (p: Pt) => {
+    const [x, y] = convert(p.x, flipHeight - p.y);
+    return { x, y };
+  };
+}
+
 /** Whether a segment is within `tolDeg` of horizontal or vertical. */
 export function axisOf(s: { a: Pt; b: Pt }, tolDeg = 3): 'h' | 'v' | 'free' {
   const angle = segAngleDeg(s);

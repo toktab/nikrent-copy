@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { VectorDrawing } from '../../detection/pdf';
-import { axisOf, extractSegments, segLength, type Seg } from '../segments';
-import { matchStroke, strokeAsSegment } from '../match';
+import {
+  axisOf,
+  extractSegments,
+  mapSegments,
+  segLength,
+  viewportMapper,
+  type Seg,
+} from '../segments';
+import { matchStroke, piecesOverlap, strokeAlong, strokeAsSegment } from '../match';
 import { chainPaths, fitTracedLines, originAt, type TracedLine } from '../fit';
 
 const drawing = (items: VectorDrawing['items']): VectorDrawing => ({
@@ -65,6 +72,38 @@ describe('extractSegments', () => {
   });
 });
 
+describe('putting the lines where the page is drawn', () => {
+  /**
+   * The bug this exists for: an A3 sheet stored portrait with /Rotate 90.
+   * The renderer turns it a quarter circle; the extracted geometry is not
+   * turned, and was flipped with the rotated height, so it landed off the
+   * page entirely - which is what made every traced line miss its wall.
+   */
+  it('turns a rotated page’s geometry onto the rendered sheet', () => {
+    // pdf.js for /Rotate 90 on a 841.8 × 1190.52 page: (x, y) -> (y, x).
+    const convert = (x: number, y: number) => [y, x];
+    const map = viewportMapper(841.8, convert);
+    // A point extraction reported above the page, as it does on these sheets.
+    expect(map({ x: 93.6, y: -296.1 })).toEqual({ x: 1137.9, y: 93.6 });
+    const inside = map({ x: 400, y: 600 });
+    expect(inside.x).toBeCloseTo(241.8, 1);
+    expect(inside.y).toBe(400);
+  });
+
+  it('leaves an unrotated page exactly where it was', () => {
+    // The ordinary transform: flip y about the page height.
+    const h = 842;
+    const map = viewportMapper(h, (x, y) => [x, h - y]);
+    expect(map({ x: 120, y: 300 })).toEqual({ x: 120, y: 300 });
+  });
+
+  it('moves both ends and keeps what the line is', () => {
+    const list: Seg[] = [{ id: 'a', a: { x: 1, y: 2 }, b: { x: 3, y: 4 }, parts: 7 }];
+    const moved = mapSegments(list, (p) => ({ x: p.x + 10, y: p.y * 2 }));
+    expect(moved[0]).toEqual({ id: 'a', a: { x: 11, y: 4 }, b: { x: 13, y: 8 }, parts: 7 });
+  });
+});
+
 describe('matchStroke', () => {
   const wall: Seg = { id: 'wall', a: { x: 0, y: 0 }, b: { x: 200, y: 0 }, parts: 1 };
   const other: Seg = { id: 'other', a: { x: 0, y: 60 }, b: { x: 200, y: 60 }, parts: 1 };
@@ -100,6 +139,53 @@ describe('matchStroke', () => {
   it('keeps an unmatched stroke as the user’s own line', () => {
     const own = strokeAsSegment({ x: 0, y: 0 }, { x: 10, y: 0 }, 'hand1');
     expect(own).toMatchObject({ id: 'hand1', parts: 0 });
+  });
+
+  it('squares up a hand line that was nearly square already', () => {
+    const own = strokeAsSegment({ x: 0, y: 0 }, { x: 200, y: 6 }, 'hand2');
+    expect(own.b).toEqual({ x: 200, y: 0 });
+    const upright = strokeAsSegment({ x: 0, y: 0 }, { x: 5, y: 150 }, 'hand3');
+    expect(upright.b).toEqual({ x: 0, y: 150 });
+    // ...and leaves a deliberate diagonal alone.
+    const diagonal = strokeAsSegment({ x: 0, y: 0 }, { x: 100, y: 100 }, 'hand4');
+    expect(diagonal.b).toEqual({ x: 100, y: 100 });
+  });
+});
+
+describe('strokeAlong', () => {
+  const wall = { a: { x: 0, y: 0 }, b: { x: 200, y: 0 } };
+
+  it('takes what was drawn, straightened onto the line', () => {
+    const piece = strokeAlong(wall, { x: 52, y: 4 }, { x: 140, y: -3 });
+    expect(piece.a).toEqual({ x: 52, y: 0 });
+    expect(piece.b).toEqual({ x: 140, y: 0 });
+  });
+
+  // Nobody hits the exact end of a wall by hand, and a corner that nearly
+  // meets is the one defect that makes a traced drawing useless.
+  it('runs to the corner when the stroke came close to it', () => {
+    const piece = strokeAlong(wall, { x: 6, y: 1 }, { x: 191, y: -1 });
+    expect(piece.a.x).toBe(0);
+    expect(piece.b.x).toBe(200);
+  });
+
+  it('never runs past the line', () => {
+    const piece = strokeAlong(wall, { x: -80, y: 0 }, { x: 320, y: 0 });
+    expect(piece.a.x).toBe(0);
+    expect(piece.b.x).toBe(200);
+  });
+
+  it('keeps a vertical wall vertical', () => {
+    const upright = { a: { x: 10, y: 0 }, b: { x: 10, y: 300 } };
+    const piece = strokeAlong(upright, { x: 13, y: 100 }, { x: 8, y: 220 });
+    expect(piece.a).toEqual({ x: 10, y: 100 });
+    expect(piece.b).toEqual({ x: 10, y: 220 });
+  });
+
+  it('spots a stretch of a wall that is already taken', () => {
+    const first = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 } };
+    expect(piecesOverlap(first, { a: { x: 50, y: 0 }, b: { x: 150, y: 0 } })).toBe(true);
+    expect(piecesOverlap(first, { a: { x: 120, y: 0 }, b: { x: 190, y: 0 } })).toBe(false);
   });
 });
 

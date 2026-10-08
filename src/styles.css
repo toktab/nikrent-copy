@@ -5573,3 +5573,60 @@ kbd {
   .trace-body { flex-direction: column; }
   .trace-panel { flex: 0 0 auto; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* Tracing: the line about to be taken, the pan cursors, and the panel bits
+   that came with zooming and undo. The preview is the same green as a
+   selected line because it is about to become one. */
+.trace-overlay.tool-grab { cursor: grab; }
+.trace-overlay.tool-grabbing { cursor: grabbing; }
+.trace-overlay .preview line {
+  stroke: #0f9c6c;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-opacity: .85;
+  vector-effect: non-scaling-stroke;
+}
+.trace-overlay .preview circle { fill: #0f9c6c; }
+.trace-overlay .preview.own line {
+  stroke: #b8870d;
+  stroke-dasharray: 7 4;
+}
+.trace-overlay .preview.own circle { fill: #b8870d; }
+
+.trace-keys {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-tertiary);
+}
+.trace-keys b {
+  color: var(--muted);
+  font-weight: 600;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+}
+.trace-note {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.trace-check { align-items: flex-start; }
+.trace-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.trace-actions .btn { flex: 1 1 0; }
+
+/* "A wall is probably here": a thick green wash over the crowded parts of the
+   sheet. Rows of squares, drawn with no gaps between them so a band reads as
+   one shape, and soft enough that the drawing underneath stays readable. */
+.trace-overlay .zone {
+  fill: #19b36b;
+  fill-opacity: .26;
+  stroke: none;
+  shape-rendering: crispEdges;
+}

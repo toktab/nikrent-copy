@@ -120,6 +120,63 @@ export function matchStroke(
 }
 
 /**
+ * The stroke, laid onto the line it matched.
+ *
+ * What a person draws is never straight and never quite in the right place,
+ * but they know exactly how much of the wall they meant. So the stroke's two
+ * ends are dropped onto the found line - the result is perfectly straight and
+ * exactly where the drawing says, while keeping the length that was drawn.
+ *
+ * Within `snapEndsPt` of either end of the line, the piece runs to that end
+ * instead. That is the difference between a wall that stops a few points short
+ * of the corner and one that meets it: nobody can hit the exact end of a line
+ * by hand, and a corner that nearly meets is the one defect that makes the
+ * traced drawing useless downstream.
+ */
+export function strokeAlong(
+  seg: { a: Pt; b: Pt },
+  strokeA: Pt,
+  strokeB: Pt,
+  snapEndsPt = 14,
+): { a: Pt; b: Pt } {
+  const dx = seg.b.x - seg.a.x;
+  const dy = seg.b.y - seg.a.y;
+  const len = Math.hypot(dx, dy);
+  if (!len) return { a: { ...seg.a }, b: { ...seg.b } };
+  const ux = dx / len;
+  const uy = dy / len;
+
+  const at = (p: Pt) => Math.max(0, Math.min(len, projectOnto(p, seg.a, seg.b)));
+  let from = Math.min(at(strokeA), at(strokeB));
+  let to = Math.max(at(strokeA), at(strokeB));
+  if (from <= snapEndsPt) from = 0;
+  if (to >= len - snapEndsPt) to = len;
+  // A stroke drawn right across one end can collapse; keep it a line.
+  if (to - from < 1) {
+    from = 0;
+    to = len;
+  }
+
+  return {
+    a: { x: seg.a.x + ux * from, y: seg.a.y + uy * from },
+    b: { x: seg.a.x + ux * to, y: seg.a.y + uy * to },
+  };
+}
+
+/** Do two pieces of the same found line cover the same stretch of it? */
+export function piecesOverlap(
+  first: { a: Pt; b: Pt },
+  second: { a: Pt; b: Pt },
+  tolPt = 2,
+): boolean {
+  const alongFirst = (p: Pt) => projectOnto(p, first.a, first.b);
+  const len = Math.hypot(first.b.x - first.a.x, first.b.y - first.a.y);
+  const from = Math.min(alongFirst(second.a), alongFirst(second.b));
+  const to = Math.max(alongFirst(second.a), alongFirst(second.b));
+  return Math.min(len, to) - Math.max(0, from) > tolPt;
+}
+
+/**
  * A stroke the program could not match, kept as the user's own line.
  *
  * Scanned drawings have no vector geometry at all, and even a clean PDF hides
@@ -127,6 +184,13 @@ export function matchStroke(
  * leave the person with nothing to do, so it becomes a line marked as theirs -
  * verified by a person and by nothing else, which the list says plainly.
  */
-export function strokeAsSegment(strokeA: Pt, strokeB: Pt, id: string): Seg {
-  return { id, a: { ...strokeA }, b: { ...strokeB }, parts: 0 };
+export function strokeAsSegment(strokeA: Pt, strokeB: Pt, id: string, squareTolDeg = 4): Seg {
+  // Straightened onto the square if it was nearly square already: the drawing
+  // this becomes is orthogonal, and a hand-drawn line two degrees off would
+  // arrive as a wall nothing can be set out from.
+  const angle = segAngleDeg({ a: strokeA, b: strokeB });
+  let b = { ...strokeB };
+  if (angleGap(angle, 0) <= squareTolDeg) b = { x: strokeB.x, y: strokeA.y };
+  else if (angleGap(angle, 90) <= squareTolDeg) b = { x: strokeA.x, y: strokeB.y };
+  return { id, a: { ...strokeA }, b, parts: 0 };
 }
