@@ -14,7 +14,14 @@
  *     the page height, exactly as PyMuPDF does).
  */
 
+// Before pdfjs: the page itself turns embedded fonts into data URLs through
+// `Uint8Array.prototype.toBase64`, which older browsers do not have.
+import '../compat/install';
 import * as pdfjsLib from 'pdfjs-dist';
+// The worker pdf.js runs its parsing in, with the same methods installed in
+// ITS scope - see compat/pdfWorkerEntry.ts. `?worker&url` makes Vite bundle it
+// as a worker and hand back the URL that pdf.js wants.
+import pdfWorkerUrl from '../compat/pdfWorkerEntry?worker&url';
 
 export type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 
@@ -136,12 +143,17 @@ if (!mapProto.getOrInsertComputed) {
   });
 }
 
-/** Point the pdf.js worker at the bundled module worker (Vite asset URL). */
+/**
+ * Point pdf.js at our own worker bundle.
+ *
+ * Not `pdf.worker.mjs` directly any more: that one assumes a browser with the
+ * byte-array methods of 2025, and without them it throws
+ * "hashOriginal.toHex is not a function" while reading the document's
+ * fingerprint - every PDF, before the first page. Ours installs those methods
+ * and then loads exactly the same worker.
+ */
 export function initPdfJs(): void {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.mjs',
-    import.meta.url,
-  ).toString();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 }
 
 export interface Pt {
