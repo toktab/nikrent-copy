@@ -5350,3 +5350,226 @@ kbd {
   padding: 0 4px;
   text-align: right;
 }
+
+/* ── ხაზვა PDF-დან ───────────────────────────────────────────────────────────
+   The tracing workspace (/trace). The sheet is the point of this screen, so
+   the page itself is paper-white at full size and everything of ours sits in a
+   thin bar above it and one panel beside it. The overlay colours are chosen
+   against white rather than against the app's dark chrome: what the program
+   found is a faint blue wash nobody has to look at, and what the two of you
+   have agreed on is solid and warm, so a traced wall is unmistakable at any
+   zoom. */
+.trace {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+.trace-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  height: var(--row1);
+  flex: 0 0 auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.trace-bar-left,
+.trace-bar-mid,
+.trace-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.trace-bar-right { margin-left: auto; }
+.trace-brand { font-size: 14px; letter-spacing: .01em; }
+.trace-file {
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trace-page {
+  font-size: 12px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.trace-busy { color: var(--warn); font-size: 12px; }
+.trace-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.trace-check b { color: var(--text); font-variant-numeric: tabular-nums; }
+.trace-error,
+.trace-flash {
+  padding: 8px 14px;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+.trace-error { background: var(--badBg); color: var(--bad); }
+.trace-flash { background: var(--panel); color: var(--text); border-bottom: 1px solid var(--line); }
+
+.trace-body { display: flex; flex: 1 1 auto; min-height: 0; }
+.trace-sheet {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  background: var(--stage);
+  padding: 18px;
+}
+.trace-stage { position: relative; margin: 0 auto; }
+.trace-canvas {
+  display: block;
+  background: #fff;
+  box-shadow: 0 2px 18px rgb(0 0 0 / .45);
+}
+.trace-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.trace-overlay.tool-trace { cursor: crosshair; }
+.trace-overlay.tool-select { cursor: pointer; }
+.trace-overlay.tool-erase { cursor: not-allowed; }
+
+/* Found by the program, not yet agreed on by anybody. */
+.trace-overlay .found {
+  stroke: #2f6ff0;
+  stroke-opacity: .34;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+.trace-overlay .found.taken { stroke-opacity: 0; }
+
+/* Agreed: the program found it and the architect drew over it. */
+.trace-overlay .traced line {
+  stroke: #e2581f;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.trace-overlay .traced circle { fill: #e2581f; }
+.trace-overlay .traced.src-hand line { stroke: #b8870d; stroke-dasharray: 7 4; }
+.trace-overlay .traced.src-hand circle { fill: #b8870d; }
+.trace-overlay .traced.on line { stroke: #0f9c6c; stroke-width: 4.4; }
+.trace-overlay .traced.on circle { fill: #0f9c6c; }
+.trace-overlay .stroke {
+  stroke: #0f9c6c;
+  stroke-width: 2.4;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.trace-empty {
+  max-width: 460px;
+  margin: 12vh auto 0;
+  text-align: center;
+  color: var(--muted);
+}
+.trace-empty h2 { color: var(--text); font-size: 20px; margin: 0 0 10px; }
+.trace-empty p { margin: 0 0 18px; line-height: 1.6; }
+
+.trace-panel {
+  flex: 0 0 330px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+.trace-tools { align-self: stretch; }
+.trace-tools button { flex: 1 1 0; }
+.trace-hint { margin: 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+
+.trace-scale {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: 13px;
+}
+.trace-scale span { color: var(--accent); font-variant-numeric: tabular-nums; }
+.trace-scale small { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+.trace-list { display: grid; gap: 6px; }
+.trace-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.trace-row.on { border-color: var(--accent); }
+.trace-num {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.trace-row-main { min-width: 0; display: grid; gap: 5px; }
+.trace-row-top { display: flex; flex-wrap: wrap; gap: 5px; }
+.trace-tag {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--panel2);
+  color: var(--muted);
+}
+.trace-tag.pdf { color: var(--ok); }
+.trace-tag.hand { color: var(--warn); }
+.trace-tag.cal { color: var(--accent); }
+.trace-tag.warn { color: var(--shortage); }
+.trace-row-len { display: flex; align-items: center; gap: 6px; }
+.trace-row-len input {
+  width: 92px;
+  padding: 4px 7px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.trace-unit { font-size: 11.5px; color: var(--muted); }
+.trace-result {
+  font-size: 11.5px;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-report {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: 12.5px;
+}
+.trace-report div { display: flex; justify-content: space-between; gap: 10px; }
+.trace-report span { color: var(--muted); }
+.trace-report b { font-variant-numeric: tabular-nums; }
+.trace-send { margin-top: auto; }
+
+@media (max-width: 860px) {
+  .trace-body { flex-direction: column; }
+  .trace-panel { flex: 0 0 auto; border-left: 0; border-top: 1px solid var(--line); }
+}
