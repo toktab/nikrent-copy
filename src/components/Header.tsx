@@ -332,6 +332,12 @@ export function Header() {
         <ProblemsButton />
         <RemainingButton />
 
+        {/* The architect's own sheet, faint under the drawing. Up here with
+            the views rather than among the tools: it sets what you are
+            looking at, like the view buttons beside it, instead of doing
+            something to the drawing. */}
+        <UnderlayControls />
+
         {/* Simple mode works in plan only, so the views go with it. */}
         {!simple && (
           <div className="seg" role="group" aria-label="ხედი">
@@ -719,11 +725,6 @@ export function Header() {
             <WallThicknessField />
           </span>
         )}
-
-        {/* The architect's own sheet, faint under the drawing. It belongs
-            beside ხაზვა because that is the only reason it is there: you put
-            it down in order to draw on top of it. */}
-        <UnderlayControls />
 
         {/* Measuring sits beside drawing because it is the same kind of act:
             setting a line out against what is already there. */}
