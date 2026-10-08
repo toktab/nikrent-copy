@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { placeUnderlay, MAX_OPACITY } from '../lib/underlay';
+import { placeUnderlay, paperScale, underlayBox, MAX_OPACITY } from '../lib/underlay';
 import { Icon } from './Icon';
 import { Menu } from './Menu';
 
@@ -8,10 +8,10 @@ import { Menu } from './Menu';
  * Putting the architect's PDF behind the drawing, and getting it out of the
  * way again.
  *
- * Everything here is one of four questions a person actually has while
- * tracing over a sheet: which page, how faint, is it in the right place, and
- * how big is it really. The last two are the same answer in different words -
- * drag it, then type the width of something you know.
+ * The menu holds what is decided once - which file, which page, whether the
+ * colours are flipped - while size, fade and the lock also sit on the sheet
+ * itself, where they are used. Anything needed while placing a drawing has to
+ * be reachable without opening anything.
  */
 
 /**
@@ -60,7 +60,8 @@ export function UnderlayControls() {
       setUnderlay(
         placeUnderlay({ ...rendered, fileName: file.name, page: 1, pageCount: doc.pageCount }),
       );
-      setToast('PDF ფონად ჩაიდო. გადმოათრიე ადგილზე, მერე ჩაკეტე და დახაზე ზემოდან.');
+      bringIntoView(rendered.ptH / rendered.ptW);
+      setToast('PDF ჩაიდო. გადმოათრიე, მიუსადაგე ზომა, მერე ჩაკეტე და დახაზე ზემოდან.');
     } catch (e) {
       setToast(`PDF ვერ გაიხსნა: ${(e as Error).message}`);
     } finally {
@@ -82,6 +83,27 @@ export function UnderlayControls() {
     }
   };
 
+  /**
+   * Lay the sheet across what is on screen right now.
+   *
+   * The way a backdrop gets lost: it is scaled to a building, you are zoomed
+   * into a corner, and it is a mile off to one side with nothing to show you
+   * which way. This brings it back under the eye in one press.
+   */
+  const bringIntoView = (ratio?: number) => {
+    const s = useEditorStore.getState();
+    const u = s.underlay;
+    const r = ratio ?? (u && u.ptW > 0 ? u.ptH / u.ptW : 1);
+    const viewW = s.stageW / s.zoom;
+    const viewH = s.stageH / s.zoom;
+    const width = viewW * 0.9;
+    s.changeUnderlay({
+      widthCm: width,
+      x: -s.panX / s.zoom + viewW * 0.05,
+      y: -s.panY / s.zoom + (viewH - width * r) / 2,
+    });
+  };
+
   const picker = (label: string, primary = false) => (
     <label className={`btn small${primary ? ' primary' : ''}`}>
       <input
@@ -98,15 +120,19 @@ export function UnderlayControls() {
     </label>
   );
 
+  const scale = underlay ? paperScale(underlay) : null;
+
   return (
     <Menu
       trigger={(isOpen) => (
         <button
           className={`btn${isOpen ? ' active' : ''}${underlay?.visible ? ' engaged' : ''}`}
-          title="არქიტექტორის PDF ნახაზის ქვეშ - ზემოდან ხაზვისთვის"
+          title="არქიტექტორის PDF ნახაზის ქვეშ - ზემოდან ხაზვისთვის (P)"
         >
           <Icon name="sheet" /> <span className="btn-label">PDF ფონი</span>
-          {underlay?.visible && <span className="snap-step">{Math.round(underlay.opacity * 100)}%</span>}
+          {underlay?.visible && (
+            <span className="snap-step">{Math.round(underlay.opacity * 100)}%</span>
+          )}
         </button>
       )}
     >
@@ -114,38 +140,17 @@ export function UnderlayControls() {
         <div className="underlay-menu">
           {!underlay ? (
             <>
-              <p className="trace-hint">
-                ჩადე არქიტექტორის PDF ნახაზის ქვეშ და ზემოდან დახაზე - გამჭვირვალობას შენ ირჩევ.
+              <p className="underlay-lede">
+                ჩადე არქიტექტორის PDF ნახაზის ქვეშ და ზემოდან დახაზე - როგორც კალკა.
               </p>
               {picker(busy ? 'იხსნება…' : 'PDF-ის არჩევა…', true)}
             </>
           ) : (
             <>
-              <div className="underlay-file" title={underlay.fileName}>
-                {underlay.fileName}
+              <div className="underlay-head">
+                <b title={underlay.fileName}>{underlay.fileName}</b>
+                {scale && <span className="underlay-chip">≈ 1:{Math.round(scale)}</span>}
               </div>
-
-              <label className="vis-check">
-                <input
-                  type="checkbox"
-                  checked={underlay.visible}
-                  onChange={(e) => changeUnderlay({ visible: e.target.checked })}
-                />
-                <span>ჩანს</span>
-              </label>
-
-              <label className="underlay-row">
-                <span>გამჭვირვალობა</span>
-                <input
-                  type="range"
-                  min={0.05}
-                  max={MAX_OPACITY}
-                  step={0.05}
-                  value={underlay.opacity}
-                  onChange={(e) => changeUnderlay({ opacity: Number(e.target.value) })}
-                />
-                <b>{Math.round(underlay.opacity * 100)}%</b>
-              </label>
 
               {underlay.pageCount > 1 && (
                 <div className="underlay-row">
@@ -170,8 +175,21 @@ export function UnderlayControls() {
                 </div>
               )}
 
-              <label className="underlay-row">
-                <span>სიგანე (სმ)</span>
+              <div className="underlay-row">
+                <span>გამჭვირვალობა</span>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={MAX_OPACITY}
+                  step={0.05}
+                  value={underlay.opacity}
+                  onChange={(e) => changeUnderlay({ opacity: Number(e.target.value) })}
+                />
+                <b>{Math.round(underlay.opacity * 100)}%</b>
+              </div>
+
+              <div className="underlay-row">
+                <span>სიგანე</span>
                 <input
                   type="number"
                   min={20}
@@ -179,28 +197,46 @@ export function UnderlayControls() {
                   value={Math.round(underlay.widthCm)}
                   onChange={(e) => changeUnderlay({ widthCm: Number(e.target.value) })}
                 />
-              </label>
-              <p className="trace-hint">
-                ეს არის მასშტაბი: ჩაწერე, რამდენი სანტიმეტრია მთელი ფურცლის სიგანე სინამდვილეში.
+                <small>სმ</small>
+              </div>
+
+              <div className="underlay-switches">
+                <label className="underlay-switch">
+                  <input
+                    type="checkbox"
+                    checked={underlay.visible}
+                    onChange={(e) => changeUnderlay({ visible: e.target.checked })}
+                  />
+                  <span>ჩანს <kbd>P</kbd></span>
+                </label>
+                <label className="underlay-switch">
+                  <input
+                    type="checkbox"
+                    checked={underlay.locked}
+                    onChange={(e) => changeUnderlay({ locked: e.target.checked })}
+                  />
+                  <span>ჩაკეტილი <kbd>L</kbd></span>
+                </label>
+                <label className="underlay-switch">
+                  <input
+                    type="checkbox"
+                    checked={underlay.invert}
+                    onChange={(e) => changeUnderlay({ invert: e.target.checked })}
+                  />
+                  <span>ფერების შებრუნება</span>
+                </label>
+              </div>
+
+              <p className="underlay-lede">
+                {underlay.locked
+                  ? 'ჩაკეტილია - მაუსი პირდაპირ ნახაზზე მუშაობს. გასახსნელად L.'
+                  : 'ფურცელს კუთხეებში აქვს სახელურები, გვერდით კი ზომა და „ზომით მორგება“ - ცნობილი კედლის ორი ბოლო და მისი სიგრძე.'}
               </p>
 
-              <label className="vis-check">
-                <input
-                  type="checkbox"
-                  checked={underlay.locked}
-                  onChange={(e) => changeUnderlay({ locked: e.target.checked })}
-                />
-                <span>
-                  ჩაკეტილი
-                  <small className="underlay-note">
-                    {underlay.locked
-                      ? 'ფონი ადგილზეა - მაუსი პირდაპირ ნახაზზე მუშაობს.'
-                      : 'ახლა ფონს გადმოათრევ; ჩაკეტე, რომ ხაზვა შეძლო.'}
-                  </small>
-                </span>
-              </label>
-
               <div className="underlay-actions">
+                <button className="btn small" onClick={() => bringIntoView()}>
+                  ეკრანზე მოყვანა
+                </button>
                 {picker('სხვა PDF…')}
                 <button className="btn small" onClick={() => setUnderlay(null)}>
                   მოხსნა
@@ -213,3 +249,6 @@ export function UnderlayControls() {
     </Menu>
   );
 }
+
+/** Exported for the status line and tests: the sheet's box in world cm. */
+export { underlayBox };
