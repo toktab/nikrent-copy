@@ -5630,3 +5630,101 @@ kbd {
   stroke: none;
   shape-rendering: crispEdges;
 }
+
+/* ── PDF ფონი: the architect's sheet under the drawing ───────────────────────
+   Inside the world layer, so it pans and zooms with the drawing and is sized
+   in world centimetres. Locked, it takes no pointer events at all - that is
+   what lets ხაზვა and every other tool work straight through it, the way a
+   pencil works through tracing paper. */
+.underlay {
+  position: absolute;
+  z-index: 0;
+}
+.underlay img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The sheets are black line work on white; on the dark surface the white
+     would glare, so it is knocked back and the lines keep their contrast. */
+  filter: invert(1) hue-rotate(180deg) contrast(0.9);
+}
+.underlay.locked {
+  pointer-events: none;
+}
+.underlay.movable {
+  cursor: grab;
+  outline: calc(2px / var(--z)) dashed var(--accent);
+  outline-offset: calc(2px / var(--z));
+}
+.underlay.movable:active {
+  cursor: grabbing;
+}
+.underlay-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translateY(-120%);
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.underlay-menu {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  width: 290px;
+}
+.underlay-file {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.underlay-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.underlay-row > span:first-child {
+  flex: 0 0 96px;
+  color: var(--muted);
+}
+.underlay-row input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.underlay-row input[type='number'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 7px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.underlay-row b {
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: right;
+}
+.underlay-note {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.underlay-actions {
+  display: flex;
+  gap: 8px;
+}
+.underlay-actions > * {
+  flex: 1 1 0;
+  text-align: center;
+}

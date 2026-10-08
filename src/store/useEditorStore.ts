@@ -80,6 +80,7 @@ import {
   type MeasureAnchor,
   type MeasureStyle,
 } from '../lib/measure';
+import { patchUnderlay, type Underlay } from '../lib/underlay';
 import {
   DEFAULT_JSON_EXPORT,
   normalizeJsonExport,
@@ -346,6 +347,13 @@ export interface EditorState {
    * being looked at. Never part of the drawing, its history or what is saved.
    */
   recommendPreview: Piece[] | null;
+  /**
+   * The architect's PDF, faint under the drawing, to draw on top of - see
+   * `lib/underlay.ts`. Session only, like the preview above: it is a backdrop
+   * to work against, not part of the drawing, and a rendered page is a
+   * thousand times the size of the drawing it would be saved with.
+   */
+  underlay: Underlay | null;
 
   // ── actions: data ──
   /** Replace all company data with what the server holds. */
@@ -543,6 +551,10 @@ export interface EditorState {
   closeDialog: () => void;
   setToast: (message: string | null) => void;
   setRecommendPreview: (pieces: Piece[] | null) => void;
+  /** Put a rendered PDF page behind the drawing, or `null` to take it away. */
+  setUnderlay: (underlay: Underlay | null) => void;
+  /** Move it, scale it, fade it, turn the page - see `lib/underlay.ts`. */
+  changeUnderlay: (patch: Partial<Underlay>) => void;
 
   // ── actions: the drawn layout ──
   /** Pick up the pen. The second argument also sets which face it draws. */
@@ -871,6 +883,7 @@ export const useEditorStore = create<EditorState>()(
         guideY: null,
         draggingMaterialId: null,
         recommendPreview: null,
+        underlay: null,
 
         // ── data ──────────────────────────────────────────────────────────
         /**
@@ -1963,6 +1976,11 @@ export const useEditorStore = create<EditorState>()(
         setToast: (message) => set({ toast: message }),
         // Plain set: a preview is looked at, not drawn, so it takes no undo step.
         setRecommendPreview: (pieces) => set({ recommendPreview: pieces }),
+
+        // The backdrop is not drawing data: plain sets, never an undo step.
+        setUnderlay: (underlay) => set({ underlay }),
+        changeUnderlay: (patch) =>
+          set((s) => (s.underlay ? { underlay: patchUnderlay(s.underlay, patch) } : {})),
 
         // ── the drawn layout ────────────────────────────────────────────────
         setTool: (tool, perimeter) =>
