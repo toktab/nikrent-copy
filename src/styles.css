@@ -5631,11 +5631,13 @@ kbd {
   shape-rendering: crispEdges;
 }
 
-/* ── PDF ფონი: the architect's sheet under the drawing ───────────────────────
+/* ── PDF ფონი: the architect's sheet under the drawing ──────────────────────
    Inside the world layer, so it pans and zooms with the drawing and is sized
    in world centimetres. Locked, it takes no pointer events at all - that is
    what lets ხაზვა and every other tool work straight through it, the way a
-   pencil works through tracing paper. */
+   pencil works through tracing paper. Unlocked, it is the thing being worked
+   on: corner handles, a bar beside it, and both drawn at a constant size on
+   screen so they stay usable at any zoom. */
 .underlay {
   position: absolute;
   z-index: 0;
@@ -5644,52 +5646,154 @@ kbd {
   display: block;
   width: 100%;
   height: 100%;
-  /* The sheets are black line work on white; on the dark surface the white
-     would glare, so it is knocked back and the lines keep their contrast. */
-  filter: invert(1) hue-rotate(180deg) contrast(0.9);
+}
+/* Drawings are black on white; the surface is dark. Inverted, a glaring sheet
+   becomes pale lines on dark ground - off for a coloured drawing. */
+.underlay img.inverted {
+  filter: invert(1) hue-rotate(180deg) contrast(0.92);
 }
 .underlay.locked {
   pointer-events: none;
 }
-.underlay.movable {
+.underlay.movable img {
   cursor: grab;
-  outline: calc(2px / var(--z)) dashed var(--accent);
-  outline-offset: calc(2px / var(--z));
 }
-.underlay.movable:active {
+.underlay.movable img:active {
   cursor: grabbing;
 }
-.underlay-grip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transform: translateY(-120%);
-  padding: 2px 6px;
-  border-radius: var(--r-sm);
-  background: var(--accent);
-  color: var(--ink);
-  white-space: nowrap;
-  pointer-events: none;
+.underlay.movable {
+  outline: calc(1px / var(--z)) dashed var(--accent);
+  outline-offset: calc(2px / var(--z));
+}
+.underlay.calibrating img {
+  cursor: crosshair;
 }
 
+.underlay-handle {
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--bg);
+  border-style: solid;
+  border-color: var(--accent);
+  border-radius: 50%;
+}
+.underlay-handle.tl,
+.underlay-handle.br {
+  cursor: nwse-resize;
+}
+.underlay-handle.tr,
+.underlay-handle.bl {
+  cursor: nesw-resize;
+}
+
+.underlay-calib {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.underlay-calib line {
+  stroke: var(--warn);
+}
+.underlay-calib circle {
+  fill: var(--warn);
+}
+
+/* The bar beside the sheet. Counter-scaled, so it is the same size on screen
+   whatever the drawing is zoomed to. */
+.underlay-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  white-space: nowrap;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: 0 6px 18px rgb(0 0 0 / .45);
+  font-size: 12px;
+  cursor: default;
+}
+.underlay-bar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.underlay-bar input[type='number'] {
+  width: 84px;
+  padding: 3px 6px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.underlay-bar input[type='range'] {
+  width: 86px;
+}
+.underlay-bar-fade b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: right;
+}
+.underlay-scale {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.underlay-step {
+  color: var(--warn);
+}
+
+/* The menu: what is decided once, laid out as plain rows. */
 .underlay-menu {
   display: grid;
   gap: 10px;
   padding: 12px;
-  width: 290px;
+  width: 300px;
 }
-.underlay-file {
-  font-size: 12px;
-  color: var(--muted);
+.underlay-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.underlay-head b {
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.underlay-chip {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel2);
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.underlay-lede {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
 }
 .underlay-row {
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 12.5px;
+  min-height: 26px;
 }
 .underlay-row > span:first-child {
   flex: 0 0 96px;
@@ -5702,27 +5806,48 @@ kbd {
 .underlay-row input[type='number'] {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 4px 7px;
+  padding: 4px 8px;
   background: var(--well);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-.underlay-row b {
+.underlay-row > b {
   font-variant-numeric: tabular-nums;
   min-width: 38px;
   text-align: right;
 }
-.underlay-note {
-  display: block;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.5;
+.underlay-row > small {
+  color: var(--muted);
+}
+.underlay-switches {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  background: var(--well);
+  border-radius: var(--r);
+}
+.underlay-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.underlay-switch kbd {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10.5px;
 }
 .underlay-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 .underlay-actions > * {
   flex: 1 1 0;

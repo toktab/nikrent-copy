@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampOpacity,
+  paperScale,
   patchUnderlay,
   placeUnderlay,
   scaleToLength,
@@ -51,6 +52,37 @@ describe('the PDF behind the drawing', () => {
     expect(patchUnderlay(sheet(), { page: 9 }).page).toBe(3);
     expect(patchUnderlay(sheet(), { page: 0 }).page).toBe(1);
     expect(patchUnderlay(sheet(), { page: 2.4 }).page).toBe(2);
+  });
+
+  it('arrives with its colours flipped, which is right on a dark surface', () => {
+    expect(sheet().invert).toBe(true);
+    expect(patchUnderlay(sheet(), { invert: false }).invert).toBe(false);
+  });
+
+  describe('the scale it reads at', () => {
+    /**
+     * An architect checks a sheet by its scale, not by its width in
+     * centimetres. An A3 page is 42 cm of paper across; laid out as 21 metres
+     * of building, that is 1:50.
+     */
+    it('says 1:50 when the page is laid out at fifty times paper size', () => {
+      const a3 = placeUnderlay({ ...page, ptW: 1190.5, ptH: 842 }, { widthCm: 2100 });
+      expect(Math.round(paperScale(a3)!)).toBe(50);
+    });
+
+    it('doubles when the sheet is laid out twice as big', () => {
+      const small = placeUnderlay(page, { widthCm: 1000 });
+      const big = placeUnderlay(page, { widthCm: 2000 });
+      expect(paperScale(big)! / paperScale(small)!).toBeCloseTo(2, 6);
+    });
+
+    it('follows a calibration, so scaling off a wall lands on a round number', () => {
+      const a3 = placeUnderlay({ ...page, ptW: 1190.5, ptH: 842 }, { widthCm: 1050 });
+      expect(Math.round(paperScale(a3)!)).toBe(25);
+      // A wall measured 100 on the sheet is really 200: everything doubles.
+      const fixed = scaleToLength(a3, 100, 200, { x: 0, y: 0 });
+      expect(Math.round(paperScale(fixed)!)).toBe(50);
+    });
   });
 
   describe('scaling it to something known', () => {

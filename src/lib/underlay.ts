@@ -31,6 +31,13 @@ export interface Underlay {
   widthCm: number;
   /** 0.05 to 1; the drawing has to stay the thing you can see */
   opacity: number;
+  /**
+   * Flip the page's colours. Drawings are black on white and the surface is
+   * dark, so inverted is right nearly always - it turns a glaring white sheet
+   * into pale lines on the dark ground. A coloured drawing (red structure,
+   * blue services) reads better as it was drawn, hence the switch.
+   */
+  invert: boolean;
   visible: boolean;
   /** false while it is being positioned: dragging the page moves it */
   locked: boolean;
@@ -68,6 +75,7 @@ export function placeUnderlay(
     y: 0,
     widthCm: clampWidth(page.ptW),
     opacity: DEFAULT_OPACITY,
+    invert: true,
     visible: true,
     locked: false,
     ...over,
@@ -89,6 +97,24 @@ export function patchUnderlay(current: Underlay, patch: Partial<Underlay>): Unde
     widthCm: clampWidth(next.widthCm),
     page: Math.min(Math.max(1, Math.round(next.page)), Math.max(1, next.pageCount)),
   };
+}
+
+const CM_PER_INCH = 2.54;
+const PT_PER_INCH = 72;
+
+/**
+ * The drawing scale the page is currently laid out at - the 50 of "1:50".
+ *
+ * An architect reads a sheet by its scale, so this is the number that says
+ * whether the placement is right: set the width by eye and it reads 1:47, and
+ * you know to nudge it; calibrate it off a known wall and it should land on a
+ * round 1:50 or 1:100. Worth more than the width in centimetres, which means
+ * nothing on its own.
+ */
+export function paperScale(u: Underlay): number | null {
+  const paperCm = (u.ptW / PT_PER_INCH) * CM_PER_INCH;
+  if (!(paperCm > 0)) return null;
+  return clampWidth(u.widthCm) / paperCm;
 }
 
 /**
