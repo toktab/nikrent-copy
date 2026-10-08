@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './store/useEditorStore';
 import { legacyBritaniaToV1, schemaToSketchPaths } from './lib/detectImport';
+import { takeTraceImport, TRACE_IMPORT_KEY } from './lib/trace/handoff';
+import { uid } from './lib/ids';
 import type { LegacyDetectedDoc } from './lib/detection/types';
 import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
@@ -72,6 +74,39 @@ export default function App() {
       sessionStorage.removeItem('detect-import');
     }
   }, [dataLoaded]);
+
+  /**
+   * Walls traced off a PDF in the /trace tab.
+   *
+   * That tab hands them over through localStorage rather than sessionStorage,
+   * because it is a different tab - so this listens as well as looking once on
+   * load: with the editor already open beside the tracing page, "send to the
+   * editor" lands here while the user watches, instead of on a later reload.
+   */
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const take = () => {
+      const handed = takeTraceImport();
+      if (!handed) return;
+      const paths = handed.paths.map((p) => ({
+        id: uid('sk'),
+        points: p.points,
+        ...(p.closed ? { closed: true } : {}),
+        perimeter: 'outer' as const,
+      }));
+      useEditorStore.getState().appendSketch(paths);
+      useEditorStore.getState().fitToContent();
+      setToast(
+        `PDF-დან ჩაიტვირთა ${paths.length} ხაზი${handed.fileName ? ` - ${handed.fileName}` : ''}.`,
+      );
+    };
+    take();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === TRACE_IMPORT_KEY && e.newValue) take();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [dataLoaded, setToast]);
 
   return (
     <div className="app">

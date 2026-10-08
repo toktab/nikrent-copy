@@ -454,6 +454,18 @@ export function Header() {
                   >
                     ნახაზის იმპორტი
                   </MenuItem>
+                  {/* Its own tab on purpose: there the whole screen is the
+                      architect's PDF. What is traced there arrives here by
+                      itself, with this window left open. */}
+                  <MenuItem
+                    icon="pen"
+                    onClick={() => {
+                      window.open('/trace', '_blank', 'noopener');
+                      close();
+                    }}
+                  >
+                    ხაზვა PDF-დან…
+                  </MenuItem>
                   <MenuItem
                     icon="trash"
                     danger
