@@ -29,6 +29,7 @@ import { PasswordDialog } from './components/PasswordDialog';
 import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
 import { RemainingDialog } from './components/RemainingDialog';
 import { ExportDialog } from './components/ExportDialog';
+import { DrawingSizeDialog } from './components/DrawingSizeDialog';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { CommandPalette } from './components/CommandPalette';
 import { TourDialog } from './components/TourDialog';
@@ -167,6 +168,7 @@ export default function App() {
       {dialog?.kind === 'display-settings' && <DisplaySettingsDialog />}
       {dialog?.kind === 'remaining' && <RemainingDialog />}
       {dialog?.kind === 'export' && <ExportDialog key={dialog.tab} tab={dialog.tab} />}
+      {dialog?.kind === 'drawing-size' && <DrawingSizeDialog />}
       {dialog?.kind === 'confirm' && (
         <ConfirmDialog
           title={dialog.title}
