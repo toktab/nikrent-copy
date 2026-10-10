@@ -408,6 +408,18 @@ export function Header() {
                   >
                     შტამპი…
                   </MenuItem>
+                  {/* A plan traced off a PDF has the right shape at a guessed
+                      size; this sets the whole thing from one known figure. */}
+                  <MenuItem
+                    icon="array"
+                    disabled={!sketch.length && !measures.length}
+                    onClick={() => {
+                      openDialog({ kind: 'drawing-size' });
+                      close();
+                    }}
+                  >
+                    ნახაზის ზომა…
+                  </MenuItem>
                   {/* One window for both, with a switch for every part of the
                       drawing; these two only decide which tab it opens on. A
                       drawing of lines alone is still worth printing or taking along. */}

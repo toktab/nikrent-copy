@@ -5665,6 +5665,11 @@ kbd {
   outline: calc(1px / var(--z)) dashed var(--accent);
   outline-offset: calc(2px / var(--z));
 }
+/* Picked up by a click, so Delete knows which thing it is being asked about. */
+.underlay.picked {
+  outline-style: solid;
+  outline-width: calc(2px / var(--z));
+}
 .underlay.calibrating img {
   cursor: crosshair;
 }
@@ -5852,4 +5857,29 @@ kbd {
 .underlay-actions > * {
   flex: 1 1 0;
   text-align: center;
+}
+
+/* The before/after of resizing a whole layout. Three plain rows: what it is,
+   what it becomes, and by how much - the last one is what tells you whether
+   you typed metres where you meant centimetres. */
+.size-now {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--well);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: 13px;
+}
+.size-now div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.size-now span {
+  color: var(--muted);
+}
+.size-now b {
+  font-variant-numeric: tabular-nums;
 }

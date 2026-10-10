@@ -195,6 +195,7 @@ export function StageCanvas() {
   const showOverlaps = useEditorStore((s) => s.showOverlaps);
   const tool = useEditorStore((s) => s.tool);
   const sketch = useEditorStore((s) => s.sketch);
+  const underlay = useEditorStore((s) => s.underlay);
   const penPoints = useEditorStore((s) => s.penPoints);
   const showSketch = useEditorStore((s) => s.showSketch);
   const showGaps = useEditorStore((s) => s.showGaps);
@@ -1401,10 +1402,13 @@ export function StageCanvas() {
       {/* A drawn layout is not an empty drawing. Someone who has set the walls
           out has started; putting a "nothing here yet" card over their lines
           would be the app disagreeing with what is plainly on screen. */}
+      {/* ...and neither is a sheet laid out to trace. The card would cover the
+          drawing somebody just put there to work from. */}
       {pieces.length === 0 &&
         sketch.length === 0 &&
         measures.length === 0 &&
         penPoints.length === 0 &&
+        !(underlay?.visible && !elevation) &&
         tool !== 'measure' && <EmptyDrawing />}
 
       {elevation && <div className="surface-hint">{VIEW_HINT[surfaceView]}</div>}

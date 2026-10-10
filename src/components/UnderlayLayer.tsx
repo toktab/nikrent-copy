@@ -59,6 +59,12 @@ export function UnderlayLayer() {
    */
   const [calib, setCalib] = useState<{ a: Pt | null; b: Pt | null } | null>(null);
   const [realCm, setRealCm] = useState('');
+  /**
+   * Picked up by clicking the sheet, so Delete knows what it is being asked
+   * to delete. Without it the key would be ambiguous while a panel is also
+   * selected, and ambiguity on a delete key is how people lose work.
+   */
+  const [picked, setPicked] = useState(false);
 
   // P shows and hides it, L locks it, arrows nudge it. Tracing is a lot of
   // looking under and over the sheet, and reaching for a menu to do that is
@@ -81,8 +87,24 @@ export function UnderlayLayer() {
         changeUnderlay({ locked: !underlay.locked });
         return;
       }
-      if (e.key === 'Escape' && calib) {
-        setCalib(null);
+      if (e.key === 'Escape') {
+        if (calib) setCalib(null);
+        setPicked(false);
+        return;
+      }
+      // Only the picked sheet answers to Delete, and it asks first: the PDF
+      // is not saved anywhere, so taking it back means finding the file again.
+      if ((e.key === 'Delete' || e.key === 'Backspace') && picked && !underlay.locked) {
+        e.preventDefault();
+        e.stopPropagation();
+        useEditorStore.getState().openDialog({
+          kind: 'confirm',
+          title: 'PDF ფონის მოხსნა',
+          message: `„${underlay.fileName}“ მოიხსნას ნახაზის ქვემოდან? ნახაზს არაფერი დაემართება - PDF თავიდან უნდა გახსნა.`,
+          confirmLabel: 'მოხსნა',
+          danger: true,
+          onConfirm: () => useEditorStore.getState().setUnderlay(null),
+        });
         return;
       }
       if (underlay.locked || !underlay.visible) return;
@@ -101,7 +123,23 @@ export function UnderlayLayer() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [underlay, changeUnderlay, calib]);
+  }, [underlay, changeUnderlay, calib, picked]);
+
+  // Clicking anywhere else puts the sheet down again, the way clicking off a
+  // selection does everywhere else in the app.
+  useEffect(() => {
+    if (!picked) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setPicked(false);
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [picked]);
+
+  // A locked sheet is not something you are working on, so it cannot be picked.
+  useEffect(() => {
+    if (underlay?.locked) setPicked(false);
+  }, [underlay?.locked]);
 
   if (!underlay || !underlay.visible) return null;
   const box = underlayBox(underlay);
@@ -128,6 +166,7 @@ export function UnderlayLayer() {
       setCalib(calib.a ? { a: calib.a, b: p } : { a: p, b: null });
       return;
     }
+    setPicked(true);
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { x: e.clientX, y: e.clientY, startX: underlay.x, startY: underlay.y };
   };
@@ -215,7 +254,9 @@ export function UnderlayLayer() {
   return (
     <div
       ref={rootRef}
-      className={`underlay${underlay.locked ? ' locked' : ' movable'}${calib ? ' calibrating' : ''}`}
+      className={`underlay${underlay.locked ? ' locked' : ' movable'}${calib ? ' calibrating' : ''}${
+        picked ? ' picked' : ''
+      }`}
       style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
     >
       <img
