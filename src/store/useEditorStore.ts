@@ -81,6 +81,7 @@ import {
   type MeasureStyle,
 } from '../lib/measure';
 import { patchUnderlay, type Underlay } from '../lib/underlay';
+import { scaleMeasures, scaleSketch, sketchBounds } from '../lib/scaleSketch';
 import {
   DEFAULT_JSON_EXPORT,
   normalizeJsonExport,
@@ -551,6 +552,12 @@ export interface EditorState {
   closeDialog: () => void;
   setToast: (message: string | null) => void;
   setRecommendPreview: (pieces: Piece[] | null) => void;
+  /**
+   * Resize the whole drawn layout about its own top-left corner, so a traced
+   * or detected plan can be set to the size it really is. Placed pieces are
+   * deliberately left alone - see `lib/scaleSketch.ts`.
+   */
+  scaleDrawing: (factor: number) => void;
   /** Put a rendered PDF page behind the drawing, or `null` to take it away. */
   setUnderlay: (underlay: Underlay | null) => void;
   /** Move it, scale it, fade it, turn the page - see `lib/underlay.ts`. */
@@ -1976,6 +1983,18 @@ export const useEditorStore = create<EditorState>()(
         setToast: (message) => set({ toast: message }),
         // Plain set: a preview is looked at, not drawn, so it takes no undo step.
         setRecommendPreview: (pieces) => set({ recommendPreview: pieces }),
+
+        // Resizing the layout IS drawing data, so it goes through commit and
+        // one Ctrl+Z puts the old size back.
+        scaleDrawing: (factor) =>
+          commit((s) => {
+            const box = sketchBounds(s.sketch, s.measures);
+            if (!box || !(factor > 0) || factor === 1) return {};
+            return {
+              sketch: scaleSketch(s.sketch, factor, box),
+              measures: scaleMeasures(s.measures, factor, box),
+            };
+          }),
 
         // The backdrop is not drawing data: plain sets, never an undo step.
         setUnderlay: (underlay) => set({ underlay }),

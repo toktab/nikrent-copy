@@ -275,6 +275,7 @@ export type DialogState =
   | { kind: 'display-settings' }
   | { kind: 'remaining' }
   | { kind: 'export'; tab: 'pdf' | 'json' }
+  | { kind: 'drawing-size' }
   | { kind: 'shortcuts' }
   | { kind: 'command' }
   | { kind: 'tour' }
