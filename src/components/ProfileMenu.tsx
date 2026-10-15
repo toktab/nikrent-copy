@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { initialsFor } from '../lib/presence';
 import { removeAvatar, updateDisplayName, uploadAvatar, validateAvatar } from '../lib/profile';
+import { saveBeforeLeaving } from '../lib/syncEngine';
 import { useAuthStore, type Role } from '../store/useAuthStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { t } from '../i18n';
@@ -111,6 +112,30 @@ export function ProfileMenu() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * Save first, then leave. Signing out stops the sync, and in server mode the
+   * drawing has no other copy, so anything still queued would be lost. If it
+   * cannot be saved, say what and let the person choose rather than dropping it.
+   */
+  async function onSignOut() {
+    setBusy(true);
+    const unsaved = await saveBeforeLeaving();
+    setBusy(false);
+    if (!unsaved) {
+      void signOut();
+      return;
+    }
+    setOpen(false);
+    openDialog({
+      kind: 'confirm',
+      title: 'ცვლილებები არ შენახულა',
+      message: `${unsaved} თუ ახლა გახვალ, შეუნახავი ცვლილებები დაიკარგება.`,
+      confirmLabel: 'მაინც გასვლა',
+      danger: true,
+      onConfirm: () => void signOut(),
+    });
   }
 
   return (
@@ -227,7 +252,7 @@ export function ProfileMenu() {
               }}
             ><Icon name="key" /> პაროლის შეცვლა
             </button>
-            <button className="btn full danger" onClick={() => void signOut()}>
+            <button className="btn full danger" disabled={busy} onClick={() => void onSignOut()}>
               გამოსვლა
             </button>
           </div>
