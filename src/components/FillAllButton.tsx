@@ -1,6 +1,7 @@
 import { useEditorStore } from '../store/useEditorStore';
 import { normalizeFillDefaults } from '../lib/fillDefaults';
 import { freeStock, stockEntered } from '../lib/fillOptions';
+import { stockView } from '../lib/inventory';
 import { solveLayout } from '../lib/layoutSolver';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
@@ -27,14 +28,15 @@ export function runFillAll(): void {
     s.setToast('შესავსები ხაზი არ არის.');
     return;
   }
-  const hasStock = stockEntered(s.materials);
+  const view = stockView(s.documents, s.activeDocId);
+  const hasStock = stockEntered(s.materials) && !view.unlimited;
   const result = solveLayout({
     paths,
     height: spec.height,
     includeCorners: spec.includeCorners,
     materials: s.materials,
     pieces: s.pieces,
-    free: hasStock ? freeStock(s.materials, s.pieces) : undefined,
+    free: hasStock ? freeStock(s.materials, s.pieces, view) : undefined,
     filters: { ...s.layoutFilters, useStock: s.layoutFilters.useStock && hasStock },
     limit: 1,
   });

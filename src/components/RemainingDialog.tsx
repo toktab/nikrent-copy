@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { useCanManageCatalog } from '../store/useAuthStore';
+import { useStockView } from '../store/useStockView';
 import { sizeLabel, fmtNum } from '../lib/bom';
-import { DEFAULT_WAREHOUSE, stockIn } from '../lib/inventory';
-import { keepWheelOffNumber } from '../lib/numberField';
+import { STATUS_LABEL, statusOf } from '../lib/inventory';
 import { remainingRows, type RemainingRow, type RemainingShow } from '../lib/remaining';
 import { CATEGORIES } from '../data/categories';
 import { Modal } from './Modal';
@@ -12,58 +11,34 @@ import { Icon } from './Icon';
 /**
  * ნაშთი: how the open drawing stands against what the company holds.
  *
- * The architect's own sheet - owned, used here, left - opened from the top bar
- * so it is one click from any view. Read-only by default; an admin can switch
- * on editing and type the totals straight into the table, which is where the
- * shortfall is looked at anyway.
+ * The architect's own sheet - owned, held by other jobs, used here, left -
+ * opened from the top bar so it is one click from any view. Read-only: owned
+ * stock is changed in the მარაგი tab, and what the other jobs hold follows
+ * from their status, set in the drawings menu.
  */
 export function RemainingDialog() {
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
-  const warehouses = useEditorStore((s) => s.warehouses);
-  const setStock = useEditorStore((s) => s.setStock);
-  const setAllStock = useEditorStore((s) => s.setAllStock);
   const closeDialog = useEditorStore((s) => s.closeDialog);
-  const drawingName = useEditorStore(
-    (s) => s.documents.find((d) => d.id === s.activeDocId)?.name ?? '',
-  );
-  const canManage = useCanManageCatalog();
+  const openDialog = useEditorStore((s) => s.openDialog);
+  const activeDoc = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocId));
+  const drawingName = activeDoc?.name ?? '';
+  const status = statusOf(activeDoc);
+  const view = useStockView();
 
   const [show, setShow] = useState<RemainingShow>('all');
   const [query, setQuery] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? DEFAULT_WAREHOUSE.id);
-  const [bulk, setBulk] = useState('500');
-  const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /**
-   * Rows edited since the filter last changed. They stay listed: under "only
-   * short", typing 120 into a row short by 4 ends the shortage at "12", and the
-   * row - and the field with the cursor in it - would vanish before the 0.
-   */
-  const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set());
 
   const remaining = useMemo(
-    () => remainingRows(materials, pieces, { show, query, keep: kept }),
-    [materials, pieces, show, query, kept],
+    () => remainingRows(materials, pieces, { show, query, view }),
+    [materials, pieces, show, query, view],
   );
   const usedKinds = useMemo(
     () => remainingRows(materials, pieces, { show: 'used' }).groups.reduce((n, g) => n + g.rows.length, 0),
     [materials, pieces],
   );
-
-  const admin = canManage && editing;
-  const warehouse = warehouses.find((w) => w.id === warehouseId) ?? warehouses[0];
-  const bulkValue = Math.max(0, Math.round(Number(bulk) || 0));
-
-  const changeShow = (next: RemainingShow) => {
-    setShow(next);
-    setKept(new Set());
-  };
-  const editStock = (id: string, whId: string, quantity: number) => {
-    setKept((k) => (k.has(id) ? k : new Set(k).add(id)));
-    setStock(id, whId, quantity);
-  };
+  const heldElsewhere = view.reserved.size > 0;
 
   const onExcel = async () => {
     setError(null);
@@ -72,7 +47,7 @@ export function RemainingDialog() {
       const { exportRemainingToExcel } = await import('../lib/excelExport');
       // The file carries every component: the filters tidy the screen, a sheet
       // sent on should not silently drop rows.
-      exportRemainingToExcel(remainingRows(materials, pieces), drawingName);
+      exportRemainingToExcel(remainingRows(materials, pieces, { view }), drawingName);
     } catch (e) {
       setError(`ექსპორტი ვერ მოხერხდა: ${(e as Error).message}`);
     }
@@ -111,8 +86,14 @@ export function RemainingDialog() {
           </div>
           <div className={`rem-tile ${remaining.shortages ? 'warn' : 'good'}`}>
             <span>არ ჰყოფნის</span>
-            <b>{remaining.shortages || '✓'}</b>
-            <small>{remaining.shortages ? 'კომპონენტს' : 'ყველაფერი ჰყოფნის'}</small>
+            <b>{remaining.unlimited ? '∞' : remaining.shortages || '✓'}</b>
+            <small>
+              {remaining.unlimited
+                ? 'მარაგი შეუზღუდავია'
+                : remaining.shortages
+                  ? 'კომპონენტს'
+                  : 'ყველაფერი ჰყოფნის'}
+            </small>
           </div>
           <div className="rem-tile">
             <span>წონა</span>
@@ -123,6 +104,30 @@ export function RemainingDialog() {
           </div>
         </div>
 
+        {/* Which yard this sheet is counted against - the one thing about it
+            that the numbers themselves do not say. */}
+        <div className={`rem-status ${status}`}>
+          <span className={`status-dot ${status}`} />
+          <span className="grow">
+            {status === 'unimportant'
+              ? 'უმნიშვნელო ნახაზი - მარაგი შეუზღუდავია, არაფერი აკლია და სხვას არაფერს ართმევს.'
+              : status === 'finished'
+                ? 'დასრულებული ნახაზი - მისი ელემენტები მარაგში დაბრუნებულია.'
+                : heldElsewhere
+                  ? 'აქტიური ნახაზი - "დარჩა" აკლებს სხვა აქტიური ნახაზების მიერ დაკავებულსაც.'
+                  : 'აქტიური ნახაზი - სხვა აქტიური ნახაზი მარაგს არ იკავებს.'}
+          </span>
+          {activeDoc && (
+            <button
+              className="btn small"
+              onClick={() => openDialog({ kind: 'project', docId: activeDoc.id })}
+              title="ნახაზის დეტალები და სტატუსის შეცვლა"
+            >
+              სტატუსი: {STATUS_LABEL[status]}
+            </button>
+          )}
+        </div>
+
         <div className="rem-bar">
           <div className="seg" role="group" aria-label="რა ჩანს">
             {filters.map(([key, label, count]) => (
@@ -130,7 +135,7 @@ export function RemainingDialog() {
                 key={key}
                 className={show === key ? 'on' : undefined}
                 aria-pressed={show === key}
-                onClick={() => changeShow(key)}
+                onClick={() => setShow(key)}
               >
                 {label} <span className="rem-seg-count">{count}</span>
               </button>
@@ -139,10 +144,7 @@ export function RemainingDialog() {
           <input
             className="search"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setKept(new Set());
-            }}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="ძებნა - მაგ. 90*300"
           />
           <button className="btn small" onClick={() => void onExcel()} title="მხოლოდ ნაშთის ცხრილი">
@@ -155,66 +157,7 @@ export function RemainingDialog() {
           >
             <Icon name="sheet" /> სრული Excel
           </button>
-          {canManage && (
-            <button
-              className={`btn small${editing ? ' engaged' : ''}`}
-              aria-pressed={editing}
-              onClick={() => {
-                setEditing((on) => !on);
-                setArmed(false);
-                setKept(new Set());
-              }}
-              title="მარაგის ციფრების რედაქტირება - მხოლოდ ადმინისტრატორი"
-            >
-              <Icon name={editing ? 'check' : 'lock'} /> {editing ? 'რედაქტირება ჩართულია' : 'ადმინ რეჟიმი'}
-            </button>
-          )}
         </div>
-
-        {admin && (
-          <div className="rem-admin">
-            <span className="grow">
-              სულ მარაგის ციფრები ცხრილში რედაქტირდება და მაშინვე ინახება
-              {warehouses.length > 1 ? '' : '.'}
-            </span>
-            {warehouses.length > 1 && (
-              <select value={warehouse?.id} onChange={(e) => setWarehouseId(e.target.value)}>
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            <span className="rem-bulk">
-              ყველას:
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={bulk}
-                onWheel={keepWheelOffNumber}
-                onChange={(e) => {
-                  setBulk(e.target.value);
-                  setArmed(false);
-                }}
-              />
-              {/* Two presses, not a popup: this window stays open, and writing
-                  one number over every real count deserves a second look. */}
-              <button
-                className={`btn small${armed ? ' primary danger' : ''}`}
-                onClick={() => {
-                  if (!armed) return setArmed(true);
-                  setAllStock(warehouse?.id ?? DEFAULT_WAREHOUSE.id, bulkValue);
-                  setArmed(false);
-                }}
-                onBlur={() => setArmed(false)}
-              >
-                {armed ? `${materials.length} კომპონენტი = ${bulkValue}? დაადასტურე` : 'ჩაწერა'}
-              </button>
-            </span>
-          </div>
-        )}
 
         {error && <div className="alert error">{error}</div>}
 
@@ -228,7 +171,8 @@ export function RemainingDialog() {
               <thead>
                 <tr>
                   <th>კომპონენტი</th>
-                  <th className="num">სულ მარაგი{admin && warehouses.length > 1 ? ` (${warehouse?.name})` : ''}</th>
+                  <th className="num">სულ მარაგი</th>
+                  <th className="num" title="სხვა აქტიურ ნახაზებში დაკავებული">სხვა ნახაზებში</th>
                   <th className="num">ამ ნახაზში</th>
                   <th className="num">დარჩა</th>
                   <th className="rem-meter-head">დაკავებული</th>
@@ -237,21 +181,14 @@ export function RemainingDialog() {
               <tbody>
                 {remaining.groups.map((g) => [
                   <tr className="rem-cat" key={g.category}>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <span className="catdot" style={{ background: CATEGORIES[g.category].color }} />
                       {g.label}
                       <span className="rem-cat-count">{g.rows.length}</span>
                     </td>
                   </tr>,
                   ...g.rows.map((r) => (
-                    <Row
-                      key={r.material.id}
-                      row={r}
-                      admin={admin}
-                      warehouseId={warehouse?.id ?? DEFAULT_WAREHOUSE.id}
-                      multi={warehouses.length > 1}
-                      onStock={editStock}
-                    />
+                    <Row key={r.material.id} row={r} unlimited={remaining.unlimited} />
                   )),
                 ])}
               </tbody>
@@ -263,22 +200,12 @@ export function RemainingDialog() {
   );
 }
 
-function Row({
-  row,
-  admin,
-  warehouseId,
-  multi,
-  onStock,
-}: {
-  row: RemainingRow;
-  admin: boolean;
-  warehouseId: string;
-  multi: boolean;
-  onStock: (id: string, warehouseId: string, quantity: number) => void;
-}) {
-  const { material: m, stock, used, left, short } = row;
-  // How much of the stock this drawing takes: calm, tight past 80%, over at 100.
-  const share = stock > 0 ? used / stock : used > 0 ? Infinity : 0;
+function Row({ row, unlimited }: { row: RemainingRow; unlimited: boolean }) {
+  const { material: m, stock, reserved, used, left, short } = row;
+  // How much of what is free for this drawing it takes: calm, tight past 80%,
+  // over at 100. An unimportant drawing takes nothing from anyone.
+  const free = Math.max(0, stock - reserved);
+  const share = free > 0 ? used / free : used > 0 ? Infinity : 0;
   const meter = share > 1 ? 'over' : share >= 0.8 ? 'tight' : 'ok';
 
   return (
@@ -290,33 +217,21 @@ function Row({
           {m.weight > 0 ? ` · ${m.weight} კგ` : ''}
         </span>
       </td>
-      <td className="num">
-        {admin ? (
-          <>
-            <input
-              className="rem-stock-input"
-              type="number"
-              min={0}
-              step={1}
-              value={stockIn(m, warehouseId)}
-              onWheel={keepWheelOffNumber}
-              onChange={(e) => onStock(m.id, warehouseId, Number(e.target.value))}
-            />
-            {multi && <span className="rem-size">სულ {stock}</span>}
-          </>
-        ) : (
-          stock
-        )}
-      </td>
+      <td className="num">{stock}</td>
+      <td className="num">{reserved || <span className="rem-dim">-</span>}</td>
       <td className="num">{used || <span className="rem-dim">-</span>}</td>
       <td className="num">
-        <span className={`rem-left${short ? ' short' : used ? '' : ' dim'}`}>
-          {short ? `−${-left} აკლია` : left}
-        </span>
+        {unlimited ? (
+          <span className="rem-left dim">∞</span>
+        ) : (
+          <span className={`rem-left${short ? ' short' : used ? '' : ' dim'}`}>
+            {short ? `−${-left} აკლია` : left}
+          </span>
+        )}
       </td>
       <td className={`rem-meter ${meter}`}>
-        {used > 0 && (
-          <i title={stock > 0 ? `${Math.round(share * 100)}% მარაგისა` : 'მარაგში არ არის'}>
+        {used > 0 && !unlimited && (
+          <i title={free > 0 ? `${Math.round(share * 100)}% თავისუფალი მარაგისა` : 'თავისუფალი მარაგი არ არის'}>
             <b style={{ width: `${Math.min(100, share * 100)}%` }} />
           </i>
         )}

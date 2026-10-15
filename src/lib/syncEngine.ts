@@ -7,6 +7,8 @@ import {
   fetchAll,
   measuresSaveUnsupported,
   recheckMeasuresColumn,
+  recheckStatusColumn,
+  statusSaveUnsupported,
   reloadDocument,
 } from './repo';
 import { captureError } from './errorLog';
@@ -50,6 +52,8 @@ interface SyncState {
    * lines look saved on this screen and are gone after a reload.
    */
   measuresUnsaved: boolean;
+  /** Likewise drawing statuses, until migration 0013 adds their column. */
+  statusUnsaved: boolean;
 }
 
 export const useSyncStore = create<SyncState>(() => ({
@@ -60,6 +64,7 @@ export const useSyncStore = create<SyncState>(() => ({
   deniedWhat: null,
   pendingChanges: false,
   measuresUnsaved: false,
+  statusUnsaved: false,
 }));
 
 const DEBOUNCE_MS = 900;
@@ -72,6 +77,7 @@ let canWrite = true;
 /** when the server was last asked whether the measures column has arrived */
 let lastMeasuresProbe = 0;
 const MEASURES_PROBE_MS = 60_000;
+let lastStatusProbe = 0;
 
 function snapshotOf(): DataSnapshot {
   const s = useEditorStore.getState();
@@ -145,6 +151,21 @@ export async function flush(): Promise<void> {
           useSyncStore.setState({ measuresUnsaved: false, pendingChanges: true });
           // Every save made while it was missing went up without its lines,
           // so every drawing goes up once more, with them this time.
+          pending = mergePlans(pending, {
+            ...emptyPlan(),
+            documentsUpsert: useEditorStore.getState().documents,
+          });
+          schedule();
+        }
+      }
+    }
+    // The same for drawing statuses and migration 0013.
+    if (statusSaveUnsupported()) {
+      useSyncStore.setState({ statusUnsaved: true });
+      if (Date.now() - lastStatusProbe > MEASURES_PROBE_MS) {
+        lastStatusProbe = Date.now();
+        if (await recheckStatusColumn()) {
+          useSyncStore.setState({ statusUnsaved: false, pendingChanges: true });
           pending = mergePlans(pending, {
             ...emptyPlan(),
             documentsUpsert: useEditorStore.getState().documents,

@@ -146,9 +146,22 @@ export interface MeasureLine {
   b: { x: number; y: number };
 }
 
+/**
+ * Where a drawing stands as a job, and so whether it holds stock.
+ *
+ * - `active` - a real job: what it places is spoken for, and every other
+ *   drawing sees that much less in the yard.
+ * - `unimportant` - a sketch, an offer, a what-if: it draws as if the yard were
+ *   bottomless and holds nothing back from anyone.
+ * - `finished` - the job is back: its parts count as returned, free again.
+ */
+export type DrawingStatus = 'unimportant' | 'active' | 'finished';
+
 export interface DrawingDoc {
   id: string;
   name: string;
+  /** absent on drawings saved before statuses existed, which read as active */
+  status?: DrawingStatus;
   /** epoch ms of the last edit */
   updatedAt: number;
   pieces: Piece[];
@@ -274,6 +287,7 @@ export type DialogState =
   | { kind: 'password' }
   | { kind: 'display-settings' }
   | { kind: 'remaining' }
+  | { kind: 'project'; docId: string }
   | { kind: 'export'; tab: 'pdf' | 'json' }
   | { kind: 'drawing-size' }
   | { kind: 'shortcuts' }

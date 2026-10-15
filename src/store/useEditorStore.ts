@@ -7,6 +7,7 @@ import type {
   DialogState,
   DocSnapshot,
   DrawingDoc,
+  DrawingStatus,
   HiddenLineMode,
   InspectorTab,
   Material,
@@ -502,6 +503,8 @@ export interface EditorState {
   newDocument: (name?: string) => void;
   switchDocument: (id: string) => void;
   renameDocument: (id: string, name: string) => void;
+  /** finished hands the drawing's parts back to every other drawing at once */
+  setDocumentStatus: (id: string, status: DrawingStatus) => void;
   duplicateDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
   setTitleBlock: (patch: Partial<Pick<DrawingDoc, 'projectName' | 'revision' | 'scale'>>) => void;
@@ -674,10 +677,16 @@ export interface EditorState {
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
 
+function isDrawingStatus(value: unknown): value is DrawingStatus {
+  return value === 'unimportant' || value === 'active' || value === 'finished';
+}
+
 function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
   return {
     id: uid('doc'),
     name,
+    // A new drawing is a job until someone says otherwise.
+    status: 'active',
     updatedAt: Date.now(),
     pieces,
     sketch: [],
@@ -1740,6 +1749,13 @@ export const useEditorStore = create<EditorState>()(
             ),
           })),
 
+        // Not an undo step: undo restores drawing content, and a status is a
+        // fact about the job. Same as a rename.
+        setDocumentStatus: (id, status) =>
+          set((s) => ({
+            documents: s.documents.map((d) => (d.id === id && d.status !== status ? { ...d, status } : d)),
+          })),
+
         duplicateDocument: (id) =>
           set((s) => {
             const source = s.documents.find((d) => d.id === id);
@@ -2409,6 +2425,8 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
     .map((d) => ({
       id: d.id,
       name: typeof d.name === 'string' && d.name ? d.name : 'ნახაზი',
+      // statuses arrived after the title block; none reads as a real job
+      status: isDrawingStatus(d.status) ? d.status : 'active',
       updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : Date.now(),
       pieces: Array.isArray(d.pieces) ? d.pieces : [],
       // and the sketch after those — a drawing made before the pen has none

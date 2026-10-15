@@ -15,7 +15,12 @@ export function SidePanel() {
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
   const selected = useEditorStore((s) => s.selectedIds.length + s.selectedSketchIds.length);
-  const shortages = useMemo(() => buildBom(materials, pieces).shortageCount, [materials, pieces]);
+  const documents = useEditorStore((s) => s.documents);
+  const activeDocId = useEditorStore((s) => s.activeDocId);
+  const shortages = useMemo(
+    () => buildBom(materials, pieces, documents, activeDocId).shortageCount,
+    [materials, pieces, documents, activeDocId],
+  );
 
   const setInspectorOpen = useEditorStore((s) => s.setInspectorOpen);
 

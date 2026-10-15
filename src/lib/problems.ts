@@ -7,6 +7,7 @@ import { allGaps, componentThatFits, faceBands, isFace, type GapRect } from './g
 import { hiddenSpan } from './projection';
 import { remainingRows } from './remaining';
 import { stockEntered } from './fillOptions';
+import type { StockView } from './inventory';
 
 /**
  * Everything wrong with the open drawing, in one list - the architect's rule is
@@ -64,6 +65,8 @@ interface Input {
   materials: Material[];
   pieces: Piece[];
   sketch: SketchPath[];
+  /** the other drawings' hold on the yard - see `stockView`; none is the whole yard */
+  view?: StockView;
 }
 
 /** Colour for each drawn line - the cheap part of `findProblems`, for the canvas. */
@@ -80,7 +83,7 @@ export function lineStatuses(
   return out;
 }
 
-export function findProblems({ materials, pieces, sketch }: Input): ProblemReport {
+export function findProblems({ materials, pieces, sketch, view }: Input): ProblemReport {
   const byId = new Map(materials.map((m) => [m.id, m]));
   const problems: Problem[] = [];
   const lines = new Map<string, LineStatus>();
@@ -167,7 +170,7 @@ export function findProblems({ materials, pieces, sketch }: Input): ProblemRepor
 
   // ── short of stock (only once stock has been entered at all) ──
   if (stockEntered(materials)) {
-    for (const group of remainingRows(materials, pieces, { show: 'short' }).groups) {
+    for (const group of remainingRows(materials, pieces, { show: 'short', view }).groups) {
       for (const row of group.rows) {
         problems.push({
           id: `shortage:${row.material.id}`,

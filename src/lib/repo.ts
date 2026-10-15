@@ -1,4 +1,4 @@
-import type { DrawingDoc, Material, Piece, StockByWarehouse, Warehouse } from '../types';
+import type { DrawingDoc, DrawingStatus, Material, Piece, StockByWarehouse, Warehouse } from '../types';
 import { requireSupabase } from './supabase';
 import type { DataSnapshot, SyncPlan } from './syncDiff';
 
@@ -99,6 +99,7 @@ interface DocumentRow {
   pieces: Piece[];
   sketch?: unknown;
   measures?: unknown;
+  status?: unknown;
   version: number;
   updated_at: string;
 }
@@ -211,6 +212,51 @@ export async function recheckMeasuresColumn(): Promise<boolean> {
 }
 
 /**
+ * Set once the server has said it has no `documents.status` column - migration
+ * 0013 has not been run yet. Same treatment as the measures column: the drawing
+ * still saves, without its status, and the sync engine says so. Until then
+ * every drawing reads back as active, which is how stock was counted before.
+ */
+let statusUnsupported = false;
+
+export function statusSaveUnsupported(): boolean {
+  return statusUnsupported;
+}
+
+/** The server's two ways of saying `documents.status` is not there. Narrow, as above. */
+export function isMissingStatusColumn(error: PostgrestLikeError): boolean {
+  const text = error.message ?? '';
+  return (
+    (error.code === 'PGRST204' && text.includes("'status'")) ||
+    /column "status"( of relation "documents")? does not exist/i.test(text)
+  );
+}
+
+/** Ask whether the status column has arrived. Never throws. */
+export async function recheckStatusColumn(): Promise<boolean> {
+  try {
+    const { error } = await requireSupabase().from('documents').select('status').limit(1);
+    if (error) return false;
+    statusUnsupported = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Either optional column missing: switch it off for the session and say so. */
+function adoptMissingColumn(error: PostgrestLikeError | null): boolean {
+  if (!error) return false;
+  if (!measuresUnsupported && isMissingMeasuresColumn(error)) return (measuresUnsupported = true);
+  if (!statusUnsupported && isMissingStatusColumn(error)) return (statusUnsupported = true);
+  return false;
+}
+
+function rowStatus(value: unknown): DrawingStatus {
+  return value === 'unimportant' || value === 'finished' ? value : 'active';
+}
+
+/**
  * Which of these material ids the server already has.
  *
  * A drawing file can carry a material this screen lacks only because the tab
@@ -234,7 +280,11 @@ function documentToRow(d: DrawingDoc) {
     pieces: d.pieces,
     sketch: d.sketch ?? [],
   };
-  return measuresUnsupported ? row : { ...row, measures: d.measures ?? [] };
+  return {
+    ...row,
+    ...(measuresUnsupported ? {} : { measures: d.measures ?? [] }),
+    ...(statusUnsupported ? {} : { status: d.status ?? 'active' }),
+  };
 }
 
 function rowToDocument(row: DocumentRow): DrawingDoc {
@@ -249,6 +299,8 @@ function rowToDocument(row: DocumentRow): DrawingDoc {
     sketch: Array.isArray(row.sketch) ? row.sketch : [],
     // Nor any measured lines; the column arrives with migration 0011.
     measures: Array.isArray(row.measures) ? (row.measures as DrawingDoc['measures']) : [],
+    // And no status before migration 0013 - read as active, as stock always was.
+    status: rowStatus(row.status),
     updatedAt: new Date(row.updated_at).getTime(),
   };
 }
@@ -384,10 +436,7 @@ export async function saveDocument(doc: DrawingDoc): Promise<number> {
       .insert(documentToRow(doc))
       .select('version')
       .single();
-    if (error && !measuresUnsupported && isMissingMeasuresColumn(error)) {
-      measuresUnsupported = true;
-      return saveDocument(doc);
-    }
+    if (adoptMissingColumn(error)) return saveDocument(doc);
     if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
     const version = (data as { version: number }).version;
     versions.set(doc.id, version);
@@ -401,10 +450,7 @@ export async function saveDocument(doc: DrawingDoc): Promise<number> {
     .eq('version', expected)
     .select('version');
 
-  if (error && !measuresUnsupported && isMissingMeasuresColumn(error)) {
-    measuresUnsupported = true;
-    return saveDocument(doc);
-  }
+  if (adoptMissingColumn(error)) return saveDocument(doc);
   if (error) throw wrapError(`ნახაზი "${doc.name}"`, error);
   if (!data || data.length === 0) throw new ConflictError(doc.id);
 

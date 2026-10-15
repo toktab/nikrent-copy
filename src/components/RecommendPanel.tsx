@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { useStockView } from '../store/useStockView';
 import { freeStock, stockEntered } from '../lib/fillOptions';
 import { MAX_WALL_CM } from '../lib/sketchFill';
 import { segments } from '../lib/sketch';
@@ -116,9 +117,14 @@ export function RecommendPanel({
     setFilter(key, filters[key].includes(w) ? filters[key].filter((x) => x !== w) : [...filters[key], w]);
 
   // Stock only means something once it has been entered; see `stockEntered`.
-  // Counted against the open drawing only, the same figure the ნაშთი tab shows.
-  const hasStock = useMemo(() => stockEntered(materials), [materials]);
-  const free = useMemo(() => (hasStock ? freeStock(materials, pieces) : undefined), [hasStock, materials, pieces]);
+  // Counted the way the ნაშთი sheet counts it: less what the other active
+  // drawings hold, and not at all for an unimportant drawing.
+  const view = useStockView();
+  const hasStock = useMemo(() => stockEntered(materials) && !view.unlimited, [materials, view]);
+  const free = useMemo(
+    () => (hasStock ? freeStock(materials, pieces, view) : undefined),
+    [hasStock, materials, pieces, view],
+  );
 
   const result = useMemo(
     () =>

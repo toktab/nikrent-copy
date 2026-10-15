@@ -15,6 +15,8 @@ import { combo, overrideLabel } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
 import { BrandMark } from './BrandMark';
+import { ProjectsMenuList } from './ProjectsMenu';
+import { STATUS_LABEL, statusOf } from '../lib/inventory';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { ProfileMenu } from './ProfileMenu';
@@ -113,14 +115,13 @@ export function Header() {
   const redo = useEditorStore((s) => s.redo);
   const zoomBy = useEditorStore((s) => s.zoomBy);
   const fitToContent = useEditorStore((s) => s.fitToContent);
-  const switchDocument = useEditorStore((s) => s.switchDocument);
   const openDialog = useEditorStore((s) => s.openDialog);
   const setToast = useEditorStore((s) => s.setToast);
   const canManage = useCanManageCatalog();
 
   const shortages = useMemo(
-    () => buildBom(materials, pieces).shortageCount,
-    [materials, pieces],
+    () => buildBom(materials, pieces, documents, activeDocId).shortageCount,
+    [materials, pieces, documents, activeDocId],
   );
   const hasSelection = selectedIds.length > 0;
   const activeDoc = documents.find((d) => d.id === activeDocId);
@@ -294,7 +295,11 @@ export function Header() {
 
           <Menu
             trigger={(open) => (
-              <button className={`doc-pick${open ? ' open' : ''}`} title="მიმდინარე ნახაზი">
+              <button
+                className={`doc-pick${open ? ' open' : ''}`}
+                title={`მიმდინარე ნახაზი - ${STATUS_LABEL[statusOf(activeDoc)]}`}
+              >
+                <span className={`status-dot ${statusOf(activeDoc)}`} />
                 <span className="doc-pick-name">{activeDoc?.name ?? 'ნახაზი'}</span>
                 <span className="doc-pick-count">{activeDoc?.pieces.length ?? 0}</span>
                 <Icon name="chevron-down" size={14} />
@@ -303,20 +308,7 @@ export function Header() {
           >
             {(close) => (
               <>
-                <MenuLabel>ნახაზები</MenuLabel>
-                {documents.map((d) => (
-                  <MenuItem
-                    key={d.id}
-                    on={d.id === activeDocId}
-                    trail={d.pieces.length || undefined}
-                    onClick={() => {
-                      switchDocument(d.id);
-                      close();
-                    }}
-                  >
-                    {d.name}
-                  </MenuItem>
-                ))}
+                <ProjectsMenuList close={close} />
                 <MenuSep />
                 <MenuItem
                   icon="folder"

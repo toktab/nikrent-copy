@@ -45,6 +45,7 @@ saved drawing.
 | fill recommendations - ranked ways to fill a run; the ruleset | `src/lib/fillOptions.ts`, `docs/FILL-RULES.md` |
 | layout solver - whole-layout variants the architect's way (laps, overhang, matched faces); the recommendation tab and ყველას შევსება | `src/lib/layoutSolver.ts`, `docs/LAYOUT-SOLVER.md` |
 | ნაშთი - stock left once the open drawing is delivered (top-bar window) | `src/lib/remaining.ts`, `src/components/RemainingDialog.tsx` |
+| drawing status (აქტიური / უმნიშვნელო / დასრულებული) - other active drawings' pieces are counted out of stock, never subtracted from it | `stockView` in `src/lib/inventory.ts`, `src/components/ProjectsMenu.tsx`, `ProjectDialog.tsx`, migration 0013 |
 | ცდომილება - pieces on a drawn line against its length | `src/lib/lengthCheck.ts`, `src/components/LengthCheckPanel.tsx` |
 | all state, undo, persistence, sync | `src/store/useEditorStore.ts` |
 | the canvas | `src/components/StageCanvas.tsx`, `SketchLayer.tsx` |
