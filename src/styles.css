@@ -1983,6 +1983,51 @@ input.stock-input.bad {
   line-height: 1.4;
   color: var(--text-tertiary);
 }
+/* The other face of a built wall, made as a line from the one picked. */
+.rec-outer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+}
+.rec-outer .field {
+  width: 100%;
+}
+.rec-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+/* One wall of a whole-layout variant: a strip per face, to scale. */
+.rec-wall {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rec-wall-head {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rec-face {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rec-strip.thin {
+  height: 16px;
+}
+.rec-over {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.rec-chips-label {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 44px;
+}
 .rec-apply {
   position: sticky;
   bottom: -12px;

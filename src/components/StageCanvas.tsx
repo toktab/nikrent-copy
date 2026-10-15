@@ -44,12 +44,14 @@ import {
 } from '../lib/projection';
 import {
   closestOnLeg,
+  connectedLines,
   orthogonal,
   segmentAt,
   segments,
   snapToSketch,
   type SegmentHit,
 } from '../lib/sketch';
+import { piecesOnLines } from '../lib/outerLines';
 import { overrideHeld } from '../lib/platform';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
@@ -736,6 +738,23 @@ export function StageCanvas() {
     if (s.tool === 'measure') return;
     e.stopPropagation();
 
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      /**
+       * Shift + click on a piece standing on a drawn line picks up the whole
+       * built wall, the same as Shift + click on the line: the lines joined to
+       * it and every piece on them. Panels cover the line they stand on, so
+       * this is where the click usually lands.
+       */
+      const piece = s.pieces.find((p) => p.id === id);
+      const under = piece ? s.sketch.filter((k) => piecesOnLines([k], [piece], s.materials).length > 0) : [];
+      if (under.length) {
+        const lines = [...new Set(under.flatMap((k) => connectedLines(s.sketch, k.id)))];
+        s.selectSketchMany(lines);
+        s.selectSketchPart(null);
+        s.setSelection(piecesOnLines(s.sketch.filter((k) => lines.includes(k.id)), s.pieces, s.materials));
+        return;
+      }
+    }
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       s.toggleSelect(id);
       return; // modifier-click adjusts the selection, it does not start a drag
@@ -995,6 +1014,32 @@ export function StageCanvas() {
       const path = grab && s.sketch.find((k) => k.id === grab.pathId);
       if (grab && path) {
         /**
+         * Picking lines rather than grabbing one: Shift + click takes the line
+         * and every line joined to it, Ctrl (Cmd) + click adds or takes off
+         * just this one, and both together add the joined lines to what is
+         * already picked. Nothing is dragged - the press was for choosing.
+         */
+        const mod = e.ctrlKey || e.metaKey;
+        if (e.shiftKey || mod) {
+          if (e.shiftKey) {
+            // The joined lines and everything standing on them: the built wall,
+            // panels and all, is what Shift + click picks up.
+            const lines = connectedLines(s.sketch, path.id);
+            s.selectSketchMany(lines, mod);
+            const onThem = piecesOnLines(
+              s.sketch.filter((k) => lines.includes(k.id)),
+              s.pieces,
+              s.materials,
+            );
+            s.setSelection(mod ? [...new Set([...s.selectedIds, ...onThem])] : onThem);
+          } else {
+            s.selectSketch(path.id, true);
+            s.setSelection([]);
+          }
+          s.selectSketchPart(null);
+          return;
+        }
+        /**
          * Whether this drag moves the whole layout or one part of it.
          *
          * Grabbing a run that is already part of a bigger selection moves all
@@ -1007,7 +1052,7 @@ export function StageCanvas() {
           (s.selectedSketchIds.length > 1 || alsoPieces) && s.selectedSketchIds.includes(path.id);
         const whole = many || e.altKey;
         if (!many) {
-          s.selectSketch(path.id, e.shiftKey);
+          s.selectSketch(path.id);
           s.selectSketchPart(
             whole
               ? null

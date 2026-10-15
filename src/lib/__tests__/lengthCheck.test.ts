@@ -90,7 +90,7 @@ describe('checkPath - ცდომილება', () => {
     expect(faces(far).flatMap((f) => f.parts.map((p) => p.label))).toContain('კუთხე 20');
   });
 
-  it('accepts an outside corner closed by hand, and still catches a piece past the corner', () => {
+  it('accepts an outside corner closed by hand or lapped, and catches a piece past it that closes nothing', () => {
     const scenario = SCENARIOS.find((s) => s.name === 'l-wall-east-then-south')!;
     const plan = fill(scenario.paths);
     const near = scenario.paths[0];
@@ -102,11 +102,16 @@ describe('checkPath - ცდომილება', () => {
     const closer: Piece = { id: 'closer', materialId: 'filler-10x300', x: 560, y: -9, rot: 0, z: 0 };
     expect(leg0([...plan.pieces, closer])).toMatchObject({ ok: true, error: 0, openCorners: [30] });
 
-    // A panel carried on past the corner is too long by what sticks out.
-    const past: Piece = { id: 'past', materialId: 'panel-90x300', x: 560, y: -9, rot: 0, z: 0 };
+    // A panel carried on past the corner far enough to cover the other face is
+    // a lap - the architect's way of closing it (docs/LAYOUT-SOLVER.md, A1).
+    const lap: Piece = { id: 'lap', materialId: 'panel-90x300', x: 560, y: -9, rot: 0, z: 0 };
+    expect(leg0([...plan.pieces, lap])).toMatchObject({ ok: true, error: 0, openCorners: [] });
+
+    // Past it by less than a panel is thick covers nothing: too long by that.
+    const past: Piece = { id: 'past', materialId: 'panel-45x300', x: 560, y: -9, rot: 0, z: 0 };
     const over = leg0([...plan.pieces, past]);
     expect(over.ok).toBe(false);
-    expect(over.error).toBe(50);
+    expect(over.error).toBe(5);
   });
 
   it('says nothing about a line nobody has put anything on', () => {

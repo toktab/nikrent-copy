@@ -181,13 +181,13 @@ export function courseStacks(height: number, heights: number[], maxCourses = 4):
 }
 
 /** One entry per width, first material wins - the catalog order breaks ties. */
-function byWidth(options: PanelOption[]): PanelOption[] {
+export function byWidth(options: PanelOption[]): PanelOption[] {
   const seen = new Set<number>();
   return options.filter((o) => (seen.has(o.w) ? false : (seen.add(o.w), true)));
 }
 
 /** Every multiset of filler widths of at most `max` pieces, as count arrays. */
-function fillerCombos(widths: number[], max: number): number[][] {
+export function fillerCombos(widths: number[], max: number): number[][] {
   const out: number[][] = [];
   const counts = new Array(widths.length).fill(0);
   const walk = (i: number, left: number) => {
@@ -209,7 +209,7 @@ function fillerCombos(widths: number[], max: number): number[][] {
  * Every multiset of panel widths (widest first) summing to `target`, using at
  * most `maxPanels` pieces. Pruned by the fewest pieces the rest could still take.
  */
-function panelCombos(target: number, widths: number[], maxPanels: number): number[][] {
+export function panelCombos(target: number, widths: number[], maxPanels: number): number[][] {
   const out: number[][] = [];
   const counts = new Array(widths.length).fill(0);
   const walk = (i: number, rest: number, used: number) => {

@@ -138,6 +138,13 @@ interface Standing {
   cm: number;
   label: string;
   z: number;
+  /** laid along the leg, so it counts its whole width - and may run past an end */
+  along: boolean;
+  /** its whole extent along the leg, unclipped */
+  rawFrom: number;
+  rawTo: number;
+  /** plan thickness - what a lap has to reach past a corner to close it */
+  depth: number;
 }
 
 /**
@@ -177,7 +184,17 @@ function standingOn(leg: Leg, outward: 1 | -1, piece: Piece, m: Material): Stand
         : m.category === 'filler'
           ? `ჩ${width}`
           : String(width);
-  return { from: clipFrom, to: clipTo, cm: along ? to - from : clipTo - clipFrom, label, z: Math.round(piece.z ?? 0) };
+  return {
+    from: clipFrom,
+    to: clipTo,
+    cm: along ? to - from : clipTo - clipFrom,
+    label,
+    z: Math.round(piece.z ?? 0),
+    along,
+    rawFrom: from,
+    rawTo: to,
+    depth: m.depth,
+  };
 }
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -248,6 +265,26 @@ function checkFace(leg: Leg, side: 1 | -1, standing: Standing[]): FaceCheck {
       }
     }
     required = Math.max(0, required);
+
+    /**
+     * Run past the end on purpose. At an outside corner the architect laps the
+     * faces - one runs on past the corner to cover the end of the other - and
+     * at the free end of a line the panels may stick out into air rather than
+     * take a filler (docs/LAYOUT-SOLVER.md, A1 and A2). Either way the piece
+     * reaching past is meant to, so what it reaches past the line is part of
+     * what has to be there. Past an inside corner it is still too long: that
+     * is the concrete, or the profile. Past an outside corner by less than a
+     * panel is thick it closes nothing, and that is still too long as well.
+     */
+    const along = sorted.filter((s) => s.along);
+    if (along.length) {
+      const head = along.reduce((p, q) => (q.rawFrom < p.rawFrom ? q : p));
+      const tail = along.reduce((p, q) => (q.rawTo > p.rawTo ? q : p));
+      const past = (kind: EndKind, cm: number, depth: number) =>
+        kind === 'open' || (kind === 'outside' && cm >= depth - TOL) ? Math.max(0, cm) : 0;
+      required += past(loKind, leg.lo - head.rawFrom, head.depth);
+      required += past(hiKind, tail.rawTo - leg.hi, tail.depth);
+    }
   }
 
   const sum = standing.reduce((total, s) => total + s.cm, 0);

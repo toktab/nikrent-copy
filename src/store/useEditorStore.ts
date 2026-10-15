@@ -56,6 +56,7 @@ import {
 } from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
+import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
 import {
   isElevation,
   projectPiece,
@@ -153,7 +154,7 @@ const PREF_KEYS = [
   'inspectorTab',
   'simpleMode',
   'fillDefaults',
-  'wallThickness',
+  'layoutFilters',
   'tourSeen',
 ] as const;
 
@@ -284,6 +285,12 @@ export interface EditorState {
   simpleMode: boolean;
   /** the pour height and corner setting fills open with - see `lib/fillDefaults` */
   fillDefaults: { height: number; includeCorners: boolean };
+  /**
+   * The layout solver's filters - crossing line ends, lapping outside
+   * corners, sizes to spare, keeping placed pieces. Shared by the
+   * recommendation tab and ყველას შევსება, remembered like `fillDefaults`.
+   */
+  layoutFilters: LayoutFilters;
   /** the pen draws both faces of a wall this thick apart; null draws single lines */
   wallThickness: number | null;
   /** the first-visit tour has been seen (or closed) */
@@ -522,6 +529,7 @@ export interface EditorState {
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
   setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
+  setLayoutFilters: (filters: LayoutFilters) => void;
   /** a wall thickness for the pen to draw both faces with, or null for single lines */
   setWallThickness: (thickness: number | null) => void;
   setTourSeen: (seen: boolean) => void;
@@ -581,6 +589,8 @@ export interface EditorState {
   setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
   /** Change which face already-drawn runs are, and so which way they fill. */
   setSketchPerimeter: (pathIds: string[], perimeter: 'outer' | 'inner') => void;
+  /** Put finished lines on the drawing - the generated other face of a wall - and select them, as one undo step. */
+  addSketchPaths: (paths: SketchPath[]) => void;
   /** Add a vertex to the path in progress, already snapped by the caller. */
   penAddPoint: (x: number, y: number) => void;
   /** Drop the last vertex — the pen's own undo, mid-path. */
@@ -651,6 +661,11 @@ export interface EditorState {
     spec: SketchFillSpec,
     picks: Array<{ runKey: string; variant: Variant }>,
   ) => { added: number; warnings: string[] };
+  /**
+   * Build a layout solver variant: its pieces in, and - when it replaces what
+   * stood on the lines - the old ones out, as one undo step.
+   */
+  applyLayout: (add: Piece[], remove: string[]) => { added: number; removed: number };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
@@ -876,6 +891,7 @@ export const useEditorStore = create<EditorState>()(
         showGaps: false,
         simpleMode: false,
         fillDefaults: { height: 300, includeCorners: true },
+        layoutFilters: { ...DEFAULT_LAYOUT_FILTERS },
         wallThickness: null,
         tourSeen: false,
         showSketch: true,
@@ -1855,6 +1871,7 @@ export const useEditorStore = create<EditorState>()(
         },
         // Preferences, so plain sets: remembered, never undo steps.
         setFillDefaults: (defaults) => set({ fillDefaults: { ...defaults } }),
+        setLayoutFilters: (filters) => set({ layoutFilters: normalizeLayoutFilters(filters) }),
         setWallThickness: (thickness) => set({ wallThickness: thickness }),
         setTourSeen: (seen) => set({ tourSeen: seen }),
         setShowSketch: (on) =>
@@ -2025,6 +2042,14 @@ export const useEditorStore = create<EditorState>()(
 
         setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),
 
+        addSketchPaths: (paths) =>
+          commit((s) => ({
+            sketch: [...s.sketch, ...paths],
+            selectedSketchIds: paths.map((p) => p.id),
+            selectedSketchPart: null,
+            selectedIds: [],
+          })),
+
         setSketchPerimeter: (pathIds, perimeter) =>
           commit((s) => ({
             sketch: s.sketch.map((k) =>
@@ -2129,6 +2154,18 @@ export const useEditorStore = create<EditorState>()(
             choices[runKey] = choice.sequences;
           }
           return get().fillSketch(pathIds, { ...spec, stack, choices });
+        },
+
+        applyLayout: (add, remove) => {
+          if (!add.length && !remove.length) return { added: 0, removed: 0 };
+          const gone = new Set(remove);
+          const removed = get().pieces.filter((p) => gone.has(p.id)).length;
+          commit((s) => ({
+            pieces: [...s.pieces.filter((p) => !gone.has(p.id)), ...add],
+            selectedIds: add.map((p) => p.id),
+            selectedSketchIds: [],
+          }));
+          return { added: add.length, removed };
         },
 
         dragSketchAll: (dx, dy, baselines) =>
@@ -2279,6 +2316,7 @@ export const useEditorStore = create<EditorState>()(
             ...saved,
             measureStyle: normalizeMeasureStyle(saved.measureStyle),
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+            layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
             pdfSheet: normalizeSheetSize(saved.pdfSheet),
             jsonExport: normalizeJsonExport(saved.jsonExport),
@@ -2320,6 +2358,7 @@ export const useEditorStore = create<EditorState>()(
           selectedMeasureId: null,
           measureStyle: normalizeMeasureStyle(saved.measureStyle),
           lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+          layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
           pdfSheet: normalizeSheetSize(saved.pdfSheet),
           jsonExport: normalizeJsonExport(saved.jsonExport),

@@ -99,6 +99,8 @@ export function Header() {
   const setTool = useEditorStore((s) => s.setTool);
   const penPerimeter = useEditorStore((s) => s.penPerimeter);
   const setPenPerimeter = useEditorStore((s) => s.setPenPerimeter);
+  const setWallThickness = useEditorStore((s) => s.setWallThickness);
+  const wallOn = useEditorStore((s) => s.wallThickness !== null);
   const setShowSketch = useEditorStore((s) => s.setShowSketch);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
@@ -725,9 +727,16 @@ export function Header() {
             ).map(([face, label, why]) => (
               <button
                 key={face}
-                className={`btn small${penPerimeter === face ? ' engaged' : ''}`}
-                onClick={() => setPenPerimeter(face)}
-                aria-pressed={penPerimeter === face}
+                className={`btn small${penPerimeter === face && !wallOn ? ' engaged' : ''}`}
+                onClick={() => {
+                  // One face at a time: picking გარე or შიდა puts the
+                  // two-face კედელი pen down, so a finished line never brings
+                  // a second one with it unasked. The other face is made from
+                  // the recommendation tab once this one is built.
+                  setPenPerimeter(face);
+                  setWallThickness(null);
+                }}
+                aria-pressed={penPerimeter === face && !wallOn}
                 title={why}
               >
                 {label}

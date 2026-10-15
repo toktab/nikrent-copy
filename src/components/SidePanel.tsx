@@ -88,7 +88,9 @@ export function SidePanel() {
 function SelectionTab() {
   const pieces = useEditorStore((s) => s.selectedIds.length);
   const lines = useEditorStore((s) => s.selectedSketchIds.length);
-  const recommend = lines > 0 && pieces === 0;
+  // Lines picked up with their panels (Shift + click) still get the
+  // recommendations - that is how the outer face of a built wall is asked for.
+  const recommend = lines > 0;
 
   return (
     <>
