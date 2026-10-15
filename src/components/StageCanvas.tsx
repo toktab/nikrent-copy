@@ -58,6 +58,7 @@ import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
+import { BoltLayer } from './BoltLayer';
 import { MeasureLayer } from './MeasureLayer';
 import {
   collinearRun,
@@ -201,6 +202,7 @@ export function StageCanvas() {
   const penPoints = useEditorStore((s) => s.penPoints);
   const showSketch = useEditorStore((s) => s.showSketch);
   const showGaps = useEditorStore((s) => s.showGaps);
+  const showBolts = useEditorStore((s) => s.showBolts);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const measures = useEditorStore((s) => s.measures);
   const recommendPreview = useEditorStore((s) => s.recommendPreview);
@@ -1410,6 +1412,9 @@ export function StageCanvas() {
           hoverPieceId={hoverPieceId}
         />
       )}
+
+      {/* ჭანჭიკები on the plan: a joint is a place in plan, not on a face. */}
+      {!elevation && showBolts && <BoltLayer />}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text
           stays readable at any zoom. Amber, because an unclosed gap is

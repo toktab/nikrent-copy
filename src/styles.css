@@ -5926,3 +5926,68 @@ kbd {
 .size-now b {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── ჭანჭიკები: marks on the plan and the count in the top bar ─────────────── */
+.bolt-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 41;
+  overflow: hidden;
+}
+.bolt-layer circle,
+.bolts-btn-mark circle {
+  fill: #f5d90a;
+  stroke: #b59c00;
+  stroke-width: 1.5;
+}
+/* the inner-corner bolt sits on a filler, which is yellow already */
+.bolt-layer .bolt.corner circle {
+  fill: #f08a3c;
+  stroke: #b85a14;
+}
+.bolt-layer .bolt-bar,
+.bolts-btn-mark .bolt-bar {
+  stroke: #111;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.bolt-layer .bolt-slash,
+.bolts-btn-mark .bolt-slash {
+  stroke: #b3261e;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.bolts-btn {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.bolts-btn:not(.on) .bolts-btn-mark {
+  opacity: 0.4;
+}
+.bolts-count {
+  background: rgba(245, 217, 10, 0.16);
+  color: #f5d90a;
+  border-radius: 10px;
+  font-size: 10px;
+  padding: 1px 6px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* The drawing name's menu has to give too, or the name never reaches its
+   ellipsis and runs under the buttons beside it once the top bar is full. */
+.row-left > .menu-anchor {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.row-left > .menu-anchor > .doc-pick {
+  min-width: 0;
+  max-width: 100%;
+}
+/* A full top bar keeps the ჭანჭიკი mark and its number; the word is in the
+   tooltip. */
+@media (max-width: 1280px) {
+  .bolts-label {
+    display: none;
+  }
+}

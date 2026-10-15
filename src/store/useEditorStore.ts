@@ -144,6 +144,7 @@ const PREF_KEYS = [
   'forceLabels',
   'showOverlaps',
   'showGaps',
+  'showBolts',
   'showSketch',
   'measureStyle',
   'viewMode',
@@ -277,6 +278,8 @@ export interface EditorState {
   inspectorTab: InspectorTab;
   /** mark every open gap, not only the one beside the selection */
   showGaps: boolean;
+  /** mark where a ჭანჭიკი goes - T-joints, inner corners on a ჩაკერება 5 / 10 */
+  showBolts: boolean;
   /**
    * Simple mode: only what drawing and filling need stays on screen - drawing,
    * measuring, the parts, the recommendation tab. Everything else comes back
@@ -526,6 +529,7 @@ export interface EditorState {
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
+  setShowBolts: (on: boolean) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
   setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
@@ -889,6 +893,7 @@ export const useEditorStore = create<EditorState>()(
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
         inspectorTab: 'bom',
         showGaps: false,
+        showBolts: true,
         simpleMode: false,
         fillDefaults: { height: 300, includeCorners: true },
         layoutFilters: { ...DEFAULT_LAYOUT_FILTERS },
@@ -1849,6 +1854,7 @@ export const useEditorStore = create<EditorState>()(
           set({
             showLengths: true,
             lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
+            showBolts: true,
             measureStyle: { ...DEFAULT_MEASURE_STYLE },
           }),
         resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
@@ -1860,6 +1866,7 @@ export const useEditorStore = create<EditorState>()(
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
+        setShowBolts: (on) => set({ showBolts: on }),
         // Simple mode has no view switcher, so it opens on the plan it works in -
         // through the view setters, so whatever a view change also resets, it does.
         setSimpleMode: (on) => {
