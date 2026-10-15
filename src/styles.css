@@ -1168,11 +1168,9 @@ input.stock-input.bad {
 
 /* A piece seen from the front or the side: a flat silhouette, filled in the
    material's own colour so a course still reads as panels-and-walers. The
-   border keeps neighbouring pieces of the same colour apart. */
-.piece.elevation {
-  border: calc(1px / var(--z, 1)) solid rgba(10, 13, 17, 0.55);
-  box-sizing: border-box;
-}
+   outline that keeps neighbouring pieces of the same colour apart is the SVG
+   rect's stroke, drawn on the exact edge - a CSS border was rounded to the
+   pixel with the box. */
 
 /* Ground level, and the reason a height is readable at a glance. Sits under
    the pieces but over the grid. */

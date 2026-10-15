@@ -54,7 +54,7 @@ import { overrideHeld } from '../lib/platform';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { PieceView } from './PieceView';
 import { ElevationPieceView } from './ElevationPieceView';
-import { ShapeSvg } from './ShapeSvg';
+import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
 import { MeasureLayer } from './MeasureLayer';
 import {
@@ -1277,21 +1277,28 @@ export function StageCanvas() {
         )}
 
         {/* Live drop preview: exactly where the piece will land, snapping included. */}
-        {ghost && (
-          <div
-            className="drop-ghost"
-            style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
-          >
-            {!elevation && (
-              <ShapeSvg
-                material={ghost.material}
-                width={ghost.w}
-                height={ghost.h}
-                strokeWidth={1 / zoom}
-              />
-            )}
-          </div>
-        )}
+        {ghost &&
+          (elevation ? (
+            <div
+              className="drop-ghost"
+              style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
+            />
+          ) : (
+            (() => {
+              // Drawn the way the piece will be, so the preview is as exact as
+              // the drop.
+              const probe = { id: '', materialId: ghost.material.id, x: ghost.x, y: ghost.y, rot: 0, z: 0 };
+              const box = placedBox(probe, ghost.material);
+              return (
+                <div
+                  className="drop-ghost"
+                  style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
+                >
+                  <PlacedShapeSvg piece={probe} material={ghost.material} box={box} strokeWidth={1 / zoom} />
+                </div>
+              );
+            })()
+          ))}
         {pieces.map((piece) => {
           const material = byId.get(piece.materialId);
           if (!material) return null;
@@ -1324,24 +1331,14 @@ export function StageCanvas() {
           recommendPreview?.map((piece) => {
             const material = byId.get(piece.materialId);
             if (!material) return null;
+            const box = placedBox(piece, material);
             return (
               <div
                 key={`preview-${piece.id}`}
                 className="piece preview-piece"
-                style={{
-                  left: piece.x,
-                  top: piece.y,
-                  width: planW(material),
-                  height: planH(material),
-                  transform: `rotate(${piece.rot}deg)`,
-                }}
+                style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
               >
-                <ShapeSvg
-                  material={material}
-                  width={planW(material)}
-                  height={planH(material)}
-                  strokeWidth={1 / zoom}
-                />
+                <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
               </div>
             );
           })}

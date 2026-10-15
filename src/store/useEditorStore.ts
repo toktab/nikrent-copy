@@ -28,6 +28,7 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
+  rotatedOnGrid,
   snapValue,
   unionRect,
 } from '../lib/geometry';
@@ -1297,11 +1298,14 @@ export const useEditorStore = create<EditorState>()(
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
             // Each piece turns about its own centre — what a drafter expects
-            // when nudging several panels at once.
+            // when nudging several panels at once — and lands on whole cm.
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
             return {
-              pieces: s.pieces.map((p) =>
-                selected.has(p.id) ? { ...p, rot: normalizeRot(p.rot + step) } : p,
-              ),
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const m = byId.get(p.materialId);
+                return m ? rotatedOnGrid(p, m, p.rot + step) : { ...p, rot: normalizeRot(p.rot + step) };
+              }),
             };
           }),
 
@@ -1311,8 +1315,13 @@ export const useEditorStore = create<EditorState>()(
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
             const rot = normalizeRot(deg);
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
             return {
-              pieces: s.pieces.map((p) => (selected.has(p.id) ? { ...p, rot } : p)),
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const m = byId.get(p.materialId);
+                return m ? rotatedOnGrid(p, m, rot) : { ...p, rot };
+              }),
             };
           }),
 

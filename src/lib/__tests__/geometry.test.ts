@@ -13,6 +13,7 @@ import {
   planW,
   rectsOverlap,
   rotatedExtent,
+  rotatedOnGrid,
   screenToWorld,
   snapValue,
   unionRect,
@@ -219,6 +220,49 @@ describe('computeEdgeSnap', () => {
       { x: 0, y: 0, w: 46, h: 300 }, // right edge 46 → dx -1
     ], 8);
     expect(snap.dx).toBe(-1);
+  });
+
+  it('never puts an edge on a centre', () => {
+    // An inner panel 9 deep, dragged down towards a 20 × 20 corner at y 250.
+    // Its top edge at 260.3 is closest to the corner's centre (260), but the
+    // flush position is with the corner's leg, 261 to 270.
+    const panel = { x: 130, y: 260.3, w: 90, h: 9 };
+    const corner = { x: 100, y: 250, w: 20, h: 20, yLines: [261, 270] };
+    const snap = computeEdgeSnap(panel, [corner], 4);
+    expect(panel.y + snap.dy).toBeCloseTo(261);
+  });
+
+  it('never puts a centre on a drawn line', () => {
+    const panel = { x: 130, y: 265.3, w: 90, h: 9 }; // centre 269.8
+    const line = { x: 100, y: 270, w: 345, h: 0 };
+    const snap = computeEdgeSnap(panel, [line], 5);
+    expect(panel.y + snap.dy).toBeCloseTo(261); // bottom edge on the line
+  });
+
+  it('still centres one thing on another', () => {
+    const snap = computeEdgeSnap({ x: 21, y: 0, w: 60, h: 9 }, [{ x: 0, y: 0, w: 100, h: 9 }], 2);
+    expect(snap.dx).toBe(-1);
+    expect(snap.guideX).toBe(50);
+  });
+});
+
+describe('rotatedOnGrid', () => {
+  const m = material({ w: 60, h: 300, depth: 9 });
+
+  it('lands a panel turned on its side on whole cm', () => {
+    const turned = rotatedOnGrid({ id: 'a', materialId: 'p', x: 75, y: 150, rot: 0, z: 0 }, m, 90);
+    const b = pieceBounds(turned, m);
+    expect(turned.rot).toBe(90);
+    expect(b.x).toBeCloseTo(Math.round(b.x), 9);
+    expect(b.y).toBeCloseTo(Math.round(b.y), 9);
+    expect(b.w).toBeCloseTo(9);
+    expect(b.h).toBeCloseTo(60);
+  });
+
+  it('leaves an odd angle alone', () => {
+    const turned = rotatedOnGrid({ id: 'a', materialId: 'p', x: 75, y: 150, rot: 0, z: 0 }, m, 45);
+    expect(turned.x).toBe(75);
+    expect(turned.y).toBe(150);
   });
 });
 
