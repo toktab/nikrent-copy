@@ -1,6 +1,6 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { openBolts, type Bolt, type BoltKind } from '../lib/bolts';
+import { openBolts, openRods, ROD_OVERHANG_CM, type Bolt, type BoltKind, type Rod } from '../lib/bolts';
 
 /**
  * A კონექტორი mark on every joint that takes one - see `lib/bolts.ts` for which.
@@ -57,7 +57,17 @@ export function ConnectorGlyph({
   );
 }
 
-export function BoltLayer({ onGrab }: { onGrab?: (e: ReactPointerEvent, bolt: Bolt) => void }) {
+/** A შტირი is drawn this thick: its 3 cm, but never thinner than a pointer can find. */
+const ROD_MIN_PX = 4;
+const ROD_CM = 3;
+
+export function BoltLayer({
+  onGrab,
+  onGrabRod,
+}: {
+  onGrab?: (e: ReactPointerEvent, bolt: Bolt) => void;
+  onGrabRod?: (e: ReactPointerEvent, rod: Rod) => void;
+}) {
   const pieces = useEditorStore((s) => s.pieces);
   const materials = useEditorStore((s) => s.materials);
   const zoom = useEditorStore((s) => s.zoom);
@@ -67,10 +77,18 @@ export function BoltLayer({ onGrab }: { onGrab?: (e: ReactPointerEvent, bolt: Bo
   const stageH = useEditorStore((s) => s.stageH);
   const tool = useEditorStore((s) => s.tool);
 
-  const bolts = useMemo(
-    () => openBolts(pieces, new Map(materials.map((m) => [m.id, m])), true),
-    [pieces, materials],
-  );
+  const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
+  const bolts = useMemo(() => openBolts(pieces, byId, true), [pieces, byId]);
+  // A stacked course has its rods in the same place in plan: one bar each.
+  const rods = useMemo(() => {
+    const seen = new Set<string>();
+    return openRods(pieces, byId, true).filter((r) => {
+      const key = `${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [pieces, byId]);
   // A stacked course shares its joints in plan: one mark is enough to see.
   const spots = useMemo(() => {
     const seen = new Set<string>();
@@ -82,14 +100,39 @@ export function BoltLayer({ onGrab }: { onGrab?: (e: ReactPointerEvent, bolt: Bo
     });
   }, [bolts]);
 
-  if (spots.length === 0) return null;
+  if (spots.length === 0 && rods.length === 0) return null;
   const r = markRadiusPx(zoom);
   // Only the select tool takes hold of things; with the pen or the measure tool
   // out, a press on a mark is a press on the drawing under it.
   const grabbable = !!onGrab && tool === 'select';
+  const rodsGrabbable = !!onGrabRod && tool === 'select';
+  const thick = Math.max(ROD_MIN_PX, ROD_CM * zoom);
 
   return (
     <svg className="bolt-layer" width={stageW} height={stageH} aria-hidden="true">
+      {/* Rods under the connector marks: a joint can have both. */}
+      {rods.map((rod) => {
+        const a = (rod.from - ROD_OVERHANG_CM) * zoom;
+        const b = (rod.to + ROD_OVERHANG_CM) * zoom;
+        const at = rod.at * zoom;
+        const box =
+          rod.dir === 'v'
+            ? { x: at + panX - thick / 2, y: a + panY, w: thick, h: b - a }
+            : { x: a + panX, y: at + panY - thick / 2, w: b - a, h: thick };
+        if (box.x > stageW || box.y > stageH || box.x + box.w < 0 || box.y + box.h < 0) return null;
+        return (
+          <rect
+            key={`rod:${rod.dir}:${rod.x}:${rod.y}`}
+            className={`rod-mark${rodsGrabbable ? ' grabbable' : ''}`}
+            x={box.x}
+            y={box.y}
+            width={box.w}
+            height={box.h}
+            rx={thick / 2}
+            onPointerDown={rodsGrabbable ? (e) => onGrabRod(e, rod) : undefined}
+          />
+        );
+      })}
       {spots.map((b) => {
         const x = b.x * zoom + panX;
         const y = b.y * zoom + panY;

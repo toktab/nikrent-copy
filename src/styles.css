@@ -6303,3 +6303,47 @@ kbd {
   align-items: center;
   gap: 7px;
 }
+/* A worked-out შტირი across a wall: the rod colour, outlined so it reads over
+   the panels it goes through. */
+.bolt-layer .rod-mark {
+  fill: #d98880;
+  stroke: #7a2f28;
+  stroke-width: 1;
+}
+.bolt-layer .rod-mark.grabbable {
+  pointer-events: auto;
+  cursor: grab;
+}
+.rods-mark rect {
+  fill: #d98880;
+  stroke: #7a2f28;
+  stroke-width: 1;
+}
+/* ავტომატურად თავიდან დასმა with its settings beside it: the kinds it resets. */
+.bolts-reset-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.bolts-reset-row > .menu-item {
+  flex: 1 1 auto;
+}
+.bolts-reset-settings {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: #c3cad4;
+  cursor: pointer;
+}
+.bolts-reset-settings:hover,
+.bolts-reset-settings.on {
+  background: var(--panel2);
+}
+.bolts-reset-kind {
+  padding-left: 22px;
+}

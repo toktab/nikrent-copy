@@ -60,8 +60,13 @@ import {
   CONNECTOR_SNAP_PX,
   connectorMaterial,
   connectorsAtCorners,
+  isRod,
+  rodPieceAt,
+  rodStackOf,
   snapConnector,
+  snapRod,
   type Bolt,
+  type Rod,
 } from '../lib/bolts';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
@@ -194,6 +199,8 @@ export function StageCanvas() {
     y: number;
     w: number;
     h: number;
+    /** a შტირი that has found its spot is turned to it */
+    rot?: number;
   } | null>(null);
 
   const pieces = useEditorStore((s) => s.pieces);
@@ -775,7 +782,13 @@ export function StageCanvas() {
       return; // modifier-click adjusts the selection, it does not start a drag
     }
     // Clicking an already-selected piece keeps the group so it can be dragged.
-    if (!s.selectedIds.includes(id)) s.select(id);
+    if (!s.selectedIds.includes(id)) {
+      // Rods one above the other are one thing on the plan: take them all.
+      const piece = s.pieces.find((p) => p.id === id);
+      const stack = piece ? rodStackOf(piece, s.pieces, new Map(s.materials.map((m) => [m.id, m]))) : [];
+      if (stack.length > 1) s.setSelection(stack.map((p) => p.id));
+      else s.select(id);
+    }
 
     const after = useEditorStore.getState();
     interaction.current = {
@@ -803,6 +816,26 @@ export function StageCanvas() {
     e.stopPropagation();
     s.takeBolt(bolt, m.id);
     const after = useEditorStore.getState();
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
+  /** The same for a worked-out შტირი: a real rod of the right length, dragged. */
+  const onRodPointerDown = useCallback((e: ReactPointerEvent, rod: Rod) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    e.stopPropagation();
+    const before = s.pieces.length;
+    s.takeRod(rod);
+    const after = useEditorStore.getState();
+    if (after.pieces.length === before) return; // a catalog without rods has none to place
     interaction.current = {
       type: 'move',
       sx: e.clientX,
@@ -1164,6 +1197,21 @@ export function StageCanvas() {
      * snaps to the nearest one in reach, and only lands loose where there is
      * none. Plan only - a joint is a place in plan.
      */
+    /**
+     * A შტირი goes through a pair of joints facing each other across a wall,
+     * turned to run across it - see `findRods`. Where there is none in reach
+     * it lands loose, the way any other piece does.
+     */
+    if (view === 'plan' && isRod(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapRod(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      if (spot) {
+        const p = rodPieceAt(material, spot, '');
+        return { u: p.x, v: p.y, w: pw, h: ph, world: { x: p.x, y: p.y, z: p.z ?? 0 }, rot: p.rot, guideX: null, guideY: null };
+      }
+    }
+
     if (view === 'plan' && isConnector(material)) {
       const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
       const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
@@ -1223,7 +1271,7 @@ export function StageCanvas() {
       const material = s.materials.find((m) => m.id === s.draggingMaterialId);
       if (!material) return;
       const at = dropPosition(material, e.clientX, e.clientY);
-      if (at) setGhost({ material, x: at.u, y: at.v, w: at.w, h: at.h });
+      if (at) setGhost({ material, x: at.u, y: at.v, w: at.w, h: at.h, rot: 'rot' in at ? at.rot : 0 });
     },
     [dropPosition],
   );
@@ -1237,8 +1285,25 @@ export function StageCanvas() {
       const materialId = e.dataTransfer.getData('text/plain') || s.draggingMaterialId;
       const material = s.materials.find((m) => m.id === materialId);
       if (!material) return;
+      // A rod let go on a rod spot is the whole stack that spot takes.
+      if (s.surfaceView === 'plan' && isRod(material)) {
+        const r = stageRef.current?.getBoundingClientRect();
+        const spot =
+          r &&
+          snapRod(
+            { x: (e.clientX - r.left - s.panX) / s.zoom, y: (e.clientY - r.top - s.panY) / s.zoom },
+            s.pieces,
+            new Map(s.materials.map((mm) => [mm.id, mm])),
+            CONNECTOR_SNAP_PX / s.zoom,
+          );
+        if (spot) {
+          s.placeRodStack(material.id, spot);
+          s.setDraggingMaterial(null);
+          return;
+        }
+      }
       const at = dropPosition(material, e.clientX, e.clientY);
-      if (at) s.addPiece(material.id, at.world.x, at.world.y, at.world.z);
+      if (at) s.addPiece(material.id, at.world.x, at.world.y, at.world.z, 'rot' in at ? at.rot : 0);
       s.setDraggingMaterial(null);
     },
     [dropPosition],
@@ -1387,7 +1452,7 @@ export function StageCanvas() {
             (() => {
               // Drawn the way the piece will be, so the preview is as exact as
               // the drop.
-              const probe = { id: '', materialId: ghost.material.id, x: ghost.x, y: ghost.y, rot: 0, z: 0 };
+              const probe = { id: '', materialId: ghost.material.id, x: ghost.x, y: ghost.y, rot: ghost.rot ?? 0, z: 0 };
               const box = placedBox(probe, ghost.material);
               const connector = isConnector(ghost.material);
               return (
@@ -1473,7 +1538,7 @@ export function StageCanvas() {
       )}
 
       {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
-      {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} />}
+      {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} onGrabRod={onRodPointerDown} />}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text
           stays readable at any zoom. Amber, because an unclosed gap is

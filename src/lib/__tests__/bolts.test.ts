@@ -7,6 +7,15 @@ import {
   resetBolts,
   snapConnector,
   withBoltOff,
+  findRods,
+  openRods,
+  rodCount,
+  rodMaterialFor,
+  rodPieceAt,
+  rodStack,
+  rodStackOf,
+  snapRod,
+  withRodOff,
 } from '../bolts';
 import { SEED_MATERIALS } from '../../data/seedCatalog';
 import type { Piece } from '../../types';
@@ -151,5 +160,92 @@ describe('taking a joint off and putting it back', () => {
     expect(pieces.map((p) => p.id)).toEqual([top.id, leg.id]);
     expect(pieces.every((p) => p.boltsOff === undefined)).toBe(true);
     expect(findBolts(pieces, byId)).toHaveLength(1);
+  });
+});
+
+describe('შტირები', () => {
+  // Two faces of a wall along x, 21 cm of concrete between them, joints at x 90.
+  const wall = (innerAt = 90) => [
+    put('panel-90x300', 0, 0),
+    put('panel-90x300', 90, 0),
+    put('panel-90x300', innerAt - 90, 30),
+    put('panel-90x300', innerAt, 30),
+  ];
+
+  it('puts one rod through joints that face each other across the wall', () => {
+    const rods = findRods(wall(), byId);
+    expect(rods).toHaveLength(1);
+    expect(rods[0]).toMatchObject({ dir: 'v', at: 90, from: 0, to: 39, x: 90, y: 19.5 });
+  });
+
+  it('puts none where the joints do not line up', () => {
+    expect(findRods(wall(120), byId)).toHaveLength(0);
+  });
+
+  it('turns with a wall that runs along y', () => {
+    const across = (x: number, y: number) => upright('panel-90x300', x, y);
+    const rods = findRods([across(0, 0), across(0, 90), across(30, 0), across(30, 90)], byId);
+    expect(rods).toHaveLength(1);
+    expect(rods[0]).toMatchObject({ dir: 'h', at: 90, x: 19.5, y: 90 });
+  });
+
+  it('is taken off by hand and put back by a reset of rods only', () => {
+    const pieces = wall();
+    const [rod] = findRods(pieces, byId);
+    const off = withRodOff(pieces, rod);
+    expect(findRods(off, byId)).toHaveLength(0);
+    expect(findRods(off, byId, true)).toHaveLength(1);
+    const back = resetBolts(off, byId, { connectors: false, rods: true });
+    expect(findRods(back, byId)).toHaveLength(1);
+  });
+
+  it('counts a placed rod on the spot once, and snaps a dragged one onto it turned', () => {
+    const pieces = wall();
+    const m = rodMaterialFor(SEED_MATERIALS, 39)!;
+    expect(m.id).toBe('rod-60');
+    const spot = snapRod({ x: 95, y: 15 }, pieces, byId, 20)!;
+    expect(spot).toEqual({ x: 90, y: 19.5, z: 0, rot: 90, h: 300, count: 5 });
+    const placed = [...pieces, rodPieceAt(m, spot, 'r1')];
+    expect(openRods(placed, byId)).toHaveLength(0);
+    expect(rodCount(placed, byId)).toBe(1);
+  });
+});
+
+describe('შტირები at a ჩაკერება', () => {
+  it('ties a panel-to-ჩაკერება joint across from a panel joint', () => {
+    // Outer face: two panels meeting at x 90. Inner face: a ჩაკერება 5 at
+    // x 85..90, then a panel from 90 - its joint with the panel faces the outer one.
+    const pieces = [
+      put('panel-90x300', 0, 0),
+      put('panel-90x300', 90, 0),
+      put('panel-60x300', 25, 30),
+      put('filler-5x300', 85, 30),
+      put('panel-90x300', 90, 30),
+    ];
+    const rods = findRods(pieces, byId);
+    expect(rods.map((r) => r.at)).toEqual([90]);
+  });
+});
+
+describe('შტირები up the height', () => {
+  const wall = (id: string) => [put(id, 0, 0), put(id, 90, 0), put(id, 0, 30), put(id, 90, 30)];
+
+  it('counts five at a spot on 300 panels and two on 150', () => {
+    expect(rodCount(wall('panel-90x300'), byId)).toBe(5);
+    // panel-75x150 is the 150 the catalog has in a 75 width
+    const short = [put('panel-75x150', 0, 0), put('panel-75x150', 75, 0), put('panel-75x150', 0, 30), put('panel-75x150', 75, 30)];
+    expect(rodCount(short, byId)).toBe(2);
+  });
+
+  it('stacks the rods evenly up the face, and a stack fills its spot', () => {
+    const pieces = wall('panel-90x300');
+    const spot = snapRod({ x: 90, y: 20 }, pieces, byId, 10)!;
+    const m = byId.get('rod-60')!;
+    let n = 0;
+    const stack = rodStack(m, spot, [], () => `s${n++}`);
+    expect(stack.map((p) => p.z! + m.h / 2)).toEqual([30, 90, 150, 210, 270]);
+    expect(rodStackOf(stack[2], [...pieces, ...stack], byId)).toHaveLength(5);
+    expect(openRods([...pieces, ...stack], byId)).toHaveLength(0);
+    expect(rodCount([...pieces, ...stack], byId)).toBe(5);
   });
 });

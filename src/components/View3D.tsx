@@ -32,6 +32,7 @@ import {
 } from '../lib/raster3d';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { Icon } from './Icon';
+import { openRods, rodMaterialFor, rodSpot, rodStack } from '../lib/bolts';
 import { EmptyDrawing } from './EmptyDrawing';
 
 /** Darken/lighten a #rrggbb by a 0..1+ factor. */
@@ -151,6 +152,20 @@ export function View3D() {
   const [blocked, setBlocked] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
+  const showBolts = useEditorStore((s) => s.showBolts);
+  /**
+   * The worked-out შტირები nobody has placed yet, drawn where they would go -
+   * five up a 300 face, two up a 150 or 90 - so the 3D shows the wall as it
+   * will be tied. Not pieces: they cannot be picked here, and they go when the
+   * marks are switched off.
+   */
+  const autoRods = useMemo(() => {
+    if (!showBolts) return [];
+    return openRods(pieces, byId).flatMap((r) => {
+      const m = rodMaterialFor(materials, r.to - r.from);
+      return m ? rodStack(m, rodSpot(r), [], () => '') : [];
+    });
+  }, [showBolts, pieces, byId, materials]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   // Anything that sets zoom outside the wheel — fitting, entering the view —
@@ -505,10 +520,11 @@ export function View3D() {
     const selectedEdges: Array<[ScreenPoint, ScreenPoint]> = [];
     const map: string[] = [];
 
-    for (const piece of pieces) {
+    for (const piece of [...pieces, ...autoRods]) {
       const m = byId.get(piece.materialId);
       if (!m) continue;
       const pickId = map.length;
+      // An unplaced rod has no id: a click on it is a click on empty space.
       map.push(piece.id);
       const chosen = selectedSet.has(piece.id);
 
@@ -550,7 +566,7 @@ export function View3D() {
     // surrounded by other pieces.
     drawEdges(ctx, raster, selectedEdges, hiddenLines, zoom, ACCENT_CSS, 1.8);
     drawHeightMarker(ctx, bounds, toScreen);
-  }, [pieces, byId, cam, zoom, pan, centre, size, hiddenLines, selectedSet]);
+  }, [pieces, autoRods, byId, cam, zoom, pan, centre, size, hiddenLines, selectedSet]);
 
   const hasPieces = pieces.length > 0;
   const hint = blocked ?? axisUnavailable;

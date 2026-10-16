@@ -61,11 +61,21 @@ import {
 import { faceBands } from '../lib/gap';
 import {
   CONNECTOR_SNAP_PX,
+  isRod,
   pieceCentre,
   resetBolts,
+  rodMaterialFor,
+  rodSpot,
+  rodStack,
+  rodStackOf,
   snapConnector,
+  snapRod,
   withBoltOff,
+  withRodOff,
   type Bolt,
+  type BoltKinds,
+  type Rod,
+  type RodSpot,
 } from '../lib/bolts';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
@@ -400,7 +410,7 @@ export interface EditorState {
   selectAll: () => void;
 
   // ── actions: pieces ──
-  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number) => void;
+  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number, rot?: number) => void;
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
   /**
@@ -550,8 +560,12 @@ export interface EditorState {
    * the connector moves it, and deleting it removes it. One undo step.
    */
   takeBolt: (bolt: Bolt, materialId: string) => void;
-  /** ჭანჭიკები -> ავტომატურად დასმა: every connector back where the rule puts it. */
-  resetBolts: () => void;
+  /** The same for a worked-out შტირი: a real rod of the length it needs goes there. */
+  takeRod: (rod: Rod) => void;
+  /** A catalog rod let go on a rod spot: the whole stack that spot takes. */
+  placeRodStack: (materialId: string, spot: RodSpot) => void;
+  /** ჭანჭიკები -> ავტომატურად თავიდან დასმა: the kinds asked, back where the rule puts them. */
+  resetBolts: (kinds?: BoltKinds) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
   setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
@@ -1066,7 +1080,7 @@ export const useEditorStore = create<EditorState>()(
          * caller's job (see `dropPosition` in StageCanvas) so that the drop
          * preview and the placed piece can never disagree.
          */
-        addPiece: (materialId, worldX, worldY, worldZ = 0) =>
+        addPiece: (materialId, worldX, worldY, worldZ = 0, rot = 0) =>
           commit((s) => {
             if (!s.materials.some((m) => m.id === materialId)) return {};
             const piece: Piece = {
@@ -1074,7 +1088,7 @@ export const useEditorStore = create<EditorState>()(
               materialId,
               x: worldX,
               y: worldY,
-              rot: 0,
+              rot,
               z: Math.max(0, worldZ),
             };
             return { pieces: [...s.pieces, piece], selectedIds: [piece.id] };
@@ -1125,6 +1139,44 @@ export const useEditorStore = create<EditorState>()(
              */
             const alone = baseline.filter((p) => selected.has(p.id));
             const cm = alone.length === 1 ? byId.get(alone[0].materialId) : undefined;
+            /**
+             * A შტირი stack - the rods one above the other at one spot, which
+             * is one thing on the plan - goes from rod spot to rod spot, turned
+             * to run across the wall it lands in and as many high as that wall
+             * takes (see `findRods`, `rodsUpHeight`). Loose, it moves on the
+             * grid as it was picked up.
+             */
+            const lifted = baseline.filter((p) => selected.has(p.id));
+            const rm = lifted.length ? byId.get(lifted[0].materialId) : undefined;
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isRod(rm) &&
+              !sketchBaseline?.length &&
+              rodStackOf(lifted[0], lifted, byId).length === lifted.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              // The stack may have grown or shrunk on a spot earlier in this
+              // drag, so what is selected now is what gets re-laid.
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const now = s.pieces.filter((p) => selected.has(p.id)).map((p) => p.id);
+              const spot = snapRod(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                others,
+                byId,
+                CONNECTOR_SNAP_PX / s.zoom,
+              );
+              const stack = spot
+                ? rodStack(rm, spot, now, uid)
+                : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: [...others, ...stack],
+                selectedIds: stack.map((p) => p.id),
+              };
+            }
             if (view === 'plan' && !freehand && cm && isConnector(cm) && !sketchBaseline?.length) {
               const base = alone[0];
               const centre = pieceCentre(base, cm);
@@ -1946,9 +1998,23 @@ export const useEditorStore = create<EditorState>()(
             };
             return { pieces: [...withBoltOff(s.pieces, bolt.a, bolt.b), piece], selectedIds: [piece.id] };
           }),
-        resetBolts: () =>
+        takeRod: (rod) =>
           commit((s) => {
-            const pieces = resetBolts(s.pieces, new Map(s.materials.map((m) => [m.id, m])));
+            const m = rodMaterialFor(s.materials, rod.to - rod.from);
+            if (!m) return {};
+            const stack = rodStack(m, rodSpot(rod), [], uid);
+            return { pieces: [...withRodOff(s.pieces, rod), ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        placeRodStack: (materialId, spot) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const stack = rodStack(m, spot, [], uid);
+            return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        resetBolts: (kinds) =>
+          commit((s) => {
+            const pieces = resetBolts(s.pieces, new Map(s.materials.map((m) => [m.id, m])), kinds);
             const left = new Set(pieces.map((p) => p.id));
             return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
           }),
