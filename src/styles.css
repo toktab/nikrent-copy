@@ -6332,6 +6332,19 @@ kbd {
   fill: #5c636d;
   stroke: #2c3137;
 }
+/* ჩამკეტი fix: a light wing nut past the dark nut, so the two read apart. */
+.latch-wing,
+.latch-hub {
+  fill: #e4e7eb;
+  stroke: #59606a;
+}
+.latch-hole {
+  fill: #8a919a;
+}
+.piece.nut.selected .latch-wing,
+.piece.nut.selected .latch-hub {
+  stroke: var(--sel);
+}
 .piece.rod > svg,
 .piece.nut > svg {
   overflow: visible;

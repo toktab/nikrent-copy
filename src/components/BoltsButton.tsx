@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { ALL_BOLT_KINDS, connectorCount, nutCount, rodCount, type BoltKinds } from '../lib/bolts';
+import { ALL_BOLT_KINDS, connectorCount, latchCount, nutCount, rodCount, type BoltKinds } from '../lib/bolts';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
+import { LatchShape } from './BoltLayer';
 
 /**
  * ჭანჭიკები in the top bar: the fixings the drawing needs, in a menu.
@@ -38,6 +39,7 @@ const KIND_NAMES: Array<[keyof BoltKinds, string]> = [
   ['connectors', 'კონექტორები'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
+  ['latches', 'ჩამკეტი fix'],
 ];
 
 export function BoltsButton() {
@@ -50,6 +52,7 @@ export function BoltsButton() {
   const connectors = useMemo(() => connectorCount(pieces, byId), [pieces, byId]);
   const rods = useMemo(() => rodCount(pieces, byId), [pieces, byId]);
   const nuts = useMemo(() => nutCount(pieces, byId), [pieces, byId]);
+  const latches = useMemo(() => latchCount(pieces, byId), [pieces, byId]);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -108,6 +111,17 @@ export function BoltsButton() {
             <rect className="nut-nut" x="6.5" y="4.5" width="5" height="5" rx="0.8" />
           </svg>
           ქანჩი + დისკო
+        </span>
+      </MenuItem>
+      <MenuItem
+        title="თითო ყველა ქანჩი + დისკოზე - ჩაკეტავს მას"
+        trail={<span className="bolts-count">{latches} ც.</span>}
+      >
+        <span className="bolts-kind">
+          <svg className="latch-mark" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+            <LatchShape hub={4} wings={12} />
+          </svg>
+          ჩამკეტი fix
         </span>
       </MenuItem>
       <MenuSep />

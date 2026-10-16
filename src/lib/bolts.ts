@@ -1,5 +1,5 @@
 import type { Material, Piece } from '../types';
-import { isConnector, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
+import { isConnector, isLatch, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
 import { cornerLeg } from './shapePath';
 
 /**
@@ -380,9 +380,10 @@ export interface BoltKinds {
   connectors: boolean;
   rods: boolean;
   nuts: boolean;
+  latches: boolean;
 }
 
-export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true };
+export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true, latches: true };
 
 /** A taken-off entry in `Piece.boltsOff` that belongs to a შტირი, not a connector. */
 const ROD_OFF = 'rod:';
@@ -404,6 +405,7 @@ export function resetBolts(
       if (kinds.connectors && isConnector(m)) return false;
       if (kinds.rods && isRod(m)) return false;
       if (kinds.nuts && isNut(m)) return false;
+      if (kinds.latches && isLatch(m)) return false;
       return true;
     })
     .map((p) => {
@@ -713,13 +715,14 @@ export function rodStack(m: Material, spot: RodSpot, ids: string[], newId: () =>
  */
 export function rodStackOf(p: Piece, pieces: Piece[], byId: Map<string, Material>): Piece[] {
   const m = byId.get(p.materialId);
-  if (!m || !(isRod(m) || isNut(m))) return [p];
+  if (!m || !(isRod(m) || isNut(m) || isLatch(m))) return [p];
   const c = pieceCentre(p, m);
   return pieces.filter((q) => {
     const qm = byId.get(q.materialId);
     if (!qm) return false;
     if (isRod(m) && !(isRod(qm) && rodDir(q) === rodDir(p))) return false;
     if (isNut(m) && !(isNut(qm) && normalizeRot(q.rot) === normalizeRot(p.rot))) return false;
+    if (isLatch(m) && !(isLatch(qm) && normalizeRot(q.rot) === normalizeRot(p.rot))) return false;
     const qc = pieceCentre(q, qm);
     return Math.hypot(qc.x - c.x, qc.y - c.y) < TOUCH_CM;
   });
@@ -756,7 +759,7 @@ export function rodPieceAt(
  * round without having to find its rod again.
  */
 
-export { isNut };
+export { isLatch, isNut };
 
 /** The nut the catalog offers for a rod end. */
 export function nutMaterial(materials: Material[]): Material | undefined {
@@ -831,48 +834,89 @@ export function rodEnds(pieces: Piece[], byId: Map<string, Material>): RodEnd[] 
   return out;
 }
 
-/** Where a nut piece's middle goes on a rod end: just outside it. */
-export function nutCentre(end: { x: number; y: number; rot: number }, m: Material) {
-  const o = outward(end.rot);
-  const half = planW(m) / 2;
-  return { x: end.x + o.x * half, y: end.y + o.y * half };
+/**
+ * What goes on a rod end, from the face out: the ქანჩი + დისკო, then the
+ * ჩამკეტი fix that locks it (the user's rule, 2026-10-16: one on every nut).
+ * Each sits `offset` cm out from the face, and is placed, counted and drawn the
+ * same way.
+ */
+export interface Fitting {
+  is: (m: Material) => boolean;
+  offset: number;
 }
 
-/** A nut placed on an end stands this close to where it belongs, cm. */
+/** The washer: a disc this wide, this thick, cm. */
+export const WASHER_CM = 12;
+export const WASHER_T_CM = 1.5;
+/** The nut on it, cm. */
+export const NUT_CM = 4;
+/** The ჩამკეტი fix - a wing nut: its hub this deep along the rod, its wings this tall across it, cm. */
+export const LATCH_HUB_CM = 4;
+export const LATCH_WINGS_CM = 14;
+
+export const NUT_FIT: Fitting = { is: isNut, offset: 0 };
+export const LATCH_FIT: Fitting = { is: isLatch, offset: WASHER_T_CM + NUT_CM };
+
+/** Any of the things that go on a rod end. */
+export const isFitting = (m: Material) => isNut(m) || isLatch(m);
+const fitOf = (m: Material): Fitting => (isLatch(m) ? LATCH_FIT : NUT_FIT);
+
+/** Where a fitting piece's middle goes on a rod end: its `offset` out, then half itself. */
+export function fittingCentre(end: { x: number; y: number; rot: number }, m: Material) {
+  const o = outward(end.rot);
+  const out = fitOf(m).offset + planW(m) / 2;
+  return { x: end.x + o.x * out, y: end.y + o.y * out };
+}
+
+/** The nut's name for `fittingCentre`. */
+export const nutCentre = fittingCentre;
+
+/** A fitting placed on an end stands this close to where it belongs, cm. */
 const ON_END_CM = 3;
 
-/** The nut pieces that stand on `end`. */
-function nutsOn(end: RodEnd, pieces: Piece[], byId: Map<string, Material>): Piece[] {
+/** The pieces of one kind that stand on `end`. */
+function fittingsOn(end: RodEnd, pieces: Piece[], byId: Map<string, Material>, fit: Fitting): Piece[] {
   return pieces.filter((p) => {
     const m = byId.get(p.materialId);
-    if (!m || !isNut(m)) return false;
-    const want = nutCentre(end, m);
+    if (!m || !fit.is(m)) return false;
+    const want = fittingCentre(end, m);
     const c = pieceCentre(p, m);
     return Math.hypot(c.x - want.x, c.y - want.y) <= ON_END_CM;
   });
 }
 
-/** The rod ends with no nut placed on them - these are drawn and counted by themselves. */
-export function openRodEnds(pieces: Piece[], byId: Map<string, Material>): RodEnd[] {
-  return rodEnds(pieces, byId).filter((e) => nutsOn(e, pieces, byId).length === 0);
+/** The rod ends with nothing of that kind placed on them - drawn and counted by themselves. */
+export function openRodEnds(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  fit: Fitting = NUT_FIT,
+): RodEnd[] {
+  return rodEnds(pieces, byId).filter((e) => fittingsOn(e, pieces, byId, fit).length === 0);
 }
 
-/** How many ქანჩი + დისკო the drawing needs: one per rod per end, placed or not. */
-export function nutCount(pieces: Piece[], byId: Map<string, Material>): number {
+/** How many of a kind the drawing needs: one per rod per end, placed or not. */
+export function fittingCount(pieces: Piece[], byId: Map<string, Material>, fit: Fitting): number {
   let n = 0;
   for (const p of pieces) {
     const m = byId.get(p.materialId);
-    if (m && isNut(m)) n++;
+    if (m && fit.is(m)) n++;
   }
   for (const e of rodEnds(pieces, byId)) {
-    n += Math.max(0, e.levels.length - nutsOn(e, pieces, byId).length);
+    n += Math.max(0, e.levels.length - fittingsOn(e, pieces, byId, fit).length);
   }
   return n;
 }
 
-/** The nuts for one rod end, one per rod up it. `ids` as in `rodStack`. */
-export function nutStack(m: Material, end: RodEnd, ids: string[], newId: () => string): Piece[] {
-  const c = nutCentre(end, m);
+/** How many ქანჩი + დისკო the drawing needs. */
+export const nutCount = (pieces: Piece[], byId: Map<string, Material>) =>
+  fittingCount(pieces, byId, NUT_FIT);
+/** How many ჩამკეტი fix - one on every ქანჩი + დისკო, so the same number. */
+export const latchCount = (pieces: Piece[], byId: Map<string, Material>) =>
+  fittingCount(pieces, byId, LATCH_FIT);
+
+/** The fittings for one rod end, one per rod up it, facing out. `ids` as in `rodStack`. */
+export function fittingStack(m: Material, end: RodEnd, ids: string[], newId: () => string): Piece[] {
+  const c = fittingCentre(end, m);
   return end.levels.map((level, i) => ({
     id: ids[i] ?? newId(),
     materialId: m.id,
@@ -883,7 +927,15 @@ export function nutStack(m: Material, end: RodEnd, ids: string[], newId: () => s
   }));
 }
 
-/** The rod end a nut let go near `at` belongs on - the nearest in reach. */
+/** The nut's name for `fittingStack`. */
+export const nutStack = fittingStack;
+
+/** The catalog ჩამკეტი fix for a rod end. */
+export function latchMaterial(materials: Material[]): Material | undefined {
+  return materials.find((m) => m.id === 'acc-latch-fix') ?? materials.find(isLatch);
+}
+
+/** The rod end a fitting let go near `at` belongs on - the nearest in reach. */
 export function snapNut(
   at: { x: number; y: number },
   pieces: Piece[],
@@ -903,32 +955,39 @@ export function snapNut(
 }
 
 /**
- * A nut as it is drawn in 3D: the washer, a plate flat against the face, and
- * the nut on it - two boxes in place of the 8 cm cube the catalog sizes it as.
- * `material` is the shape to draw each with; `piece` puts it there.
+ * A fitting as it is drawn in 3D, in place of the box the catalog sizes it as.
+ *
+ * The ქანჩი + დისკო is a washer plate flat on the face and the nut on it; the
+ * ჩამკეტი fix a wing nut - a hub on the rod and its two wings standing up and
+ * down from it, as in the user's photo. `material` is the shape to draw each
+ * part with; `piece` puts it there.
  */
-export function nutParts(p: Piece, m: Material): Array<{ piece: Piece; material: Material }> {
+export function fittingParts(p: Piece, m: Material): Array<{ piece: Piece; material: Material }> {
   const o = outward(p.rot);
   const c = pieceCentre(p, m);
-  const face = { x: c.x - o.x * (planW(m) / 2), y: c.y - o.y * (planH(m) / 2) };
+  const half = planW(m) / 2;
+  const start = { x: c.x - o.x * half, y: c.y - o.y * half };
   const level = (p.z ?? 0) + m.h / 2;
   const box = (name: string, along: number, across: number, tall: number, off: number, color: string) => {
     const mat: Material = { ...m, id: `${m.id}:${name}`, w: along, depth: across, h: tall, shape: 'rect', color };
-    const cx = face.x + o.x * off;
-    const cy = face.y + o.y * off;
+    const cx = start.x + o.x * off;
+    const cy = start.y + o.y * off;
     return {
       material: mat,
       piece: { ...p, x: cx - along / 2, y: cy - across / 2, z: Math.max(0, level - tall / 2) },
     };
   };
+  if (isLatch(m)) {
+    return [
+      box('hub', LATCH_HUB_CM, 5, 5, LATCH_HUB_CM / 2, '#d5d9de'),
+      box('wings', 1.2, 2.5, LATCH_WINGS_CM, LATCH_HUB_CM * 0.6, '#e6e9ec'),
+    ];
+  }
   return [
     box('washer', WASHER_T_CM, WASHER_CM, WASHER_CM, WASHER_T_CM / 2, '#9aa3ad'),
     box('nut', NUT_CM, NUT_CM, NUT_CM, WASHER_T_CM + NUT_CM / 2, '#5c636d'),
   ];
 }
 
-/** The washer: a disc this wide, this thick, cm. */
-export const WASHER_CM = 12;
-export const WASHER_T_CM = 1.5;
-/** The nut on it, cm. */
-export const NUT_CM = 4;
+/** The nut's name for `fittingParts`. */
+export const nutParts = fittingParts;

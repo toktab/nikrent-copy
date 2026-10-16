@@ -16,6 +16,9 @@ import {
   rodStackOf,
   snapRod,
   withRodOff,
+  LATCH_FIT,
+  fittingCentre,
+  latchCount,
   nutCount,
   nutStack,
   openRodEnds,
@@ -201,7 +204,7 @@ describe('შტირები', () => {
     const off = withRodOff(pieces, rod);
     expect(findRods(off, byId)).toHaveLength(0);
     expect(findRods(off, byId, true)).toHaveLength(1);
-    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false });
+    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false, latches: false });
     expect(findRods(back, byId)).toHaveLength(1);
   });
 
@@ -286,5 +289,31 @@ describe('ქანჩი + დისკო', () => {
     expect(openRodEnds(placed, byId)).toHaveLength(1);
     expect(nutCount(placed, byId)).toBe(10);
     expect(rodStackOf(stack[3], placed, byId)).toHaveLength(5);
+  });
+});
+
+describe('ჩამკეტი fix', () => {
+  const wall = () => [
+    put('panel-90x300', 0, 0),
+    put('panel-90x300', 90, 0),
+    put('panel-90x300', 0, 30),
+    put('panel-90x300', 90, 30),
+  ];
+
+  it('needs one on every ქანჩი + დისკო', () => {
+    expect(latchCount(wall(), byId)).toBe(nutCount(wall(), byId));
+    expect(latchCount(wall(), byId)).toBe(10);
+  });
+
+  it('snaps past the nut on a rod end, and only covers its own kind', () => {
+    const latch = byId.get('acc-latch-fix')!;
+    const end = snapNut({ x: 90, y: 50 }, wall(), byId, 15)!;
+    // washer 1.5 + nut 4 out from the face at y 39, then half its 10 cm
+    expect(fittingCentre(end, latch)).toEqual({ x: 90, y: 39 + 5.5 + 5 });
+    let n = 0;
+    const placed = [...wall(), ...nutStack(latch, end, [], () => `l${n++}`)];
+    expect(openRodEnds(placed, byId, LATCH_FIT)).toHaveLength(1);
+    expect(openRodEnds(placed, byId)).toHaveLength(2);
+    expect(latchCount(placed, byId)).toBe(10);
   });
 });

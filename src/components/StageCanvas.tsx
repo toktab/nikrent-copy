@@ -60,9 +60,9 @@ import {
   CONNECTOR_SNAP_PX,
   connectorMaterial,
   connectorsAtCorners,
-  isNut,
+  fittingCentre,
+  isFitting,
   isRod,
-  nutCentre,
   rodPieceAt,
   rodStackOf,
   snapNut,
@@ -1215,13 +1215,13 @@ export function StageCanvas() {
       }
     }
 
-    // A nut finds the rod end it belongs on, facing out.
-    if (view === 'plan' && isNut(material)) {
+    // A nut or a ჩამკეტი finds the rod end it belongs on, facing out.
+    if (view === 'plan' && isFitting(material)) {
       const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
       const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
       const end = snapNut(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
       if (end) {
-        const c = nutCentre(end, material);
+        const c = fittingCentre(end, material);
         const u = c.x - pw / 2;
         const v = c.y - ph / 2;
         return { u, v, w: pw, h: ph, world: { x: u, y: v, z: 0 }, rot: end.rot, guideX: null, guideY: null };
@@ -1301,8 +1301,8 @@ export function StageCanvas() {
       const materialId = e.dataTransfer.getData('text/plain') || s.draggingMaterialId;
       const material = s.materials.find((m) => m.id === materialId);
       if (!material) return;
-      // A nut let go near a rod end goes on it, one for every rod up it.
-      if (s.surfaceView === 'plan' && isNut(material)) {
+      // A nut or a ჩამკეტი let go near a rod end goes on it, one for every rod up it.
+      if (s.surfaceView === 'plan' && isFitting(material)) {
         const r = stageRef.current?.getBoundingClientRect();
         const end =
           r &&

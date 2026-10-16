@@ -153,7 +153,7 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
       const m = byId.get(p.materialId);
       // A კონექტორი sits ON the joint, over both of the pieces it joins, and
       // the nuts up a rod end stand one above the other.
-      if (!m || isLinear(m) || isConnector(m) || isNut(m)) return null;
+      if (!m || isLinear(m) || isConnector(m) || isNut(m) || isLatch(m)) return null;
       return { id: p.id, box: pieceBounds(p, m) };
     })
     .filter((v): v is { id: string; box: Rect } => v !== null);
@@ -312,6 +312,14 @@ export function isConnector(m: Material): boolean {
 /** A ქანჩი + დისკო - the nut and washer on a შტირი end; see `lib/bolts.ts`. */
 export function isNut(m: Material): boolean {
   return m.name.includes('ქანჩი') && m.name.includes('დისკო');
+}
+
+/**
+ * A ჩამკეტი fix - the wing nut that locks a ქანჩი + დისკო on a შტირი. Not
+ * the adjustable one, which is a different fitting.
+ */
+export function isLatch(m: Material): boolean {
+  return m.name.includes('ჩამკეტი') && m.name.toLowerCase().includes('fix');
 }
 
 /** True for materials measured by length (walers, tie rods, posts). */

@@ -1,8 +1,8 @@
 import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
 import { isConnector, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
-import { ConnectorGlyph, NutGlyph } from './BoltLayer';
-import { isNut, NUT_CM, WASHER_CM, WASHER_T_CM } from '../lib/bolts';
+import { ConnectorGlyph, LatchShape, NutGlyph } from './BoltLayer';
+import { isLatch, isNut, LATCH_HUB_CM, LATCH_WINGS_CM, NUT_CM, WASHER_CM, WASHER_T_CM } from '../lib/bolts';
 
 interface Props {
   material: Material;
@@ -46,6 +46,15 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
   // catalog as on the plan, so it is recognisably the same thing.
   if (isConnector(m)) {
     return <ConnectorGlyph cx={pw / 2} cy={ph / 2} r={(Math.min(pw, ph) / 2) * 0.92} px={strokeWidth} />;
+  }
+  // ...the ჩამკეტი fix like the wing nut it is...
+  if (isLatch(m)) {
+    const s = Math.min(pw, ph) / LATCH_WINGS_CM;
+    return (
+      <g transform={`translate(${pw / 2} ${ph / 2})`}>
+        <LatchShape hub={LATCH_HUB_CM * s * 1.4} wings={LATCH_WINGS_CM * s * 0.95} px={strokeWidth / 2} />
+      </g>
+    );
   }
   // ...and the ქანჩი + დისკო like the washer and nut it puts on a rod end.
   if (isNut(m)) {

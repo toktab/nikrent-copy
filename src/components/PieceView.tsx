@@ -1,9 +1,9 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Material, Piece } from '../types';
 import { PlacedShapeSvg, placedBox } from './ShapeSvg';
-import { ConnectorGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
+import { ConnectorGlyph, LatchGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
 import { isConnector, planW, type Rect } from '../lib/geometry';
-import { isNut, isRod, outward, pieceCentre } from '../lib/bolts';
+import { isLatch, isNut, isRod, LATCH_FIT, outward, pieceCentre } from '../lib/bolts';
 
 interface Props {
   piece: Piece;
@@ -40,7 +40,7 @@ export const PieceView = memo(function PieceView({
   const box = placedBox(piece, material);
   const connector = isConnector(material);
   const rod = isRod(material);
-  const nut = isNut(material);
+  const nut = isNut(material) || isLatch(material);
   const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : '';
   return (
     <div
@@ -78,7 +78,12 @@ export function FixingPieceSvg({
 }) {
   const c = pieceCentre(piece, material);
   let body;
-  if (isNut(material)) {
+  if (isLatch(material)) {
+    // Its box starts past the nut; the glyph is drawn from the face.
+    const o = outward(piece.rot);
+    const back = planW(material) / 2 + LATCH_FIT.offset;
+    body = <LatchGlyph x={c.x - o.x * back} y={c.y - o.y * back} rot={piece.rot} scale={1} px={1 / zoom} />;
+  } else if (isNut(material)) {
     const o = outward(piece.rot);
     const half = planW(material) / 2;
     body = <NutGlyph x={c.x - o.x * half} y={c.y - o.y * half} rot={piece.rot} scale={1} px={1 / zoom} />;

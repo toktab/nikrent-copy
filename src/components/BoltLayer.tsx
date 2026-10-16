@@ -1,6 +1,9 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import {
+  LATCH_FIT,
+  LATCH_HUB_CM,
+  LATCH_WINGS_CM,
   NUT_CM,
   openBolts,
   openRodEnds,
@@ -107,6 +110,49 @@ export function NutGlyph({
   );
 }
 
+/**
+ * A ჩამკეტი fix - a wing nut - seen from above, centred on the rod with its
+ * wings across it: a rounded hub and two lobes, in the hub's own units.
+ */
+export function LatchShape({ hub, wings, px = 1 }: { hub: number; wings: number; px?: number }) {
+  const lobe = wings / 2 - hub / 2;
+  const w = hub * 0.55;
+  return (
+    <g className="latch-shape" style={{ strokeWidth: px }}>
+      <rect className="latch-wing" x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
+      <rect className="latch-hub" x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
+      <circle className="latch-hole" r={Math.max(hub * 0.16, lobe * 0.05)} />
+    </g>
+  );
+}
+
+/**
+ * A ჩამკეტი fix on the rod end at (`x`, `y`) facing `rot`, just past the nut
+ * - see `NutGlyph` for the sizes.
+ */
+export function LatchGlyph({
+  x,
+  y,
+  rot,
+  scale,
+  px = 1,
+}: {
+  x: number;
+  y: number;
+  rot: number;
+  scale: number;
+  px?: number;
+}) {
+  const start = Math.max(WASHER_T_CM * scale, 2 * px) + Math.max(NUT_CM * scale, 4 * px);
+  const hub = Math.max(LATCH_HUB_CM * scale, 4 * px);
+  const wings = Math.max(LATCH_WINGS_CM * scale, 11 * px);
+  return (
+    <g className="latch-glyph" transform={`translate(${x} ${y}) rotate(${rot}) translate(${start + hub / 2} 0)`}>
+      <LatchShape hub={hub} wings={wings} px={px} />
+    </g>
+  );
+}
+
 /** A placed შტირი, from tip to tip along its own x: the same thin bar as the marks. */
 export function RodGlyph({ length, scale, px = 1 }: { length: number; scale: number; px?: number }) {
   const t = Math.max(ROD_CM * scale, ROD_MIN_PX * px);
@@ -146,6 +192,15 @@ export function BoltLayer({
       return true;
     });
   }, [pieces, byId]);
+  const latchEnds = useMemo(() => {
+    const seen = new Set<string>();
+    return openRodEnds(pieces, byId, LATCH_FIT).filter((e) => {
+      const key = `${Math.round(e.x)}:${Math.round(e.y)}:${e.rot}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [pieces, byId]);
   const ends = useMemo(() => {
     const seen = new Set<string>();
     return openRodEnds(pieces, byId).filter((e) => {
@@ -170,7 +225,7 @@ export function BoltLayer({
     });
   }, [bolts]);
 
-  if (spots.length === 0 && rods.length === 0 && ends.length === 0) return null;
+  if (spots.length === 0 && rods.length === 0 && ends.length === 0 && latchEnds.length === 0) return null;
   const r = markRadiusPx(zoom);
   // Only the select tool takes hold of things; with the pen or the measure tool
   // out, a press on a mark is a press on the drawing under it.
@@ -208,10 +263,20 @@ export function BoltLayer({
           </g>
         );
       })}
-      {/* ქანჩი + დისკო on every rod end nothing has been placed on. */}
+      {/* ქანჩი + დისკო, and the ჩამკეტი fix past it, on every rod end
+          nothing of that kind has been placed on. */}
       {ends.map((e) => (
         <NutGlyph
           key={`nut:${e.x}:${e.y}:${e.rot}`}
+          x={e.x * zoom + panX}
+          y={e.y * zoom + panY}
+          rot={e.rot}
+          scale={zoom}
+        />
+      ))}
+      {latchEnds.map((e) => (
+        <LatchGlyph
+          key={`latch:${e.x}:${e.y}:${e.rot}`}
           x={e.x * zoom + panX}
           y={e.y * zoom + panY}
           rot={e.rot}
