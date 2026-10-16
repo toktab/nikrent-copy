@@ -14,6 +14,7 @@ import {
   computeEdgeSnap,
   drawStep,
   findOverlaps,
+  isConnector,
   GRID_MAJOR_CM,
   gridStep,
   pieceBounds,
@@ -54,7 +55,14 @@ import {
 import { piecesOnLines } from '../lib/outerLines';
 import { overrideHeld } from '../lib/platform';
 import { createWheelClassifier } from '../lib/wheelInput';
-import { PieceView } from './PieceView';
+import { ConnectorPieceSvg, PieceView } from './PieceView';
+import {
+  CONNECTOR_SNAP_PX,
+  connectorMaterial,
+  connectorsAtCorners,
+  snapConnector,
+  type Bolt,
+} from '../lib/bolts';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
@@ -108,6 +116,7 @@ type Interaction =
 
 /** A press has to travel this far before it counts as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 3;
+
 
 /**
  * Hold a drag to one axis while Shift is down.
@@ -216,6 +225,10 @@ export function StageCanvas() {
     // is a wall.
     () => (showOverlaps && !elevation ? findOverlaps(pieces, byId) : new Set<string>()),
     [showOverlaps, elevation, pieces, byId],
+  );
+  const atCorners = useMemo(
+    () => (elevation ? new Set<string>() : connectorsAtCorners(pieces, byId)),
+    [elevation, pieces, byId],
   );
   const ranks = useMemo(
     () => depthRanks(pieces, byId, surfaceView),
@@ -776,6 +789,30 @@ export function StageCanvas() {
     };
   }, []);
 
+  /**
+   * A press on a worked-out კონექტორი mark: a real კუთხის კონექტორი goes
+   * there, selected, and the press carries on as a drag of it - so the mark
+   * moves under the pointer like any piece, and lets go onto another joint.
+   */
+  const onBoltPointerDown = useCallback((e: ReactPointerEvent, bolt: Bolt) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    const m = connectorMaterial(s.materials);
+    if (!m) return; // a catalog without one has nothing to place
+    e.stopPropagation();
+    s.takeBolt(bolt, m.id);
+    const after = useEditorStore.getState();
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
   /** Pointer position in plan world cm. */
   const worldAt = useCallback((clientX: number, clientY: number) => {
     const el = stageRef.current;
@@ -1122,6 +1159,22 @@ export function StageCanvas() {
     const pw = box.w;
     const ph = box.h;
 
+    /**
+     * A კონექტორი goes ON a joint, between two pieces, not beside them: it
+     * snaps to the nearest one in reach, and only lands loose where there is
+     * none. Plan only - a joint is a place in plan.
+     */
+    if (view === 'plan' && isConnector(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const hit = snapConnector(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      const cx = hit ? hit.x : snapValue(at.x, s.snapStep, s.snap);
+      const cy = hit ? hit.y : snapValue(at.y, s.snapStep, s.snap);
+      const u = cx - pw / 2;
+      const v = cy - ph / 2;
+      return { u, v, w: pw, h: ph, world: { x: u, y: v, z: hit?.z ?? 0 }, guideX: null, guideY: null };
+    }
+
     let u = snapValue((clientX - r.left - s.panX) / s.zoom - pw / 2, s.snapStep, s.snap);
     let v = snapValue((clientY - r.top - s.panY) / s.zoom - ph / 2, s.snapStep, s.snap);
     let guideX: number | null = null;
@@ -1336,12 +1389,17 @@ export function StageCanvas() {
               // the drop.
               const probe = { id: '', materialId: ghost.material.id, x: ghost.x, y: ghost.y, rot: 0, z: 0 };
               const box = placedBox(probe, ghost.material);
+              const connector = isConnector(ghost.material);
               return (
                 <div
-                  className="drop-ghost"
+                  className={`drop-ghost${connector ? ' connector' : ''}`}
                   style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
                 >
-                  <PlacedShapeSvg piece={probe} material={ghost.material} box={box} strokeWidth={1 / zoom} />
+                  {connector ? (
+                    <ConnectorPieceSvg piece={probe} material={ghost.material} box={box} zoom={zoom} />
+                  ) : (
+                    <PlacedShapeSvg piece={probe} material={ghost.material} box={box} strokeWidth={1 / zoom} />
+                  )}
                 </div>
               );
             })()
@@ -1367,6 +1425,7 @@ export function StageCanvas() {
               selected={selected.has(piece.id)}
               overlapping={overlapping.has(piece.id)}
               zoom={zoom}
+              atCorner={atCorners.has(piece.id)}
               onPointerDown={onPiecePointerDown}
             />
           );
@@ -1413,8 +1472,8 @@ export function StageCanvas() {
         />
       )}
 
-      {/* ჭანჭიკები on the plan: a joint is a place in plan, not on a face. */}
-      {!elevation && showBolts && <BoltLayer />}
+      {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
+      {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} />}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text
           stays readable at any zoom. Amber, because an unclosed gap is

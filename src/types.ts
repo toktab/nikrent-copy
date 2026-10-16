@@ -81,6 +81,14 @@ export interface Piece {
    * than a multiplier, and so the 3D view can show them at the right height.
    */
   z?: number;
+  /**
+   * The pieces this one shares a worked-out კონექტორი joint with that has been
+   * taken off the drawing - moved somewhere else by hand, or removed. Kept on
+   * the piece so the choice follows the joint when the wall is moved, saves
+   * with the drawing, and undoes like any other edit. ჭანჭიკები ->
+   * ავტომატურად დასმა clears it.
+   */
+  boltsOff?: string[];
 }
 
 /** Everything a material needs except its identity flags. */

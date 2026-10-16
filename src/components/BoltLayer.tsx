@@ -1,20 +1,63 @@
-import { useMemo } from 'react';
+import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { findBolts } from '../lib/bolts';
+import { openBolts, type Bolt, type BoltKind } from '../lib/bolts';
 
 /**
- * A ჭანჭიკი mark on every joint that takes one - see `lib/bolts.ts` for which.
+ * A კონექტორი mark on every joint that takes one - see `lib/bolts.ts` for which.
  *
  * Drawn the way the user sketched it: a yellow disc with a bolt across it and a
  * red stroke through, sitting on the joint. Screen space, like the gap marks,
  * so the stroke stays crisp; the disc grows with the zoom until it is about a
  * panel thick, and never shrinks past something a pointer could find.
+ *
+ * A mark can be taken hold of: pressing on it puts a real კუთხის კონექტორი
+ * there and starts dragging it (`onGrab`), so a joint the rule got wrong for
+ * this site is moved, not argued with. A joint with a connector already placed
+ * on it shows that piece instead of a mark.
  */
-const MIN_R_PX = 5;
-const MAX_R_PX = 14;
-const R_CM = 6;
+export const MIN_R_PX = 5;
+export const MAX_R_PX = 14;
+export const R_CM = 6;
 
-export function BoltLayer() {
+/** The mark's radius in screen px at a zoom. */
+export const markRadiusPx = (zoom: number) => Math.max(MIN_R_PX, Math.min(MAX_R_PX, R_CM * zoom));
+
+/**
+ * The mark itself: disc, bolt, red stroke. `px` is one screen pixel in the
+ * units it is drawn in, so the strokes stay the same on screen whether it is
+ * drawn in screen space here or in world cm as a placed piece.
+ */
+export function ConnectorGlyph({
+  cx,
+  cy,
+  r,
+  px = 1,
+  kind = 'tee',
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  px?: number;
+  kind?: BoltKind;
+}) {
+  const d = r * 0.7;
+  return (
+    <g className={`bolt-glyph ${kind}`}>
+      <circle cx={cx} cy={cy} r={r} style={{ strokeWidth: 1.5 * px }} />
+      <line className="bolt-bar" x1={cx - d} y1={cy} x2={cx + d} y2={cy} style={{ strokeWidth: 2 * px }} />
+      <line
+        className="bolt-slash"
+        x1={cx - d * 0.6}
+        y1={cy - d}
+        x2={cx + d * 0.6}
+        y2={cy + d}
+        style={{ strokeWidth: 1.6 * px }}
+      />
+    </g>
+  );
+}
+
+export function BoltLayer({ onGrab }: { onGrab?: (e: ReactPointerEvent, bolt: Bolt) => void }) {
   const pieces = useEditorStore((s) => s.pieces);
   const materials = useEditorStore((s) => s.materials);
   const zoom = useEditorStore((s) => s.zoom);
@@ -22,9 +65,10 @@ export function BoltLayer() {
   const panY = useEditorStore((s) => s.panY);
   const stageW = useEditorStore((s) => s.stageW);
   const stageH = useEditorStore((s) => s.stageH);
+  const tool = useEditorStore((s) => s.tool);
 
   const bolts = useMemo(
-    () => findBolts(pieces, new Map(materials.map((m) => [m.id, m]))),
+    () => openBolts(pieces, new Map(materials.map((m) => [m.id, m])), true),
     [pieces, materials],
   );
   // A stacked course shares its joints in plan: one mark is enough to see.
@@ -39,7 +83,10 @@ export function BoltLayer() {
   }, [bolts]);
 
   if (spots.length === 0) return null;
-  const r = Math.max(MIN_R_PX, Math.min(MAX_R_PX, R_CM * zoom));
+  const r = markRadiusPx(zoom);
+  // Only the select tool takes hold of things; with the pen or the measure tool
+  // out, a press on a mark is a press on the drawing under it.
+  const grabbable = !!onGrab && tool === 'select';
 
   return (
     <svg className="bolt-layer" width={stageW} height={stageH} aria-hidden="true">
@@ -47,12 +94,13 @@ export function BoltLayer() {
         const x = b.x * zoom + panX;
         const y = b.y * zoom + panY;
         if (x < -r || y < -r || x > stageW + r || y > stageH + r) return null;
-        const d = r * 0.7;
         return (
-          <g key={`${b.x}:${b.y}`} className={`bolt ${b.kind}`}>
-            <circle cx={x} cy={y} r={r} />
-            <line className="bolt-bar" x1={x - d} y1={y} x2={x + d} y2={y} />
-            <line className="bolt-slash" x1={x - d * 0.6} y1={y - d} x2={x + d * 0.6} y2={y + d} />
+          <g
+            key={`${b.x}:${b.y}`}
+            className={`bolt${grabbable ? ' grabbable' : ''}`}
+            onPointerDown={grabbable ? (e) => onGrab(e, b) : undefined}
+          >
+            <ConnectorGlyph cx={x} cy={y} r={r} kind={b.kind} />
           </g>
         );
       })}

@@ -151,7 +151,8 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
   const boxes = pieces
     .map((p) => {
       const m = byId.get(p.materialId);
-      if (!m || isLinear(m)) return null;
+      // A კონექტორი sits ON the joint, over both of the pieces it joins.
+      if (!m || isLinear(m) || isConnector(m)) return null;
       return { id: p.id, box: pieceBounds(p, m) };
     })
     .filter((v): v is { id: string; box: Rect } => v !== null);
@@ -294,6 +295,17 @@ export function unionRect(rects: Rect[]): Rect | null {
     maxY = Math.max(maxY, r.y + r.h);
   }
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+/**
+ * A კუთხის კონექტორი - the clamp that joins two pieces at a joint.
+ *
+ * Found by name, like the inner corner, because a company's own catalog has
+ * its own ids, and its own idea of which group it belongs in. A bar with the
+ * word in its name is not one - a connector is a fitting, not a length.
+ */
+export function isConnector(m: Material): boolean {
+  return m.name.includes('კონექტორ') && !isLinear(m);
 }
 
 /** True for materials measured by length (walers, tie rods, posts). */

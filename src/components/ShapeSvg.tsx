@@ -1,6 +1,7 @@
 import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
-import { pieceBounds, planH, planW, type Rect } from '../lib/geometry';
+import { isConnector, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
+import { ConnectorGlyph } from './BoltLayer';
 
 interface Props {
   material: Material;
@@ -39,6 +40,12 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
   const pw = planW(m);
   const ph = planH(m);
   const sw = Math.min(strokeWidth, Math.min(pw, ph) / 4);
+
+  // The connector looks like the mark the drawing puts on a joint, in the
+  // catalog as on the plan, so it is recognisably the same thing.
+  if (isConnector(m)) {
+    return <ConnectorGlyph cx={pw / 2} cy={ph / 2} r={(Math.min(pw, ph) / 2) * 0.92} px={strokeWidth} />;
+  }
 
   return m.shape === 'L' ? (
     <polygon points={pointsAttr(drawnOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />

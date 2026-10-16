@@ -6210,7 +6210,7 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── ჭანჭიკები: marks on the plan and the count in the top bar ─────────────── */
+/* ── კონექტორები: marks on the plan, and the ჭანჭიკები menu in the top bar ─────────────── */
 .bolt-layer {
   position: absolute;
   inset: 0;
@@ -6218,24 +6218,44 @@ kbd {
   z-index: 41;
   overflow: hidden;
 }
-.bolt-layer circle,
+/* A mark is taken hold of to place a real connector there. */
+.bolt-layer .bolt.grabbable {
+  pointer-events: auto;
+  cursor: grab;
+}
+/* A placed კუთხის კონექტორი is drawn as the mark, standing on its joint. */
+.piece.connector {
+  overflow: visible;
+}
+.piece.connector > svg {
+  overflow: visible;
+}
+.piece.connector.selected {
+  outline: none;
+}
+.piece.connector.selected .bolt-glyph circle {
+  stroke: var(--sel);
+}
+.bolt-glyph circle,
 .bolts-btn-mark circle {
   fill: #f5d90a;
   stroke: #b59c00;
   stroke-width: 1.5;
 }
-/* the inner-corner bolt sits on a filler, which is yellow already */
-.bolt-layer .bolt.corner circle {
-  fill: #f08a3c;
-  stroke: #b85a14;
+/* At a კუთხე the mark goes a light orange: the inner-corner bolt sits on a
+   filler, which is yellow already, and a placed connector clamping a corner
+   reads as that at a glance. */
+.bolt-glyph.corner circle {
+  fill: #f5a623;
+  stroke: #b8740e;
 }
-.bolt-layer .bolt-bar,
+.bolt-glyph .bolt-bar,
 .bolts-btn-mark .bolt-bar {
   stroke: #111;
   stroke-width: 2;
   stroke-linecap: round;
 }
-.bolt-layer .bolt-slash,
+.bolt-glyph .bolt-slash,
 .bolts-btn-mark .bolt-slash {
   stroke: #b3261e;
   stroke-width: 1.6;
@@ -6244,9 +6264,6 @@ kbd {
 .bolts-btn {
   gap: 6px;
   flex: 0 0 auto;
-}
-.bolts-btn:not(.on) .bolts-btn-mark {
-  opacity: 0.4;
 }
 .bolts-count {
   background: rgba(245, 217, 10, 0.16);
@@ -6267,10 +6284,22 @@ kbd {
   min-width: 0;
   max-width: 100%;
 }
-/* A full top bar keeps the ჭანჭიკი mark and its number; the word is in the
+/* A full top bar keeps the ჭანჭიკები mark; the word is in the
    tooltip. */
 @media (max-width: 1280px) {
   .bolts-label {
     display: none;
   }
+}
+/* The ჭანჭიკები button: crossed bars in the text colour, outline only. */
+.bolts-btn-icon rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+/* Each kind in the ჭანჭიკები menu leads with its own mark. */
+.bolts-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }

@@ -26,9 +26,12 @@ import {
   computeEdgeSnap,
   DRAW_STEP_CM,
   drawStep,
+  isConnector,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
+  planH,
+  planW,
   rotatedOnGrid,
   snapValue,
   unionRect,
@@ -56,6 +59,14 @@ import {
   type SketchFillSpec,
 } from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
+import {
+  CONNECTOR_SNAP_PX,
+  pieceCentre,
+  resetBolts,
+  snapConnector,
+  withBoltOff,
+  type Bolt,
+} from '../lib/bolts';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
 import {
@@ -279,7 +290,7 @@ export interface EditorState {
   inspectorTab: InspectorTab;
   /** mark every open gap, not only the one beside the selection */
   showGaps: boolean;
-  /** mark where a ჭანჭიკი goes - T-joints, inner corners on a ჩაკერება 5 / 10 */
+  /** mark where a კონექტორი goes - T-joints, inner corners on a ჩაკერება 5 / 10 */
   showBolts: boolean;
   /**
    * Simple mode: only what drawing and filling need stays on screen - drawing,
@@ -533,6 +544,14 @@ export interface EditorState {
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
   setShowBolts: (on: boolean) => void;
+  /**
+   * Take hold of a worked-out კონექტორი mark: a real connector goes on that
+   * spot, selected, and the joint stops making a mark of its own - so moving
+   * the connector moves it, and deleting it removes it. One undo step.
+   */
+  takeBolt: (bolt: Bolt, materialId: string) => void;
+  /** ჭანჭიკები -> ავტომატურად დასმა: every connector back where the rule puts it. */
+  resetBolts: () => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
   setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
@@ -1095,6 +1114,36 @@ export const useEditorStore = create<EditorState>()(
             //    nothing better is in reach — see below.
             const gridDu = snapValue(duCm, s.snapStep, s.snap && !freehand);
             const gridDv = snapValue(dvCm, s.snapStep, s.snap && !freehand);
+
+            /**
+             * A კონექტორი on its own goes from joint to joint.
+             *
+             * It sits ON the seam between two pieces, so lining its box up with
+             * their edges - what the edge snap below does - would put it beside
+             * the joint rather than on it. Its middle snaps to the nearest joint
+             * in reach instead, and moves on the grid where there is none.
+             */
+            const alone = baseline.filter((p) => selected.has(p.id));
+            const cm = alone.length === 1 ? byId.get(alone[0].materialId) : undefined;
+            if (view === 'plan' && !freehand && cm && isConnector(cm) && !sketchBaseline?.length) {
+              const base = alone[0];
+              const centre = pieceCentre(base, cm);
+              const others = s.pieces.filter((p) => p.id !== base.id);
+              const hit = snapConnector(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                others,
+                byId,
+                CONNECTOR_SNAP_PX / s.zoom,
+              );
+              const x = hit ? hit.x - planW(cm) / 2 : base.x + gridDu;
+              const y = hit ? hit.y - planH(cm) / 2 : base.y + gridDv;
+              const z = hit ? hit.z : (base.z ?? 0);
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: s.pieces.map((p) => (p.id === base.id ? { ...p, x, y, z } : p)),
+              };
+            }
 
             /**
              * 2. edge snap: line the selection up with a piece already placed.
@@ -1883,6 +1932,26 @@ export const useEditorStore = create<EditorState>()(
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
         setShowBolts: (on) => set({ showBolts: on }),
+        takeBolt: (bolt, materialId) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const piece: Piece = {
+              id: uid(),
+              materialId,
+              x: bolt.x - planW(m) / 2,
+              y: bolt.y - planH(m) / 2,
+              rot: 0,
+              z: Math.max(0, bolt.z),
+            };
+            return { pieces: [...withBoltOff(s.pieces, bolt.a, bolt.b), piece], selectedIds: [piece.id] };
+          }),
+        resetBolts: () =>
+          commit((s) => {
+            const pieces = resetBolts(s.pieces, new Map(s.materials.map((m) => [m.id, m])));
+            const left = new Set(pieces.map((p) => p.id));
+            return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
+          }),
         // Simple mode has no view switcher, so it opens on the plan it works in -
         // through the view setters, so whatever a view change also resets, it does.
         setSimpleMode: (on) => {

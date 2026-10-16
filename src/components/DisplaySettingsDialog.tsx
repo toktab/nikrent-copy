@@ -139,12 +139,12 @@ function ScreenSettings() {
         </table>
       </div>
 
-      <h4 className="vis-section">ჭანჭიკები</h4>
+      <h4 className="vis-section">კონექტორები</h4>
       <div className="vis-extra">
         <label className="vis-check">
           <input type="checkbox" checked={showBolts} onChange={(e) => setShowBolts(e.target.checked)} />
           <span>
-            ჭანჭიკების ჩვენება ნახაზზე - T-შეერთება და შიდა კუთხე ჩაკერება 5 / 10-თან. რაოდენობა ზედა
+            კონექტორების ჩვენება ნახაზზე - T-შეერთება და შიდა კუთხე ჩაკერება 5 / 10-თან. რაოდენობა ზედა
             ზოლშია.
           </span>
         </label>
