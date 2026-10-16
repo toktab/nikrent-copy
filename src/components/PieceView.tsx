@@ -1,9 +1,9 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Material, Piece } from '../types';
 import { PlacedShapeSvg, placedBox } from './ShapeSvg';
-import { ConnectorGlyph, markRadiusPx } from './BoltLayer';
-import { isConnector, type Rect } from '../lib/geometry';
-import { pieceCentre } from '../lib/bolts';
+import { ConnectorGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
+import { isConnector, planW, type Rect } from '../lib/geometry';
+import { isNut, isRod, outward, pieceCentre } from '../lib/bolts';
 
 interface Props {
   piece: Piece;
@@ -39,21 +39,69 @@ export const PieceView = memo(function PieceView({
 }: Props) {
   const box = placedBox(piece, material);
   const connector = isConnector(material);
+  const rod = isRod(material);
+  const nut = isNut(material);
+  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : '';
   return (
     <div
-      className={`piece${connector ? ' connector' : ''}${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
+      className={`piece${kind}${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
       data-piece-id={piece.id}
       style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
       onPointerDown={(e) => onPointerDown(e, piece.id)}
     >
       {connector ? (
         <ConnectorPieceSvg piece={piece} material={material} box={box} zoom={zoom} atCorner={atCorner} />
+      ) : rod || nut ? (
+        <FixingPieceSvg piece={piece} material={material} box={box} zoom={zoom} />
       ) : (
         <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
       )}
     </div>
   );
 });
+
+/**
+ * A placed შტირი or ქანჩი + დისკო, drawn the way their marks are: the rod as
+ * a thin bar tip to tip, the nut as a washer on the face with the nut on it,
+ * facing the way its turn says.
+ */
+export function FixingPieceSvg({
+  piece,
+  material,
+  box,
+  zoom,
+}: {
+  piece: Piece;
+  material: Material;
+  box: Rect;
+  zoom: number;
+}) {
+  const c = pieceCentre(piece, material);
+  let body;
+  if (isNut(material)) {
+    const o = outward(piece.rot);
+    const half = planW(material) / 2;
+    body = <NutGlyph x={c.x - o.x * half} y={c.y - o.y * half} rot={piece.rot} scale={1} px={1 / zoom} />;
+  } else {
+    body = (
+      <g transform={`translate(${c.x} ${c.y}) rotate(${piece.rot})`}>
+        <RodGlyph length={planW(material)} scale={1} px={1 / zoom} />
+      </g>
+    );
+  }
+  return (
+    <svg
+      className="shape"
+      width={box.w}
+      height={box.h}
+      viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
+      style={{ display: 'block' }}
+      aria-hidden="true"
+    >
+      {body}
+    </svg>
+  );
+}
 
 /**
  * A placed კუთხის კონექტორი, drawn as the mark the drawing puts on a joint by

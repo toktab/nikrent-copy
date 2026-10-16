@@ -60,9 +60,12 @@ import {
   CONNECTOR_SNAP_PX,
   connectorMaterial,
   connectorsAtCorners,
+  isNut,
   isRod,
+  nutCentre,
   rodPieceAt,
   rodStackOf,
+  snapNut,
   snapConnector,
   snapRod,
   type Bolt,
@@ -1212,6 +1215,19 @@ export function StageCanvas() {
       }
     }
 
+    // A nut finds the rod end it belongs on, facing out.
+    if (view === 'plan' && isNut(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const end = snapNut(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      if (end) {
+        const c = nutCentre(end, material);
+        const u = c.x - pw / 2;
+        const v = c.y - ph / 2;
+        return { u, v, w: pw, h: ph, world: { x: u, y: v, z: 0 }, rot: end.rot, guideX: null, guideY: null };
+      }
+    }
+
     if (view === 'plan' && isConnector(material)) {
       const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
       const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
@@ -1285,6 +1301,23 @@ export function StageCanvas() {
       const materialId = e.dataTransfer.getData('text/plain') || s.draggingMaterialId;
       const material = s.materials.find((m) => m.id === materialId);
       if (!material) return;
+      // A nut let go near a rod end goes on it, one for every rod up it.
+      if (s.surfaceView === 'plan' && isNut(material)) {
+        const r = stageRef.current?.getBoundingClientRect();
+        const end =
+          r &&
+          snapNut(
+            { x: (e.clientX - r.left - s.panX) / s.zoom, y: (e.clientY - r.top - s.panY) / s.zoom },
+            s.pieces,
+            new Map(s.materials.map((mm) => [mm.id, mm])),
+            CONNECTOR_SNAP_PX / s.zoom,
+          );
+        if (end) {
+          s.placeNutStack(material.id, end);
+          s.setDraggingMaterial(null);
+          return;
+        }
+      }
       // A rod let go on a rod spot is the whole stack that spot takes.
       if (s.surfaceView === 'plan' && isRod(material)) {
         const r = stageRef.current?.getBoundingClientRect();

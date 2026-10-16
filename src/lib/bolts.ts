@@ -1,5 +1,5 @@
 import type { Material, Piece } from '../types';
-import { isConnector, isLinear, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
+import { isConnector, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
 import { cornerLeg } from './shapePath';
 
 /**
@@ -379,9 +379,10 @@ export function withBoltOff(pieces: Piece[], a: string, b: string): Piece[] {
 export interface BoltKinds {
   connectors: boolean;
   rods: boolean;
+  nuts: boolean;
 }
 
-export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true };
+export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true };
 
 /** A taken-off entry in `Piece.boltsOff` that belongs to a შტირი, not a connector. */
 const ROD_OFF = 'rod:';
@@ -402,6 +403,7 @@ export function resetBolts(
       if (!m) return true;
       if (kinds.connectors && isConnector(m)) return false;
       if (kinds.rods && isRod(m)) return false;
+      if (kinds.nuts && isNut(m)) return false;
       return true;
     })
     .map((p) => {
@@ -705,16 +707,19 @@ export function rodStack(m: Material, spot: RodSpot, ids: string[], newId: () =>
 }
 
 /**
- * The rods standing one above the other with `p` - the stack a click on one
- * picks up, so it moves and deletes as the one thing it is on the plan.
+ * The rods - or the nuts on a rod end - standing one above the other with
+ * `p`: the stack a click on one picks up, so it moves and deletes as the one
+ * thing it is on the plan.
  */
 export function rodStackOf(p: Piece, pieces: Piece[], byId: Map<string, Material>): Piece[] {
   const m = byId.get(p.materialId);
-  if (!m || !isRod(m)) return [p];
+  if (!m || !(isRod(m) || isNut(m))) return [p];
   const c = pieceCentre(p, m);
   return pieces.filter((q) => {
     const qm = byId.get(q.materialId);
-    if (!qm || !isRod(qm) || rodDir(q) !== rodDir(p)) return false;
+    if (!qm) return false;
+    if (isRod(m) && !(isRod(qm) && rodDir(q) === rodDir(p))) return false;
+    if (isNut(m) && !(isNut(qm) && normalizeRot(q.rot) === normalizeRot(p.rot))) return false;
     const qc = pieceCentre(q, qm);
     return Math.hypot(qc.x - c.x, qc.y - c.y) < TOUCH_CM;
   });
@@ -736,3 +741,194 @@ export function rodPieceAt(
     z: Math.max(0, spot.z),
   };
 }
+
+/*
+ * ქანჩი + დისკო - the nut and washer on each end of a შტირი.
+ *
+ * As the user set it (2026-10-16): every rod has two, one on each end, the
+ * washer flat against the outside of the face and the nut on it. Worked out
+ * from the rods - placed or not - the same way the rods are worked out from
+ * the joints: counted and drawn by themselves, and a real piece only once one
+ * is dragged in from the catalog, when it snaps onto a rod end.
+ *
+ * A nut piece's turn says which way it faces: 0 is the end of a rod running off
+ * towards +x, 90 towards +y, and so on round. So it is drawn the right way
+ * round without having to find its rod again.
+ */
+
+export { isNut };
+
+/** The nut the catalog offers for a rod end. */
+export function nutMaterial(materials: Material[]): Material | undefined {
+  return materials.find((m) => m.id === 'acc-nut-washer') ?? materials.find(isNut);
+}
+
+/** One end of a rod stack, where its nuts go. */
+export interface RodEnd {
+  /** world cm, on the outside of the face */
+  x: number;
+  y: number;
+  /** which way is out, as a piece turn - see above */
+  rot: number;
+  /** the middle of each rod up the stack, cm off the floor */
+  levels: number[];
+}
+
+/** The way out from a rod end, as a unit step. */
+export const outward = (rot: number) => {
+  const r = Math.round(normalizeRot(rot) / 90) % 4;
+  return [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ][r];
+};
+
+/** The two ends of a rod running `dir` across `from..to` at `at`. */
+function endsOf(dir: 'h' | 'v', at: number, from: number, to: number, levels: number[]): RodEnd[] {
+  return dir === 'v'
+    ? [
+        { x: at, y: from, rot: 270, levels },
+        { x: at, y: to, rot: 90, levels },
+      ]
+    : [
+        { x: from, y: at, rot: 180, levels },
+        { x: to, y: at, rot: 0, levels },
+      ];
+}
+
+/**
+ * Every rod end on the drawing: the worked-out rods nobody has placed, and
+ * every stack that has been. A placed stack on a rod spot takes its ends from
+ * the faces of that spot; one standing loose, from its own two tips.
+ */
+export function rodEnds(pieces: Piece[], byId: Map<string, Material>): RodEnd[] {
+  const out: RodEnd[] = [];
+  for (const r of openRods(pieces, byId)) {
+    const levels = Array.from({ length: r.count }, (_, i) => r.z + (r.h * (i + 0.5)) / r.count);
+    out.push(...endsOf(r.dir, r.at, r.from, r.to, levels));
+  }
+  const spots = findRods(pieces, byId, true);
+  const seen = new Set<string>();
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || !isRod(m) || seen.has(p.id)) continue;
+    const stack = rodStackOf(p, pieces, byId);
+    for (const q of stack) seen.add(q.id);
+    const c = pieceCentre(p, m);
+    const dir = rodDir(p);
+    const levels = stack.map((q) => (q.z ?? 0) + (byId.get(q.materialId)?.h ?? 0) / 2).sort((a, b) => a - b);
+    const spot = spots.find((s) => s.dir === dir && Math.hypot(s.x - c.x, s.y - c.y) <= ON_ROD_CM);
+    if (spot) {
+      out.push(...endsOf(dir, spot.at, spot.from, spot.to, levels));
+    } else {
+      const half = planW(m) / 2;
+      const along = dir === 'v' ? c.y : c.x;
+      out.push(...endsOf(dir, dir === 'v' ? c.x : c.y, along - half, along + half, levels));
+    }
+  }
+  return out;
+}
+
+/** Where a nut piece's middle goes on a rod end: just outside it. */
+export function nutCentre(end: { x: number; y: number; rot: number }, m: Material) {
+  const o = outward(end.rot);
+  const half = planW(m) / 2;
+  return { x: end.x + o.x * half, y: end.y + o.y * half };
+}
+
+/** A nut placed on an end stands this close to where it belongs, cm. */
+const ON_END_CM = 3;
+
+/** The nut pieces that stand on `end`. */
+function nutsOn(end: RodEnd, pieces: Piece[], byId: Map<string, Material>): Piece[] {
+  return pieces.filter((p) => {
+    const m = byId.get(p.materialId);
+    if (!m || !isNut(m)) return false;
+    const want = nutCentre(end, m);
+    const c = pieceCentre(p, m);
+    return Math.hypot(c.x - want.x, c.y - want.y) <= ON_END_CM;
+  });
+}
+
+/** The rod ends with no nut placed on them - these are drawn and counted by themselves. */
+export function openRodEnds(pieces: Piece[], byId: Map<string, Material>): RodEnd[] {
+  return rodEnds(pieces, byId).filter((e) => nutsOn(e, pieces, byId).length === 0);
+}
+
+/** How many ქანჩი + დისკო the drawing needs: one per rod per end, placed or not. */
+export function nutCount(pieces: Piece[], byId: Map<string, Material>): number {
+  let n = 0;
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (m && isNut(m)) n++;
+  }
+  for (const e of rodEnds(pieces, byId)) {
+    n += Math.max(0, e.levels.length - nutsOn(e, pieces, byId).length);
+  }
+  return n;
+}
+
+/** The nuts for one rod end, one per rod up it. `ids` as in `rodStack`. */
+export function nutStack(m: Material, end: RodEnd, ids: string[], newId: () => string): Piece[] {
+  const c = nutCentre(end, m);
+  return end.levels.map((level, i) => ({
+    id: ids[i] ?? newId(),
+    materialId: m.id,
+    x: c.x - planW(m) / 2,
+    y: c.y - planH(m) / 2,
+    rot: end.rot,
+    z: Math.max(0, level - m.h / 2),
+  }));
+}
+
+/** The rod end a nut let go near `at` belongs on - the nearest in reach. */
+export function snapNut(
+  at: { x: number; y: number },
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  reach: number,
+): RodEnd | null {
+  let best: RodEnd | null = null;
+  let bestD = reach;
+  for (const e of rodEnds(pieces, byId)) {
+    const d = Math.hypot(e.x - at.x, e.y - at.y);
+    if (d <= bestD) {
+      best = e;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * A nut as it is drawn in 3D: the washer, a plate flat against the face, and
+ * the nut on it - two boxes in place of the 8 cm cube the catalog sizes it as.
+ * `material` is the shape to draw each with; `piece` puts it there.
+ */
+export function nutParts(p: Piece, m: Material): Array<{ piece: Piece; material: Material }> {
+  const o = outward(p.rot);
+  const c = pieceCentre(p, m);
+  const face = { x: c.x - o.x * (planW(m) / 2), y: c.y - o.y * (planH(m) / 2) };
+  const level = (p.z ?? 0) + m.h / 2;
+  const box = (name: string, along: number, across: number, tall: number, off: number, color: string) => {
+    const mat: Material = { ...m, id: `${m.id}:${name}`, w: along, depth: across, h: tall, shape: 'rect', color };
+    const cx = face.x + o.x * off;
+    const cy = face.y + o.y * off;
+    return {
+      material: mat,
+      piece: { ...p, x: cx - along / 2, y: cy - across / 2, z: Math.max(0, level - tall / 2) },
+    };
+  };
+  return [
+    box('washer', WASHER_T_CM, WASHER_CM, WASHER_CM, WASHER_T_CM / 2, '#9aa3ad'),
+    box('nut', NUT_CM, NUT_CM, NUT_CM, WASHER_T_CM + NUT_CM / 2, '#5c636d'),
+  ];
+}
+
+/** The washer: a disc this wide, this thick, cm. */
+export const WASHER_CM = 12;
+export const WASHER_T_CM = 1.5;
+/** The nut on it, cm. */
+export const NUT_CM = 4;

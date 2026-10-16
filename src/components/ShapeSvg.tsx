@@ -1,7 +1,8 @@
 import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
 import { isConnector, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
-import { ConnectorGlyph } from './BoltLayer';
+import { ConnectorGlyph, NutGlyph } from './BoltLayer';
+import { isNut, NUT_CM, WASHER_CM, WASHER_T_CM } from '../lib/bolts';
 
 interface Props {
   material: Material;
@@ -45,6 +46,11 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
   // catalog as on the plan, so it is recognisably the same thing.
   if (isConnector(m)) {
     return <ConnectorGlyph cx={pw / 2} cy={ph / 2} r={(Math.min(pw, ph) / 2) * 0.92} px={strokeWidth} />;
+  }
+  // ...and the ქანჩი + დისკო like the washer and nut it puts on a rod end.
+  if (isNut(m)) {
+    const s = Math.min(pw, ph) / (WASHER_CM + 1);
+    return <NutGlyph x={pw / 2 - ((WASHER_T_CM + NUT_CM) * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
   return m.shape === 'L' ? (

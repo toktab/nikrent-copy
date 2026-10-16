@@ -6305,19 +6305,53 @@ kbd {
 }
 /* A worked-out შტირი across a wall: the rod colour, outlined so it reads over
    the panels it goes through. */
-.bolt-layer .rod-mark {
-  fill: #d98880;
-  stroke: #7a2f28;
-  stroke-width: 1;
+/* შტირები and their ქანჩი + დისკო: a thin dark-red rod through the wall,
+   a grey washer flat on each face and the nut on it - see BoltLayer. */
+.rod-bar {
+  fill: #c0473f;
+  stroke: #6e211b;
+  stroke-width: 0.6px;
+  vector-effect: non-scaling-stroke;
 }
-.bolt-layer .rod-mark.grabbable {
+.rod-hit {
+  fill: transparent;
+}
+.bolt-layer .rod-mark .rod-hit {
+  pointer-events: none;
+}
+.bolt-layer .rod-mark.grabbable,
+.bolt-layer .rod-mark.grabbable .rod-hit {
   pointer-events: auto;
   cursor: grab;
 }
+.nut-washer {
+  fill: #b7bfc8;
+  stroke: #4b525b;
+}
+.nut-nut {
+  fill: #5c636d;
+  stroke: #2c3137;
+}
+.piece.rod > svg,
+.piece.nut > svg {
+  overflow: visible;
+}
+.piece.rod.selected,
+.piece.nut.selected {
+  outline: none;
+}
+.piece.rod.selected .rod-bar,
+.piece.nut.selected .nut-washer,
+.piece.nut.selected .nut-nut {
+  stroke: var(--sel);
+}
 .rods-mark rect {
-  fill: #d98880;
-  stroke: #7a2f28;
-  stroke-width: 1;
+  fill: #c0473f;
+  stroke: #6e211b;
+  stroke-width: 0.6;
+}
+.nuts-mark rect {
+  stroke-width: 0.6;
 }
 /* ავტომატურად თავიდან დასმა with its settings beside it: the kinds it resets. */
 .bolts-reset-row {

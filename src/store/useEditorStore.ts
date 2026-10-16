@@ -61,7 +61,9 @@ import {
 import { faceBands } from '../lib/gap';
 import {
   CONNECTOR_SNAP_PX,
+  isNut,
   isRod,
+  nutStack,
   pieceCentre,
   resetBolts,
   rodMaterialFor,
@@ -69,12 +71,14 @@ import {
   rodStack,
   rodStackOf,
   snapConnector,
+  snapNut,
   snapRod,
   withBoltOff,
   withRodOff,
   type Bolt,
   type BoltKinds,
   type Rod,
+  type RodEnd,
   type RodSpot,
 } from '../lib/bolts';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
@@ -564,6 +568,8 @@ export interface EditorState {
   takeRod: (rod: Rod) => void;
   /** A catalog rod let go on a rod spot: the whole stack that spot takes. */
   placeRodStack: (materialId: string, spot: RodSpot) => void;
+  /** A catalog ქანჩი + დისკო let go on a rod end: one for every rod up it. */
+  placeNutStack: (materialId: string, end: RodEnd) => void;
   /** ჭანჭიკები -> ავტომატურად თავიდან დასმა: the kinds asked, back where the rule puts them. */
   resetBolts: (kinds?: BoltKinds) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
@@ -1148,6 +1154,37 @@ export const useEditorStore = create<EditorState>()(
              */
             const lifted = baseline.filter((p) => selected.has(p.id));
             const rm = lifted.length ? byId.get(lifted[0].materialId) : undefined;
+            /**
+             * ქანჩი + დისკო the same way: from rod end to rod end, one for
+             * every rod up it, facing out.
+             */
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isNut(rm) &&
+              !sketchBaseline?.length &&
+              rodStackOf(lifted[0], lifted, byId).length === lifted.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const now = s.pieces.filter((p) => selected.has(p.id)).map((p) => p.id);
+              const end = snapNut(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                others,
+                byId,
+                CONNECTOR_SNAP_PX / s.zoom,
+              );
+              const stack = end
+                ? nutStack(rm, end, now, uid)
+                : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: [...others, ...stack],
+                selectedIds: stack.map((p) => p.id),
+              };
+            }
             if (
               view === 'plan' &&
               !freehand &&
@@ -2004,6 +2041,13 @@ export const useEditorStore = create<EditorState>()(
             if (!m) return {};
             const stack = rodStack(m, rodSpot(rod), [], uid);
             return { pieces: [...withRodOff(s.pieces, rod), ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        placeNutStack: (materialId, end) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const stack = nutStack(m, end, [], uid);
+            return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
           }),
         placeRodStack: (materialId, spot) =>
           commit((s) => {

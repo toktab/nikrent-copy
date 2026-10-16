@@ -32,7 +32,17 @@ import {
 } from '../lib/raster3d';
 import { createWheelClassifier } from '../lib/wheelInput';
 import { Icon } from './Icon';
-import { openRods, rodMaterialFor, rodSpot, rodStack } from '../lib/bolts';
+import {
+  isNut,
+  nutMaterial,
+  nutParts,
+  nutStack,
+  openRodEnds,
+  openRods,
+  rodMaterialFor,
+  rodSpot,
+  rodStack,
+} from '../lib/bolts';
 import { EmptyDrawing } from './EmptyDrawing';
 
 /** Darken/lighten a #rrggbb by a 0..1+ factor. */
@@ -161,10 +171,16 @@ export function View3D() {
    */
   const autoRods = useMemo(() => {
     if (!showBolts) return [];
-    return openRods(pieces, byId).flatMap((r) => {
+    const rods = openRods(pieces, byId).flatMap((r) => {
       const m = rodMaterialFor(materials, r.to - r.from);
       return m ? rodStack(m, rodSpot(r), [], () => '') : [];
     });
+    // ...and the ქანჩი + დისკო on both ends of every rod, placed or not.
+    const nut = nutMaterial(materials);
+    const nuts = nut
+      ? openRodEnds(pieces, byId).flatMap((e) => nutStack(nut, e, [], () => ''))
+      : [];
+    return [...rods, ...nuts];
   }, [showBolts, pieces, byId, materials]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -520,9 +536,14 @@ export function View3D() {
     const selectedEdges: Array<[ScreenPoint, ScreenPoint]> = [];
     const map: string[] = [];
 
-    for (const piece of [...pieces, ...autoRods]) {
+    // A ქანჩი + დისკო is drawn as what it is - a washer plate against the
+    // face and the nut on it - rather than the cube the catalog sizes it as.
+    const solids = [...pieces, ...autoRods].flatMap((piece) => {
       const m = byId.get(piece.materialId);
-      if (!m) continue;
+      if (!m) return [];
+      return isNut(m) ? nutParts(piece, m) : [{ piece, material: m }];
+    });
+    for (const { piece, material: m } of solids) {
       const pickId = map.length;
       // An unplaced rod has no id: a click on it is a click on empty space.
       map.push(piece.id);

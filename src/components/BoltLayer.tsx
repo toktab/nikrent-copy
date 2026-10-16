@@ -1,6 +1,18 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { openBolts, openRods, ROD_OVERHANG_CM, type Bolt, type BoltKind, type Rod } from '../lib/bolts';
+import {
+  NUT_CM,
+  openBolts,
+  openRodEnds,
+  openRods,
+  ROD_OVERHANG_CM,
+  rodMaterialFor,
+  WASHER_CM,
+  WASHER_T_CM,
+  type Bolt,
+  type BoltKind,
+  type Rod,
+} from '../lib/bolts';
 
 /**
  * A კონექტორი mark on every joint that takes one - see `lib/bolts.ts` for which.
@@ -57,9 +69,54 @@ export function ConnectorGlyph({
   );
 }
 
-/** A შტირი is drawn this thick: its 3 cm, but never thinner than a pointer can find. */
-const ROD_MIN_PX = 4;
-const ROD_CM = 3;
+/**
+ * A შტირი is drawn as a thin bar - thinner than its catalog 3 cm, so it reads
+ * as a rod through the wall and not a board across it - but never so thin it
+ * disappears when zoomed out.
+ */
+const ROD_MIN_PX = 2;
+const ROD_CM = 1.6;
+
+/**
+ * A ქანჩი + დისკო seen from above, on the face at (`x`, `y`) facing `rot`:
+ * the washer, a thin plate across the rod flat against the face, and the nut on
+ * it. True size in cm times `scale` (units per cm), but never smaller than a
+ * few of `px` (units per screen pixel), so it stays readable zoomed out.
+ */
+export function NutGlyph({
+  x,
+  y,
+  rot,
+  scale,
+  px = 1,
+}: {
+  x: number;
+  y: number;
+  rot: number;
+  scale: number;
+  px?: number;
+}) {
+  const wt = Math.max(WASHER_T_CM * scale, 2 * px);
+  const ww = Math.max(WASHER_CM * scale, 9 * px);
+  const nut = Math.max(NUT_CM * scale, 4 * px);
+  return (
+    <g className="nut-glyph" transform={`translate(${x} ${y}) rotate(${rot})`}>
+      <rect className="nut-washer" x={0} y={-ww / 2} width={wt} height={ww} rx={wt / 3} style={{ strokeWidth: px }} />
+      <rect className="nut-nut" x={wt} y={-nut / 2} width={nut} height={nut} rx={nut / 5} style={{ strokeWidth: px }} />
+    </g>
+  );
+}
+
+/** A placed შტირი, from tip to tip along its own x: the same thin bar as the marks. */
+export function RodGlyph({ length, scale, px = 1 }: { length: number; scale: number; px?: number }) {
+  const t = Math.max(ROD_CM * scale, ROD_MIN_PX * px);
+  return (
+    <g className="rod-glyph">
+      <rect className="rod-hit" x={-length / 2} y={-Math.max(t, 10 * px) / 2} width={length} height={Math.max(t, 10 * px)} />
+      <rect className="rod-bar" x={-length / 2} y={-t / 2} width={length} height={t} rx={t / 2} />
+    </g>
+  );
+}
 
 export function BoltLayer({
   onGrab,
@@ -89,6 +146,19 @@ export function BoltLayer({
       return true;
     });
   }, [pieces, byId]);
+  const ends = useMemo(() => {
+    const seen = new Set<string>();
+    return openRodEnds(pieces, byId).filter((e) => {
+      const key = `${Math.round(e.x)}:${Math.round(e.y)}:${e.rot}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [pieces, byId]);
+  const rodLength = (span: number) => {
+    const m = rodMaterialFor(materials, span);
+    return m ? Math.max(m.w, m.h) : span + ROD_OVERHANG_CM * 2;
+  };
   // A stacked course shares its joints in plan: one mark is enough to see.
   const spots = useMemo(() => {
     const seen = new Set<string>();
@@ -100,7 +170,7 @@ export function BoltLayer({
     });
   }, [bolts]);
 
-  if (spots.length === 0 && rods.length === 0) return null;
+  if (spots.length === 0 && rods.length === 0 && ends.length === 0) return null;
   const r = markRadiusPx(zoom);
   // Only the select tool takes hold of things; with the pen or the measure tool
   // out, a press on a mark is a press on the drawing under it.
@@ -112,27 +182,42 @@ export function BoltLayer({
     <svg className="bolt-layer" width={stageW} height={stageH} aria-hidden="true">
       {/* Rods under the connector marks: a joint can have both. */}
       {rods.map((rod) => {
-        const a = (rod.from - ROD_OVERHANG_CM) * zoom;
-        const b = (rod.to + ROD_OVERHANG_CM) * zoom;
+        // As long as the catalog rod that would go there, so the tips stand
+        // out past the nuts the way they do on site.
+        const len = rodLength(rod.to - rod.from);
+        const mid = (rod.from + rod.to) / 2;
+        const a = (mid - len / 2) * zoom;
+        const b = (mid + len / 2) * zoom;
         const at = rod.at * zoom;
-        const box =
+        const hit = Math.max(thick, 10);
+        const bar = (t: number) =>
           rod.dir === 'v'
-            ? { x: at + panX - thick / 2, y: a + panY, w: thick, h: b - a }
-            : { x: a + panX, y: at + panY - thick / 2, w: b - a, h: thick };
-        if (box.x > stageW || box.y > stageH || box.x + box.w < 0 || box.y + box.h < 0) return null;
+            ? { x: at + panX - t / 2, y: a + panY, width: t, height: b - a }
+            : { x: a + panX, y: at + panY - t / 2, width: b - a, height: t };
+        const box = bar(hit);
+        if (box.x > stageW || box.y > stageH || box.x + box.width < 0 || box.y + box.height < 0) return null;
         return (
-          <rect
+          <g
             key={`rod:${rod.dir}:${rod.x}:${rod.y}`}
             className={`rod-mark${rodsGrabbable ? ' grabbable' : ''}`}
-            x={box.x}
-            y={box.y}
-            width={box.w}
-            height={box.h}
-            rx={thick / 2}
             onPointerDown={rodsGrabbable ? (e) => onGrabRod(e, rod) : undefined}
-          />
+          >
+            {/* a wider band nobody sees, so a thin rod is still easy to take hold of */}
+            <rect className="rod-hit" {...box} />
+            <rect className="rod-bar" {...bar(thick)} rx={thick / 2} />
+          </g>
         );
       })}
+      {/* ქანჩი + დისკო on every rod end nothing has been placed on. */}
+      {ends.map((e) => (
+        <NutGlyph
+          key={`nut:${e.x}:${e.y}:${e.rot}`}
+          x={e.x * zoom + panX}
+          y={e.y * zoom + panY}
+          rot={e.rot}
+          scale={zoom}
+        />
+      ))}
       {spots.map((b) => {
         const x = b.x * zoom + panX;
         const y = b.y * zoom + panY;

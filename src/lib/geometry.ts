@@ -151,8 +151,9 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
   const boxes = pieces
     .map((p) => {
       const m = byId.get(p.materialId);
-      // A კონექტორი sits ON the joint, over both of the pieces it joins.
-      if (!m || isLinear(m) || isConnector(m)) return null;
+      // A კონექტორი sits ON the joint, over both of the pieces it joins, and
+      // the nuts up a rod end stand one above the other.
+      if (!m || isLinear(m) || isConnector(m) || isNut(m)) return null;
       return { id: p.id, box: pieceBounds(p, m) };
     })
     .filter((v): v is { id: string; box: Rect } => v !== null);
@@ -306,6 +307,11 @@ export function unionRect(rects: Rect[]): Rect | null {
  */
 export function isConnector(m: Material): boolean {
   return m.name.includes('კონექტორ') && !isLinear(m);
+}
+
+/** A ქანჩი + დისკო - the nut and washer on a შტირი end; see `lib/bolts.ts`. */
+export function isNut(m: Material): boolean {
+  return m.name.includes('ქანჩი') && m.name.includes('დისკო');
 }
 
 /** True for materials measured by length (walers, tie rods, posts). */

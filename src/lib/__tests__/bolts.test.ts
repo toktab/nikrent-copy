@@ -16,6 +16,12 @@ import {
   rodStackOf,
   snapRod,
   withRodOff,
+  nutCount,
+  nutStack,
+  openRodEnds,
+  pieceCentre,
+  rodEnds,
+  snapNut,
 } from '../bolts';
 import { SEED_MATERIALS } from '../../data/seedCatalog';
 import type { Piece } from '../../types';
@@ -195,7 +201,7 @@ describe('შტირები', () => {
     const off = withRodOff(pieces, rod);
     expect(findRods(off, byId)).toHaveLength(0);
     expect(findRods(off, byId, true)).toHaveLength(1);
-    const back = resetBolts(off, byId, { connectors: false, rods: true });
+    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false });
     expect(findRods(back, byId)).toHaveLength(1);
   });
 
@@ -247,5 +253,38 @@ describe('შტირები up the height', () => {
     expect(rodStackOf(stack[2], [...pieces, ...stack], byId)).toHaveLength(5);
     expect(openRods([...pieces, ...stack], byId)).toHaveLength(0);
     expect(rodCount([...pieces, ...stack], byId)).toBe(5);
+  });
+});
+
+describe('ქანჩი + დისკო', () => {
+  const wall = () => [
+    put('panel-90x300', 0, 0),
+    put('panel-90x300', 90, 0),
+    put('panel-90x300', 0, 30),
+    put('panel-90x300', 90, 30),
+  ];
+
+  it('needs one on each end of every rod: ten for a spot of five', () => {
+    expect(nutCount(wall(), byId)).toBe(10);
+    const ends = rodEnds(wall(), byId);
+    expect(ends.map((e) => [e.x, e.y, e.rot])).toEqual([
+      [90, 0, 270],
+      [90, 39, 90],
+    ]);
+  });
+
+  it('snaps a nut onto the nearest rod end, facing out, one per rod up it', () => {
+    const nut = byId.get('acc-nut-washer')!;
+    const end = snapNut({ x: 92, y: 42 }, wall(), byId, 10)!;
+    expect(end).toMatchObject({ x: 90, y: 39, rot: 90 });
+    let n = 0;
+    const stack = nutStack(nut, end, [], () => `n${n++}`);
+    expect(stack).toHaveLength(5);
+    // just outside the face, its middle half a nut out
+    expect(pieceCentre(stack[0], nut)).toEqual({ x: 90, y: 43 });
+    const placed = [...wall(), ...stack];
+    expect(openRodEnds(placed, byId)).toHaveLength(1);
+    expect(nutCount(placed, byId)).toBe(10);
+    expect(rodStackOf(stack[3], placed, byId)).toHaveLength(5);
   });
 });

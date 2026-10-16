@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { ALL_BOLT_KINDS, connectorCount, rodCount, type BoltKinds } from '../lib/bolts';
+import { ALL_BOLT_KINDS, connectorCount, nutCount, rodCount, type BoltKinds } from '../lib/bolts';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 
@@ -37,6 +37,7 @@ function saveKinds(kinds: BoltKinds) {
 const KIND_NAMES: Array<[keyof BoltKinds, string]> = [
   ['connectors', 'კონექტორები'],
   ['rods', 'შტირები'],
+  ['nuts', 'ქანჩი + დისკო'],
 ];
 
 export function BoltsButton() {
@@ -48,6 +49,7 @@ export function BoltsButton() {
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const connectors = useMemo(() => connectorCount(pieces, byId), [pieces, byId]);
   const rods = useMemo(() => rodCount(pieces, byId), [pieces, byId]);
+  const nuts = useMemo(() => nutCount(pieces, byId), [pieces, byId]);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -94,6 +96,18 @@ export function BoltsButton() {
             <rect x="0.5" y="5" width="13" height="4" rx="2" />
           </svg>
           შტირები
+        </span>
+      </MenuItem>
+      <MenuItem
+        title="ორი თითო შტირზე - ერთი თითო ბოლოზე"
+        trail={<span className="bolts-count">{nuts} ც.</span>}
+      >
+        <span className="bolts-kind">
+          <svg className="nuts-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <rect className="nut-washer" x="4" y="1" width="2.5" height="12" rx="0.8" />
+            <rect className="nut-nut" x="6.5" y="4.5" width="5" height="5" rx="0.8" />
+          </svg>
+          ქანჩი + დისკო
         </span>
       </MenuItem>
       <MenuSep />
