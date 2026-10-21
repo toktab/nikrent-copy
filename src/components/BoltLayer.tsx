@@ -1,21 +1,17 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import {
-  LATCH_FIT,
   LATCH_HUB_CM,
   LATCH_WINGS_CM,
   NUT_CM,
-  openBolts,
-  openRodEnds,
-  openRods,
-  ROD_OVERHANG_CM,
-  rodMaterialFor,
   WASHER_CM,
   WASHER_T_CM,
   type Bolt,
   type BoltKind,
   type Rod,
 } from '../lib/bolts';
+import { markedRodLength, planMarks } from '../lib/boltMarks';
+import { BOLT_COLORS as C } from '../lib/boltStyle';
 
 /**
  * A კონექტორი mark on every joint that takes one - see `lib/bolts.ts` for which.
@@ -56,12 +52,24 @@ export function ConnectorGlyph({
   kind?: BoltKind;
 }) {
   const d = r * 0.7;
+  const disc = kind === 'corner' ? C.corner : C.tee;
   return (
     <g className={`bolt-glyph ${kind}`}>
-      <circle cx={cx} cy={cy} r={r} style={{ strokeWidth: 1.5 * px }} />
-      <line className="bolt-bar" x1={cx - d} y1={cy} x2={cx + d} y2={cy} style={{ strokeWidth: 2 * px }} />
+      <circle cx={cx} cy={cy} r={r} fill={disc.fill} stroke={disc.stroke} style={{ strokeWidth: 1.5 * px }} />
+      <line
+        className="bolt-bar"
+        x1={cx - d}
+        y1={cy}
+        x2={cx + d}
+        y2={cy}
+        stroke={C.bar}
+        strokeLinecap="round"
+        style={{ strokeWidth: 2 * px }}
+      />
       <line
         className="bolt-slash"
+        stroke={C.slash}
+        strokeLinecap="round"
         x1={cx - d * 0.6}
         y1={cy - d}
         x2={cx + d * 0.6}
@@ -104,8 +112,8 @@ export function NutGlyph({
   const nut = Math.max(NUT_CM * scale, 4 * px);
   return (
     <g className="nut-glyph" transform={`translate(${x} ${y}) rotate(${rot})`}>
-      <rect className="nut-washer" x={0} y={-ww / 2} width={wt} height={ww} rx={wt / 3} style={{ strokeWidth: px }} />
-      <rect className="nut-nut" x={wt} y={-nut / 2} width={nut} height={nut} rx={nut / 5} style={{ strokeWidth: px }} />
+      <rect className="nut-washer" fill={C.washer.fill} stroke={C.washer.stroke} x={0} y={-ww / 2} width={wt} height={ww} rx={wt / 3} style={{ strokeWidth: px }} />
+      <rect className="nut-nut" fill={C.nut.fill} stroke={C.nut.stroke} x={wt} y={-nut / 2} width={nut} height={nut} rx={nut / 5} style={{ strokeWidth: px }} />
     </g>
   );
 }
@@ -119,9 +127,9 @@ export function LatchShape({ hub, wings, px = 1 }: { hub: number; wings: number;
   const w = hub * 0.55;
   return (
     <g className="latch-shape" style={{ strokeWidth: px }}>
-      <rect className="latch-wing" x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
-      <rect className="latch-hub" x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
-      <circle className="latch-hole" r={Math.max(hub * 0.16, lobe * 0.05)} />
+      <rect className="latch-wing" fill={C.latch.fill} stroke={C.latch.stroke} x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
+      <rect className="latch-hub" fill={C.latch.fill} stroke={C.latch.stroke} x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
+      <circle className="latch-hole" fill={C.latchHole} r={Math.max(hub * 0.16, lobe * 0.05)} />
     </g>
   );
 }
@@ -158,8 +166,8 @@ export function RodGlyph({ length, scale, px = 1 }: { length: number; scale: num
   const t = Math.max(ROD_CM * scale, ROD_MIN_PX * px);
   return (
     <g className="rod-glyph">
-      <rect className="rod-hit" x={-length / 2} y={-Math.max(t, 10 * px) / 2} width={length} height={Math.max(t, 10 * px)} />
-      <rect className="rod-bar" x={-length / 2} y={-t / 2} width={length} height={t} rx={t / 2} />
+      <rect className="rod-hit" fill="none" x={-length / 2} y={-Math.max(t, 10 * px) / 2} width={length} height={Math.max(t, 10 * px)} />
+      <rect className="rod-bar" fill={C.rod.fill} stroke={C.rod.stroke} x={-length / 2} y={-t / 2} width={length} height={t} rx={t / 2} />
     </g>
   );
 }
@@ -181,49 +189,10 @@ export function BoltLayer({
   const tool = useEditorStore((s) => s.tool);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
-  const bolts = useMemo(() => openBolts(pieces, byId, true), [pieces, byId]);
-  // A stacked course has its rods in the same place in plan: one bar each.
-  const rods = useMemo(() => {
-    const seen = new Set<string>();
-    return openRods(pieces, byId, true).filter((r) => {
-      const key = `${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [pieces, byId]);
-  const latchEnds = useMemo(() => {
-    const seen = new Set<string>();
-    return openRodEnds(pieces, byId, LATCH_FIT).filter((e) => {
-      const key = `${Math.round(e.x)}:${Math.round(e.y)}:${e.rot}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [pieces, byId]);
-  const ends = useMemo(() => {
-    const seen = new Set<string>();
-    return openRodEnds(pieces, byId).filter((e) => {
-      const key = `${Math.round(e.x)}:${Math.round(e.y)}:${e.rot}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [pieces, byId]);
-  const rodLength = (span: number) => {
-    const m = rodMaterialFor(materials, span);
-    return m ? Math.max(m.w, m.h) : span + ROD_OVERHANG_CM * 2;
-  };
-  // A stacked course shares its joints in plan: one mark is enough to see.
-  const spots = useMemo(() => {
-    const seen = new Set<string>();
-    return bolts.filter((b) => {
-      const key = `${Math.round(b.x)}:${Math.round(b.y)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [bolts]);
+  // One mark per spot - a stacked course shares its joints and rods in plan.
+  // The printed sheet draws from the same list.
+  const marks = useMemo(() => planMarks(pieces, byId), [pieces, byId]);
+  const { connectors: spots, rods, nuts: ends, latches: latchEnds } = marks;
 
   if (spots.length === 0 && rods.length === 0 && ends.length === 0 && latchEnds.length === 0) return null;
   const r = markRadiusPx(zoom);
@@ -239,7 +208,7 @@ export function BoltLayer({
       {rods.map((rod) => {
         // As long as the catalog rod that would go there, so the tips stand
         // out past the nuts the way they do on site.
-        const len = rodLength(rod.to - rod.from);
+        const len = markedRodLength(materials, rod);
         const mid = (rod.from + rod.to) / 2;
         const a = (mid - len / 2) * zoom;
         const b = (mid + len / 2) * zoom;

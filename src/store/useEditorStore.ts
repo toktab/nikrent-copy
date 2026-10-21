@@ -113,6 +113,7 @@ import { scaleMeasures, scaleSketch, sketchBounds } from '../lib/scaleSketch';
 import {
   DEFAULT_JSON_EXPORT,
   normalizeJsonExport,
+  normalizePdfScale,
   normalizeSheetSize,
   type JsonExportOptions,
   type SheetSize,
@@ -165,6 +166,7 @@ const PREF_KEYS = [
   'lengthVisibility',
   'pdfVisibility',
   'pdfSheet',
+  'pdfScale',
   'jsonExport',
   'showNames',
   'forceLabels',
@@ -284,6 +286,8 @@ export interface EditorState {
   pdfVisibility: PdfVisibility;
   /** the paper the drawing is exported on */
   pdfSheet: SheetSize;
+  /** the scale it is printed at; 0 = ავტომატური, fitted to the sheet */
+  pdfScale: number;
   /** what the exported drawing file carries - see `JsonExportOptions` */
   jsonExport: JsonExportOptions;
   showNames: boolean;
@@ -551,6 +555,7 @@ export interface EditorState {
   resetScreenDisplay: () => void;
   resetPdfVisibility: () => void;
   setPdfSheet: (sheet: SheetSize) => void;
+  setPdfScale: (scale: number) => void;
   setJsonExport: (patch: Partial<JsonExportOptions>) => void;
   resetJsonExport: () => void;
   setShowNames: (on: boolean) => void;
@@ -929,6 +934,7 @@ export const useEditorStore = create<EditorState>()(
         lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
         pdfVisibility: { ...DEFAULT_PDF_VISIBILITY },
         pdfSheet: 'A4',
+        pdfScale: 0,
         jsonExport: { ...DEFAULT_JSON_EXPORT },
         showNames: true,
         forceLabels: false,
@@ -2011,8 +2017,9 @@ export const useEditorStore = create<EditorState>()(
             showBolts: true,
             measureStyle: { ...DEFAULT_MEASURE_STYLE },
           }),
-        resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
+        resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY }, pdfScale: 0 }),
         setPdfSheet: (sheet) => set({ pdfSheet: normalizeSheetSize(sheet) }),
+        setPdfScale: (scale) => set({ pdfScale: normalizePdfScale(scale) }),
         setJsonExport: (patch) =>
           set((s) => ({ jsonExport: normalizeJsonExport({ ...s.jsonExport, ...patch }) })),
         resetJsonExport: () => set({ jsonExport: { ...DEFAULT_JSON_EXPORT } }),
@@ -2521,6 +2528,7 @@ export const useEditorStore = create<EditorState>()(
             layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
             pdfSheet: normalizeSheetSize(saved.pdfSheet),
+            pdfScale: normalizePdfScale(saved.pdfScale),
             jsonExport: normalizeJsonExport(saved.jsonExport),
             inspectorTab:
               saved.inspectorTab === undefined
@@ -2563,6 +2571,7 @@ export const useEditorStore = create<EditorState>()(
           layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
           pdfSheet: normalizeSheetSize(saved.pdfSheet),
+          pdfScale: normalizePdfScale(saved.pdfScale),
           jsonExport: normalizeJsonExport(saved.jsonExport),
           penPerimeter: 'outer',
           penPoints: [],

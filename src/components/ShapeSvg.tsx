@@ -112,8 +112,6 @@ export function PlacedShapeSvg({
   box: Rect;
   strokeWidth?: number;
 }) {
-  const pw = planW(m);
-  const ph = planH(m);
   return (
     <svg
       className="shape"
@@ -123,12 +121,32 @@ export function PlacedShapeSvg({
       style={{ display: 'block' }}
       aria-hidden="true"
     >
-      <g
-        transform={`translate(${piece.x + pw / 2} ${piece.y + ph / 2}) rotate(${piece.rot}) translate(${-pw / 2} ${-ph / 2})`}
-      >
-        <ShapeBody material={m} strokeWidth={strokeWidth} />
-      </g>
+      <PlacedShapeBody piece={piece} material={m} strokeWidth={strokeWidth} />
     </svg>
+  );
+}
+
+/**
+ * The shape where it lies, in world cm - for any SVG whose units are world cm,
+ * the surface's own and the printed sheet's.
+ */
+export function PlacedShapeBody({
+  piece,
+  material: m,
+  strokeWidth = 1,
+}: {
+  piece: Piece;
+  material: Material;
+  strokeWidth?: number;
+}) {
+  const pw = planW(m);
+  const ph = planH(m);
+  return (
+    <g
+      transform={`translate(${piece.x + pw / 2} ${piece.y + ph / 2}) rotate(${piece.rot}) translate(${-pw / 2} ${-ph / 2})`}
+    >
+      <ShapeBody material={m} strokeWidth={strokeWidth} />
+    </g>
   );
 }
 

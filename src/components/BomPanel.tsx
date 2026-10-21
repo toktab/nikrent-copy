@@ -9,7 +9,8 @@ export function BomPanel() {
   const pieces = useEditorStore((s) => s.pieces);
   const documents = useEditorStore((s) => s.documents);
   const activeDocId = useEditorStore((s) => s.activeDocId);
-  const [withSnapshot, setWithSnapshot] = useState(true);
+  const openDialog = useEditorStore((s) => s.openDialog);
+  const setPdfVisibility = useEditorStore((s) => s.setPdfVisibility);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,15 +47,13 @@ export function BomPanel() {
       exportBomToCsv(bom);
     });
 
-  const onPdf = () =>
-    run('pdf', async () => {
-      const [{ exportBomToPdf }, { renderLayoutSnapshot }] = await Promise.all([
-        import('../lib/pdfExport'),
-        import('../lib/snapshot'),
-      ]);
-      const snapshot = withSnapshot ? renderLayoutSnapshot(materials, pieces) : null;
-      await exportBomToPdf({ bom, snapshot });
-    });
+  // Every PDF in the app comes out of the one export window, so the parts list
+  // gets the same drawing, key and ჭანჭიკები as any other print. From here it
+  // opens with the list switched on - that is what this button was asked for.
+  const onPdf = () => {
+    setPdfVisibility({ bomPage: true });
+    openDialog({ kind: 'export', tab: 'pdf' });
+  };
 
   return (
     <div className="bom">
@@ -98,20 +97,10 @@ export function BomPanel() {
             <Icon name="download" /> CSV
           </>}
         </button>
-        <button className="btn small" onClick={onPdf} disabled={!!busy || !bom.totalPieces}>
-          {busy === 'pdf' ? '…' : <>
-            <Icon name="download" /> PDF
-          </>}
+        <button className="btn small" onClick={onPdf} disabled={!!busy || !bom.totalPieces} title="ნახაზი და მასალების უწყისი ერთ PDF-ში">
+          <Icon name="print" /> PDF…
         </button>
       </div>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={withSnapshot}
-          onChange={(e) => setWithSnapshot(e.target.checked)}
-        />
-        PDF-ში ნახაზის სურათიც
-      </label>
 
       {error && <div className="alert error">{error}</div>}
       {bom.orphanPieces > 0 && (

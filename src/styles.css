@@ -2171,6 +2171,27 @@ input.stock-input.bad {
   align-items: center;
   gap: 8px;
 }
+/* გაფართოებული პარამეტრები: one wide button under the basic choices, the
+   chevron turning over when it is open. */
+.export-advanced {
+  width: 100%;
+  margin-top: 16px;
+  gap: 8px;
+}
+.export-advanced > span {
+  flex: 1;
+  text-align: left;
+}
+.export-advanced > svg:last-child {
+  transition: transform 0.15s;
+}
+.export-advanced.on > svg:last-child {
+  transform: rotate(180deg);
+}
+.export-advanced-body {
+  margin-top: 4px;
+  padding-left: 2px;
+}
 .export-preview {
   position: sticky;
   top: 0;
@@ -6211,6 +6232,8 @@ kbd {
 }
 
 /* ── კონექტორები: marks on the plan, and the ჭანჭიკები menu in the top bar ─────────────── */
+/* The printed sheet draws these glyphs with no stylesheet, from the colours in
+   src/lib/boltStyle.ts - keep the two in step. */
 .bolt-layer {
   position: absolute;
   inset: 0;

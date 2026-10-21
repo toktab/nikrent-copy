@@ -76,24 +76,6 @@ export function FixingPieceSvg({
   box: Rect;
   zoom: number;
 }) {
-  const c = pieceCentre(piece, material);
-  let body;
-  if (isLatch(material)) {
-    // Its box starts past the nut; the glyph is drawn from the face.
-    const o = outward(piece.rot);
-    const back = planW(material) / 2 + LATCH_FIT.offset;
-    body = <LatchGlyph x={c.x - o.x * back} y={c.y - o.y * back} rot={piece.rot} scale={1} px={1 / zoom} />;
-  } else if (isNut(material)) {
-    const o = outward(piece.rot);
-    const half = planW(material) / 2;
-    body = <NutGlyph x={c.x - o.x * half} y={c.y - o.y * half} rot={piece.rot} scale={1} px={1 / zoom} />;
-  } else {
-    body = (
-      <g transform={`translate(${c.x} ${c.y}) rotate(${piece.rot})`}>
-        <RodGlyph length={planW(material)} scale={1} px={1 / zoom} />
-      </g>
-    );
-  }
   return (
     <svg
       className="shape"
@@ -103,8 +85,32 @@ export function FixingPieceSvg({
       style={{ display: 'block' }}
       aria-hidden="true"
     >
-      {body}
+      <FixingBody piece={piece} material={material} px={1 / zoom} />
     </svg>
+  );
+}
+
+/**
+ * A placed შტირი, ქანჩი + დისკო or ჩამკეტი fix where it lies, in world cm.
+ * `px` is one screen pixel - or, on the printed sheet, its stand-in - in cm.
+ */
+export function FixingBody({ piece, material, px }: { piece: Piece; material: Material; px: number }) {
+  const c = pieceCentre(piece, material);
+  if (isLatch(material)) {
+    // Its box starts past the nut; the glyph is drawn from the face.
+    const o = outward(piece.rot);
+    const back = planW(material) / 2 + LATCH_FIT.offset;
+    return <LatchGlyph x={c.x - o.x * back} y={c.y - o.y * back} rot={piece.rot} scale={1} px={px} />;
+  }
+  if (isNut(material)) {
+    const o = outward(piece.rot);
+    const half = planW(material) / 2;
+    return <NutGlyph x={c.x - o.x * half} y={c.y - o.y * half} rot={piece.rot} scale={1} px={px} />;
+  }
+  return (
+    <g transform={`translate(${c.x} ${c.y}) rotate(${piece.rot})`}>
+      <RodGlyph length={planW(material)} scale={1} px={px} />
+    </g>
   );
 }
 
