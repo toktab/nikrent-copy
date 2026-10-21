@@ -15,6 +15,7 @@ import {
   ROD_OVERHANG_CM,
   rodMaterialFor,
   type Bolt,
+  type BoltKinds,
   type Rod,
   type RodEnd,
 } from './bolts';
@@ -84,5 +85,20 @@ export function boltTotals(pieces: Piece[], byId: Map<string, Material>): Record
     rods: rodCount(pieces, byId),
     nuts: nutCount(pieces, byId),
     latches: latchCount(pieces, byId),
+  };
+}
+
+/**
+ * Which kinds the plan shows - each one switched on and off by itself from the
+ * ჭანჭიკები menu. Anything not a clear `false` shows, so a setting saved before
+ * a kind existed still shows it.
+ */
+export function normalizeBoltKinds(raw: unknown): BoltKinds {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    connectors: r.connectors !== false,
+    rods: r.rods !== false,
+    nuts: r.nuts !== false,
+    latches: r.latches !== false,
   };
 }

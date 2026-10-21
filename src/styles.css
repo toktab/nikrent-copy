@@ -6326,6 +6326,19 @@ kbd {
   align-items: center;
   gap: 7px;
 }
+/* A kind hidden from the plan: faded in the menu, its count struck through. */
+.bolts-kind.off {
+  opacity: 0.45;
+}
+.bolts-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bolts-count.off {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
 /* A worked-out შტირი across a wall: the rod colour, outlined so it reads over
    the panels it goes through. */
 /* შტირები and their ქანჩი + დისკო: a thin dark-red rod through the wall,

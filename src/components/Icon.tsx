@@ -55,6 +55,7 @@ export type IconName =
   | 'pen'
   | 'ruler'
   | 'eye'
+  | 'eye-off'
   | 'magnet';
 
 /** Path data only — stroke styling is applied once, on the <svg>. */
@@ -111,6 +112,8 @@ const PATHS: Record<IconName, string> = {
   // A rule laid on the diagonal with three ticks: a measurement, not a drawn line.
   ruler: 'M3 17 17 3l4 4L7 21z M7 13l2 2 M10 10l2 2 M13 7l2 2',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  // The same eye, struck through: hidden from view, not gone.
+  'eye-off': 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M4 4l16 16',
   // A horseshoe magnet, poles down: the helper that pulls points into place.
   magnet: 'M6 4v8a6 6 0 0 0 12 0V4 M6 4h4v8a2 2 0 0 0 4 0V4h4 M6 8h4 M14 8h4',
   // Two arcs, a dot and the slash. A full wifi fan has five strokes that turn

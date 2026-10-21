@@ -71,6 +71,7 @@ import {
   type Bolt,
   type Rod,
 } from '../lib/bolts';
+import { boltKindOf } from '../lib/boltMarks';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
@@ -222,6 +223,7 @@ export function StageCanvas() {
   const showSketch = useEditorStore((s) => s.showSketch);
   const showGaps = useEditorStore((s) => s.showGaps);
   const showBolts = useEditorStore((s) => s.showBolts);
+  const boltsShown = useEditorStore((s) => s.boltsShown);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const measures = useEditorStore((s) => s.measures);
   const recommendPreview = useEditorStore((s) => s.recommendPreview);
@@ -527,6 +529,10 @@ export function StageCanvas() {
             const hits = s.pieces.filter((p) => {
               const m = lookup.get(p.materialId);
               if (!m) return false;
+              // Nothing hidden is picked up: a band dragged over a wall must not
+              // carry off კონექტორები nobody can see, to be deleted with it.
+              const kind = boltKindOf(m);
+              if (kind && !s.boltsShown[kind]) return false;
               // Tested against what the view actually shows, so a rubber band
               // in an elevation catches the course it was drawn around.
               const b = projectPiece(p, m, s.surfaceView);
@@ -1505,6 +1511,10 @@ export function StageCanvas() {
         {pieces.map((piece) => {
           const material = byId.get(piece.materialId);
           if (!material) return null;
+          // A ჭანჭიკი kind switched off in its menu is hidden placed or not -
+          // the menu's switch is about seeing the kind, not where it came from.
+          const kind = boltKindOf(material);
+          if (kind && !boltsShown[kind]) return null;
           return elevation ? (
             <ElevationPieceView
               key={piece.id}

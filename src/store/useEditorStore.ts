@@ -75,12 +75,14 @@ import {
   snapRod,
   withBoltOff,
   withRodOff,
+  ALL_BOLT_KINDS,
   type Bolt,
   type BoltKinds,
   type Rod,
   type RodEnd,
   type RodSpot,
 } from '../lib/bolts';
+import { boltKindOf, normalizeBoltKinds } from '../lib/boltMarks';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
 import {
@@ -173,6 +175,7 @@ const PREF_KEYS = [
   'showOverlaps',
   'showGaps',
   'showBolts',
+  'boltsShown',
   'showSketch',
   'measureStyle',
   'viewMode',
@@ -310,6 +313,8 @@ export interface EditorState {
   showGaps: boolean;
   /** mark where a კონექტორი goes - T-joints, inner corners on a ჩაკერება 5 / 10 */
   showBolts: boolean;
+  /** each ჭანჭიკი kind shown on the plan or not - marks and placed pieces alike */
+  boltsShown: BoltKinds;
   /**
    * Simple mode: only what drawing and filling need stays on screen - drawing,
    * measuring, the parts, the recommendation tab. Everything else comes back
@@ -563,6 +568,7 @@ export interface EditorState {
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
   setShowBolts: (on: boolean) => void;
+  toggleBoltKind: (kind: keyof BoltKinds) => void;
   /**
    * Take hold of a worked-out კონექტორი mark: a real connector goes on that
    * spot, selected, and the joint stops making a mark of its own - so moving
@@ -948,6 +954,7 @@ export const useEditorStore = create<EditorState>()(
         inspectorTab: 'bom',
         showGaps: false,
         showBolts: true,
+        boltsShown: { ...ALL_BOLT_KINDS },
         simpleMode: false,
         fillDefaults: { height: 300, includeCorners: true },
         layoutFilters: { ...DEFAULT_LAYOUT_FILTERS },
@@ -1080,11 +1087,21 @@ export const useEditorStore = create<EditorState>()(
         // Everything means everything: the layout is part of the drawing, and
         // "select all, move it over" is the commonest reason to want either.
         selectAll: () =>
-          set((s) => ({
-            selectedIds: s.pieces.map((p) => p.id),
-            selectedSketchIds: s.sketch.map((k) => k.id),
-            selectedSketchPart: null,
-          })),
+          set((s) => {
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
+            return {
+              // Not the ჭანჭიკები hidden from the plan - nothing unseen is selected.
+              selectedIds: s.pieces
+                .filter((p) => {
+                  const m = byId.get(p.materialId);
+                  const kind = m ? boltKindOf(m) : null;
+                  return !kind || s.boltsShown[kind];
+                })
+                .map((p) => p.id),
+              selectedSketchIds: s.sketch.map((k) => k.id),
+              selectedSketchPart: null,
+            };
+          }),
 
         // ── pieces ────────────────────────────────────────────────────────
         /**
@@ -2015,6 +2032,7 @@ export const useEditorStore = create<EditorState>()(
             showLengths: true,
             lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
             showBolts: true,
+            boltsShown: { ...ALL_BOLT_KINDS },
             measureStyle: { ...DEFAULT_MEASURE_STYLE },
           }),
         resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY }, pdfScale: 0 }),
@@ -2028,6 +2046,7 @@ export const useEditorStore = create<EditorState>()(
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
         setShowBolts: (on) => set({ showBolts: on }),
+        toggleBoltKind: (kind) => set((s) => ({ boltsShown: { ...s.boltsShown, [kind]: !s.boltsShown[kind] } })),
         takeBolt: (bolt, materialId) =>
           commit((s) => {
             const m = s.materials.find((mm) => mm.id === materialId);
@@ -2526,6 +2545,7 @@ export const useEditorStore = create<EditorState>()(
             measureStyle: normalizeMeasureStyle(saved.measureStyle),
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
             layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
+            boltsShown: normalizeBoltKinds(saved.boltsShown),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
             pdfSheet: normalizeSheetSize(saved.pdfSheet),
             pdfScale: normalizePdfScale(saved.pdfScale),
@@ -2569,6 +2589,7 @@ export const useEditorStore = create<EditorState>()(
           measureStyle: normalizeMeasureStyle(saved.measureStyle),
           lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
           layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
+          boltsShown: normalizeBoltKinds(saved.boltsShown),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
           pdfSheet: normalizeSheetSize(saved.pdfSheet),
           pdfScale: normalizePdfScale(saved.pdfScale),

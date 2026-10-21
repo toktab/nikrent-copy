@@ -192,7 +192,12 @@ export function BoltLayer({
   // One mark per spot - a stacked course shares its joints and rods in plan.
   // The printed sheet draws from the same list.
   const marks = useMemo(() => planMarks(pieces, byId), [pieces, byId]);
-  const { connectors: spots, rods, nuts: ends, latches: latchEnds } = marks;
+  // A kind switched off in the ჭანჭიკები menu leaves the plan, marks and all.
+  const shown = useEditorStore((s) => s.boltsShown);
+  const spots = shown.connectors ? marks.connectors : [];
+  const rods = shown.rods ? marks.rods : [];
+  const ends = shown.nuts ? marks.nuts : [];
+  const latchEnds = shown.latches ? marks.latches : [];
 
   if (spots.length === 0 && rods.length === 0 && ends.length === 0 && latchEnds.length === 0) return null;
   const r = markRadiusPx(zoom);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boltKindOf, boltTotals, markedRodLength, planMarks } from '../boltMarks';
+import { boltKindOf, boltTotals, markedRodLength, normalizeBoltKinds, planMarks } from '../boltMarks';
 import { connectorCount, latchCount, nutCount, rodCount } from '../bolts';
 import { DEFAULT_PDF_VISIBILITY, normalizePdfVisibility } from '../dimensions';
 import { SEED_MATERIALS } from '../../data/seedCatalog';
@@ -80,5 +80,17 @@ describe('the PDF switches for the key and the ჭანჭიკები', () 
 
   it('remember a kind switched off', () => {
     expect(normalizePdfVisibility({ ...DEFAULT_PDF_VISIBILITY, rods: false }).rods).toBe(false);
+  });
+});
+
+describe('which ჭანჭიკები the plan shows', () => {
+  it('shows every kind unless one was switched off', () => {
+    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true });
+    expect(normalizeBoltKinds({ rods: false, nuts: 'x' })).toEqual({
+      connectors: true,
+      rods: false,
+      nuts: true,
+      latches: true,
+    });
   });
 });
