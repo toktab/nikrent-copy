@@ -244,6 +244,9 @@ describe('შტირები up the height', () => {
     // panel-75x150 is the 150 the catalog has in a 75 width
     const short = [put('panel-75x150', 0, 0), put('panel-75x150', 75, 0), put('panel-75x150', 0, 30), put('panel-75x150', 75, 30)];
     expect(rodCount(short, byId)).toBe(2);
+    // and two on a 90, the shortest the catalog has
+    const low = [put('panel-75x090', 0, 0), put('panel-75x090', 75, 0), put('panel-75x090', 0, 30), put('panel-75x090', 75, 30)];
+    expect(rodCount(low, byId)).toBe(2);
   });
 
   it('stacks the rods evenly up the face, and a stack fills its spot', () => {
