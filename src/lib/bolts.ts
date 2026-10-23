@@ -380,10 +380,9 @@ export interface BoltKinds {
   connectors: boolean;
   rods: boolean;
   nuts: boolean;
-  latches: boolean;
 }
 
-export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true, latches: true };
+export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true };
 
 /** A taken-off entry in `Piece.boltsOff` that belongs to a შტირი, not a connector. */
 const ROD_OFF = 'rod:';
@@ -405,7 +404,6 @@ export function resetBolts(
       if (kinds.connectors && isConnector(m)) return false;
       if (kinds.rods && isRod(m)) return false;
       if (kinds.nuts && isNut(m)) return false;
-      if (kinds.latches && isLatch(m)) return false;
       return true;
     })
     .map((p) => {
@@ -835,10 +833,11 @@ export function rodEnds(pieces: Piece[], byId: Map<string, Material>): RodEnd[] 
 }
 
 /**
- * What goes on a rod end, from the face out: the ქანჩი + დისკო, then the
- * ჩამკეტი fix that locks it (the user's rule, 2026-10-16: one on every nut).
- * Each sits `offset` cm out from the face, and is placed, counted and drawn the
- * same way.
+ * What goes on a rod end, from the face out: the ქანჩი + დისკო - washer, nut
+ * and the light wing piece past it, one item (the user, 2026-10-23). A
+ * ჩამკეტი fix is a catalog piece of its own that sits past the nut when one is
+ * placed by hand; it is no longer worked out on every rod end. Each sits
+ * `offset` cm out from the face, and is placed, counted and drawn the same way.
  */
 export interface Fitting {
   is: (m: Material) => boolean;
@@ -850,7 +849,10 @@ export const WASHER_CM = 12;
 export const WASHER_T_CM = 1.5;
 /** The nut on it, cm. */
 export const NUT_CM = 4;
-/** The ჩამკეტი fix - a wing nut: its hub this deep along the rod, its wings this tall across it, cm. */
+/**
+ * The wing piece at the end of a ქანჩი + დისკო - and a placed ჩამკეტი fix,
+ * the same shape: its hub this deep along the rod, its wings this tall across it, cm.
+ */
 export const LATCH_HUB_CM = 4;
 export const LATCH_WINGS_CM = 14;
 
@@ -910,9 +912,6 @@ export function fittingCount(pieces: Piece[], byId: Map<string, Material>, fit: 
 /** How many ქანჩი + დისკო the drawing needs. */
 export const nutCount = (pieces: Piece[], byId: Map<string, Material>) =>
   fittingCount(pieces, byId, NUT_FIT);
-/** How many ჩამკეტი fix - one on every ქანჩი + დისკო, so the same number. */
-export const latchCount = (pieces: Piece[], byId: Map<string, Material>) =>
-  fittingCount(pieces, byId, LATCH_FIT);
 
 /** The fittings for one rod end, one per rod up it, facing out. `ids` as in `rodStack`. */
 export function fittingStack(m: Material, end: RodEnd, ids: string[], newId: () => string): Piece[] {
@@ -929,11 +928,6 @@ export function fittingStack(m: Material, end: RodEnd, ids: string[], newId: () 
 
 /** The nut's name for `fittingStack`. */
 export const nutStack = fittingStack;
-
-/** The catalog ჩამკეტი fix for a rod end. */
-export function latchMaterial(materials: Material[]): Material | undefined {
-  return materials.find((m) => m.id === 'acc-latch-fix') ?? materials.find(isLatch);
-}
 
 /** The rod end a fitting let go near `at` belongs on - the nearest in reach. */
 export function snapNut(
@@ -957,10 +951,10 @@ export function snapNut(
 /**
  * A fitting as it is drawn in 3D, in place of the box the catalog sizes it as.
  *
- * The ქანჩი + დისკო is a washer plate flat on the face and the nut on it; the
- * ჩამკეტი fix a wing nut - a hub on the rod and its two wings standing up and
- * down from it, as in the user's photo. `material` is the shape to draw each
- * part with; `piece` puts it there.
+ * The ქანჩი + დისკო is a washer plate flat on the face, the nut on it, and past
+ * that a wing nut - a hub on the rod and its two wings standing up and down from
+ * it, as in the user's photo. A placed ჩამკეტი fix is that wing nut alone.
+ * `material` is the shape to draw each part with; `piece` puts it there.
  */
 export function fittingParts(p: Piece, m: Material): Array<{ piece: Piece; material: Material }> {
   const o = outward(p.rot);
@@ -977,15 +971,15 @@ export function fittingParts(p: Piece, m: Material): Array<{ piece: Piece; mater
       piece: { ...p, x: cx - along / 2, y: cy - across / 2, z: Math.max(0, level - tall / 2) },
     };
   };
-  if (isLatch(m)) {
-    return [
-      box('hub', LATCH_HUB_CM, 5, 5, LATCH_HUB_CM / 2, '#d5d9de'),
-      box('wings', 1.2, 2.5, LATCH_WINGS_CM, LATCH_HUB_CM * 0.6, '#e6e9ec'),
-    ];
-  }
+  const wingNut = (off: number) => [
+    box('hub', LATCH_HUB_CM, 5, 5, off + LATCH_HUB_CM / 2, '#d5d9de'),
+    box('wings', 1.2, 2.5, LATCH_WINGS_CM, off + LATCH_HUB_CM * 0.6, '#e6e9ec'),
+  ];
+  if (isLatch(m)) return wingNut(0);
   return [
     box('washer', WASHER_T_CM, WASHER_CM, WASHER_CM, WASHER_T_CM / 2, '#9aa3ad'),
     box('nut', NUT_CM, NUT_CM, NUT_CM, WASHER_T_CM + NUT_CM / 2, '#5c636d'),
+    ...wingNut(WASHER_T_CM + NUT_CM),
   ];
 }
 

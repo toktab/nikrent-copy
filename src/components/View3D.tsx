@@ -34,8 +34,6 @@ import { createWheelClassifier } from '../lib/wheelInput';
 import { Icon } from './Icon';
 import {
   isFitting,
-  LATCH_FIT,
-  latchMaterial,
   nutMaterial,
   nutParts,
   nutStack,
@@ -177,17 +175,12 @@ export function View3D() {
       const m = rodMaterialFor(materials, r.to - r.from);
       return m ? rodStack(m, rodSpot(r), [], () => '') : [];
     });
-    // ...and the ქანჩი + დისკო on both ends of every rod, placed or not.
+    // ...and the ქანჩი + დისკო, wing piece and all, on both ends of every rod.
     const nut = nutMaterial(materials);
     const nuts = nut
       ? openRodEnds(pieces, byId).flatMap((e) => nutStack(nut, e, [], () => ''))
       : [];
-    // ...and the ჩამკეტი fix locking each one.
-    const latch = latchMaterial(materials);
-    const latches = latch
-      ? openRodEnds(pieces, byId, LATCH_FIT).flatMap((e) => nutStack(latch, e, [], () => ''))
-      : [];
-    return [...rods, ...nuts, ...latches];
+    return [...rods, ...nuts];
   }, [showBolts, pieces, byId, materials]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 

@@ -56,10 +56,11 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
       </g>
     );
   }
-  // ...and the ქანჩი + დისკო like the washer and nut it puts on a rod end.
+  // ...and the ქანჩი + დისკო like the washer, nut and wing piece it puts on a rod end.
   if (isNut(m)) {
-    const s = Math.min(pw, ph) / (WASHER_CM + 1);
-    return <NutGlyph x={pw / 2 - ((WASHER_T_CM + NUT_CM) * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
+    const s = Math.min(pw, ph) / (Math.max(WASHER_CM, LATCH_WINGS_CM) + 1);
+    const long = WASHER_T_CM + NUT_CM + LATCH_HUB_CM;
+    return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
   return m.shape === 'L' ? (

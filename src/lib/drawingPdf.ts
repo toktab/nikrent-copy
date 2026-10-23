@@ -26,8 +26,8 @@ export type { SheetSize };
  * Prints the drawing itself - to scale, dimensioned, with a key and a title
  * block - as opposed to the parts list. This is the thing a foreman takes to
  * site, so it has to show what the screen shows: every panel, ჩაკერება and
- * კუთხე where it lies, every შტირი with its ქანჩი + დისკო and ჩამკეტი fix, and
- * every კონექტორი.
+ * კუთხე where it lies, every შტირი with its ქანჩი + დისკო, and every
+ * კონექტორი.
  *
  * Two layers make one sheet:
  *
@@ -201,7 +201,6 @@ export async function renderDrawingSheet(options: DrawingSheetOptions): Promise<
     connectors: content.marks.connectors,
     rods: content.marks.rods,
     nuts: content.marks.nuts,
-    latches: content.marks.latches,
   };
   const legendTop = paper.h - MARGIN_MM - titleH - legendH;
   const icons: PlacedIcon[] = [];
@@ -287,14 +286,13 @@ interface SheetContent {
     connectors: ReturnType<typeof planMarks>['connectors'];
     rods: SheetDrawing['rods'];
     nuts: ReturnType<typeof planMarks>['nuts'];
-    latches: ReturnType<typeof planMarks>['latches'];
   };
   /** where the worked-out marks reach, world cm */
   markRects: Rect[];
   markBounds: Rect | null;
 }
 
-const NO_MARKS = { connectors: [], rods: [], nuts: [], latches: [] };
+const NO_MARKS = { connectors: [], rods: [], nuts: [] };
 
 function sheetContent(
   doc: DrawingDoc,
@@ -323,7 +321,6 @@ function sheetContent(
     connectors: vis.connectors ? all.connectors : [],
     rods: vis.rods ? all.rods.map((rod) => ({ rod, length: markedRodLength(materials, rod) })) : [],
     nuts: vis.nuts ? all.nuts : [],
-    latches: vis.latches ? all.latches : [],
   };
 
   const markRects: Rect[] = [];
@@ -349,7 +346,7 @@ function sheetContent(
   }
   // A nut, and the wing nut past it, reach about 10 cm out from the face and
   // the washer 6 either side.
-  for (const e of [...marks.nuts, ...marks.latches]) {
+  for (const e of marks.nuts) {
     const out = e.rot === 0 || e.rot === 180 ? 'h' : 'v';
     const sign = e.rot === 0 || e.rot === 90 ? 1 : -1;
     const reach = 10;
@@ -463,9 +460,6 @@ function legendEntries(
     }
     if (vis.nuts && totals.nuts > 0) {
       out.push({ icon: { type: 'nut' }, label: 'ქანჩი + დისკო', note: 'შტირის ორივე ბოლოზე', count: pcs(totals.nuts) });
-    }
-    if (vis.latches && totals.latches > 0) {
-      out.push({ icon: { type: 'latch' }, label: 'ჩამკეტი fix', note: 'ყველა ქანჩი + დისკოზე', count: pcs(totals.latches) });
     }
   }
 

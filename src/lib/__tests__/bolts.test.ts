@@ -18,7 +18,7 @@ import {
   withRodOff,
   LATCH_FIT,
   fittingCentre,
-  latchCount,
+  fittingParts,
   nutCount,
   nutStack,
   openRodEnds,
@@ -204,7 +204,7 @@ describe('შტირები', () => {
     const off = withRodOff(pieces, rod);
     expect(findRods(off, byId)).toHaveLength(0);
     expect(findRods(off, byId, true)).toHaveLength(1);
-    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false, latches: false });
+    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false });
     expect(findRods(back, byId)).toHaveLength(1);
   });
 
@@ -303,9 +303,13 @@ describe('ჩამკეტი fix', () => {
     put('panel-90x300', 90, 30),
   ];
 
-  it('needs one on every ქანჩი + დისკო', () => {
-    expect(latchCount(wall(), byId)).toBe(nutCount(wall(), byId));
-    expect(latchCount(wall(), byId)).toBe(10);
+  it('is no longer worked out per rod end - the wing piece is part of the ქანჩი + დისკო', () => {
+    const nut = byId.get('acc-nut-washer')!;
+    const [end] = openRodEnds(wall(), byId);
+    const [piece] = nutStack(nut, end, [], () => 'n');
+    const parts = fittingParts(piece, nut).map((p) => p.material.id.split(':')[1]);
+    expect(parts).toEqual(['washer', 'nut', 'hub', 'wings']);
+    expect(openRodEnds(wall(), byId, LATCH_FIT)).toHaveLength(2);
   });
 
   it('snaps past the nut on a rod end, and only covers its own kind', () => {
@@ -317,6 +321,7 @@ describe('ჩამკეტი fix', () => {
     const placed = [...wall(), ...nutStack(latch, end, [], () => `l${n++}`)];
     expect(openRodEnds(placed, byId, LATCH_FIT)).toHaveLength(1);
     expect(openRodEnds(placed, byId)).toHaveLength(2);
-    expect(latchCount(placed, byId)).toBe(10);
+    // ...and is not counted as a ქანჩი + დისკო.
+    expect(nutCount(placed, byId)).toBe(10);
   });
 });

@@ -4,7 +4,7 @@ import { pieceCentre, type Bolt, type Rod, type RodEnd } from '../lib/bolts';
 import { boltKindOf } from '../lib/boltMarks';
 import { BOLT_COLORS } from '../lib/boltStyle';
 import { segments } from '../lib/sketch';
-import { ConnectorGlyph, LatchGlyph, LatchShape, NutGlyph, RodGlyph } from './BoltLayer';
+import { ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
 import { FixingBody } from './PieceView';
 import { PlacedShapeBody, ShapeSvg } from './ShapeSvg';
 
@@ -12,8 +12,8 @@ import { PlacedShapeBody, ShapeSvg } from './ShapeSvg';
  * The printed sheet's linework, as one SVG in paper millimetres.
  *
  * Everything is drawn with the very components the screen draws with - the
- * piece shapes, the კონექტორი disc, the შტირი bar, the ქანჩი + დისკო and the
- * ჩამკეტი fix - so the paper cannot drift from the screen: a panel, a corner
+ * piece shapes, the კონექტორი disc, the შტირი bar and the ქანჩი + დისკო -
+ * so the paper cannot drift from the screen: a panel, a corner
  * and the rod through them meet on the sheet exactly where they meet on the
  * plan. `drawingPdf` turns this into pixels and writes the text over it with
  * the page's Georgian font, which an SVG drawn as an image cannot reach.
@@ -39,7 +39,6 @@ export interface SheetDrawing {
   connectors: Bolt[];
   rods: Array<{ rod: Rod; length: number }>;
   nuts: RodEnd[];
-  latches: RodEnd[];
 }
 
 export type LegendIcon =
@@ -48,7 +47,6 @@ export type LegendIcon =
   | { type: 'connector'; kind: 'tee' | 'corner' }
   | { type: 'rod' }
   | { type: 'nut' }
-  | { type: 'latch' }
   | { type: 'sketch' }
   | { type: 'measure' }
   | { type: 'overall' };
@@ -188,9 +186,6 @@ function Drawing({ d }: { d: SheetDrawing }) {
       {d.nuts.map((e) => (
         <NutGlyph key={`nut:${e.x}:${e.y}:${e.rot}`} x={e.x} y={e.y} rot={e.rot} scale={1} px={px} />
       ))}
-      {d.latches.map((e) => (
-        <LatchGlyph key={`latch:${e.x}:${e.y}:${e.rot}`} x={e.x} y={e.y} rot={e.rot} scale={1} px={px} />
-      ))}
       {d.connectors.map((b) => (
         <ConnectorGlyph key={`${b.x}:${b.y}`} cx={b.x} cy={b.y} r={r} px={rPx} kind={b.kind} />
       ))}
@@ -261,12 +256,6 @@ function Icon({ icon, box }: PlacedIcon) {
         <g>
           <line x1={box.x} y1={cy} x2={cx - 1} y2={cy} stroke={BOLT_COLORS.rod.fill} strokeWidth={0.7} />
           <NutGlyph x={cx - 1} y={cy} rot={0} scale={0.3} px={PX_MM} />
-        </g>
-      );
-    case 'latch':
-      return (
-        <g transform={`translate(${cx} ${cy})`}>
-          <LatchShape hub={1.3} wings={4.2} px={PX_MM} />
         </g>
       );
     case 'sketch':

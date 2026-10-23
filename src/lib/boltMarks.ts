@@ -5,8 +5,6 @@ import {
   isLatch,
   isNut,
   isRod,
-  LATCH_FIT,
-  latchCount,
   nutCount,
   openBolts,
   openRodEnds,
@@ -35,8 +33,6 @@ export interface PlanMarks {
   rods: Rod[];
   /** rod ends with no ქანჩი + დისკო placed on them */
   nuts: RodEnd[];
-  /** rod ends with no ჩამკეტი fix placed on them */
-  latches: RodEnd[];
 }
 
 function once<T>(items: T[], key: (t: T) => string): T[] {
@@ -56,7 +52,6 @@ export function planMarks(pieces: Piece[], byId: Map<string, Material>): PlanMar
     connectors: once(openBolts(pieces, byId, true), (b) => `${Math.round(b.x)}:${Math.round(b.y)}`),
     rods: once(openRods(pieces, byId, true), (r) => `${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}`),
     nuts: once(openRodEnds(pieces, byId), endKey),
-    latches: once(openRodEnds(pieces, byId, LATCH_FIT), endKey),
   };
 }
 
@@ -67,14 +62,18 @@ export function markedRodLength(materials: Material[], rod: Rod): number {
   return m ? Math.max(m.w, m.h) : span + ROD_OVERHANG_CM * 2;
 }
 
-/** Which of the four ჭანჭიკი kinds a material is, if any. */
-export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches';
+/**
+ * Which of the three ჭანჭიკი kinds a material is, if any. The wing piece on
+ * every rod end is part of the ქანჩი + დისკო, so a ჩამკეტი fix placed by hand
+ * is no kind of its own: it shows and hides with the nuts it sits on, and is
+ * not counted in them.
+ */
+export type BoltKindName = 'connectors' | 'rods' | 'nuts';
 
 export function boltKindOf(m: Material): BoltKindName | null {
   if (isConnector(m)) return 'connectors';
   if (isRod(m)) return 'rods';
-  if (isNut(m)) return 'nuts';
-  if (isLatch(m)) return 'latches';
+  if (isNut(m) || isLatch(m)) return 'nuts';
   return null;
 }
 
@@ -84,7 +83,6 @@ export function boltTotals(pieces: Piece[], byId: Map<string, Material>): Record
     connectors: connectorCount(pieces, byId),
     rods: rodCount(pieces, byId),
     nuts: nutCount(pieces, byId),
-    latches: latchCount(pieces, byId),
   };
 }
 
@@ -99,6 +97,5 @@ export function normalizeBoltKinds(raw: unknown): BoltKinds {
     connectors: r.connectors !== false,
     rods: r.rods !== false,
     nuts: r.nuts !== false,
-    latches: r.latches !== false,
   };
 }

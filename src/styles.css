@@ -6368,7 +6368,8 @@ kbd {
   fill: #5c636d;
   stroke: #2c3137;
 }
-/* ჩამკეტი fix: a light wing nut past the dark nut, so the two read apart. */
+/* The light wing nut past the dark nut on a ქანჩი + დისკო (and a placed
+   ჩამკეტი fix), so the two read apart. */
 .latch-wing,
 .latch-hub {
   fill: #e4e7eb;

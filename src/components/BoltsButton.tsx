@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { ALL_BOLT_KINDS, connectorCount, latchCount, nutCount, rodCount, type BoltKinds } from '../lib/bolts';
+import { ALL_BOLT_KINDS, connectorCount, nutCount, rodCount, type BoltKinds } from '../lib/bolts';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { LatchShape } from './BoltLayer';
@@ -12,7 +12,7 @@ import { LatchShape } from './BoltLayer';
  * general word for this kind of hardware, and more kinds are coming, so the bar
  * carries one button and the menu lists each kind with its count. Each kind is
  * shown or hidden on the plan from its own row; there is no all-at-once switch
- * here any more - four rows already say it, kind by kind.
+ * here any more - three rows already say it, kind by kind.
  */
 
 /** Which kinds ავტომატურად თავიდან დასმა puts back - remembered on this machine. */
@@ -40,7 +40,6 @@ const KIND_NAMES: Array<[keyof BoltKinds, string]> = [
   ['connectors', 'კონექტორები'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
-  ['latches', 'ჩამკეტი fix'],
 ];
 
 export function BoltsButton() {
@@ -60,7 +59,6 @@ export function BoltsButton() {
   const connectors = useMemo(() => connectorCount(pieces, byId), [pieces, byId]);
   const rods = useMemo(() => rodCount(pieces, byId), [pieces, byId]);
   const nuts = useMemo(() => nutCount(pieces, byId), [pieces, byId]);
-  const latches = useMemo(() => latchCount(pieces, byId), [pieces, byId]);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -118,22 +116,13 @@ export function BoltsButton() {
       >
         <span className={`bolts-kind${shown.nuts ? '' : ' off'}`}>
           <svg className="nuts-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-            <rect className="nut-washer" x="4" y="1" width="2.5" height="12" rx="0.8" />
-            <rect className="nut-nut" x="6.5" y="4.5" width="5" height="5" rx="0.8" />
+            <rect className="nut-washer" x="2.5" y="1" width="2.5" height="12" rx="0.8" />
+            <rect className="nut-nut" x="5" y="4.5" width="5" height="5" rx="0.8" />
+            <g transform="translate(11.2 7)">
+              <LatchShape hub={2.4} wings={10} px={0.6} />
+            </g>
           </svg>
           ქანჩი + დისკო
-        </span>
-      </MenuItem>
-      <MenuItem
-        title="თითო ყველა ქანჩი + დისკოზე - ჩაკეტავს მას"
-        trail={<KindTrail count={latches} shown={shown.latches} />}
-        onClick={() => toggleBoltKind('latches')}
-      >
-        <span className={`bolts-kind${shown.latches ? '' : ' off'}`}>
-          <svg className="latch-mark" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
-            <LatchShape hub={4} wings={12} />
-          </svg>
-          ჩამკეტი fix
         </span>
       </MenuItem>
       <MenuSep />
