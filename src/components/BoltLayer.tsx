@@ -1,14 +1,18 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import {
-  LATCH_HUB_CM,
-  LATCH_WINGS_CM,
+  LATCH_DEPTH_CM,
+  LATCH_LEN_CM,
   NUT_CM,
   WASHER_CM,
   WASHER_T_CM,
+  WING_HUB_CM,
+  WING_SPAN_CM,
   type Bolt,
   type BoltKind,
+  type LatchSpot,
   type Rod,
+  type RodEnd,
 } from '../lib/bolts';
 import { markedRodLength, planMarks } from '../lib/boltMarks';
 import { BOLT_COLORS as C } from '../lib/boltStyle';
@@ -26,9 +30,11 @@ import { BOLT_COLORS as C } from '../lib/boltStyle';
  * this site is moved, not argued with. A joint with a connector already placed
  * on it shows that piece instead of a mark.
  */
-export const MIN_R_PX = 5;
-export const MAX_R_PX = 14;
-export const R_CM = 6;
+// A quarter smaller than it was (the user, 2026-10-23), so it no longer covers
+// what shares its joint.
+export const MIN_R_PX = 3.75;
+export const MAX_R_PX = 10.5;
+export const R_CM = 4.5;
 
 /** The mark's radius in screen px at a zoom. */
 export const markRadiusPx = (zoom: number) => Math.max(MIN_R_PX, Math.min(MAX_R_PX, R_CM * zoom));
@@ -112,14 +118,14 @@ export function NutGlyph({
   const wt = Math.max(WASHER_T_CM * scale, 2 * px);
   const ww = Math.max(WASHER_CM * scale, 9 * px);
   const nut = Math.max(NUT_CM * scale, 4 * px);
-  const hub = Math.max(LATCH_HUB_CM * scale, 4 * px);
-  const wings = Math.max(LATCH_WINGS_CM * scale, 11 * px);
+  const hub = Math.max(WING_HUB_CM * scale, 4 * px);
+  const wings = Math.max(WING_SPAN_CM * scale, 11 * px);
   return (
     <g className="nut-glyph" transform={`translate(${x} ${y}) rotate(${rot})`}>
       <rect className="nut-washer" fill={C.washer.fill} stroke={C.washer.stroke} x={0} y={-ww / 2} width={wt} height={ww} rx={wt / 3} style={{ strokeWidth: px }} />
       <rect className="nut-nut" fill={C.nut.fill} stroke={C.nut.stroke} x={wt} y={-nut / 2} width={nut} height={nut} rx={nut / 5} style={{ strokeWidth: px }} />
       <g transform={`translate(${wt + nut + hub / 2} 0)`}>
-        <LatchShape hub={hub} wings={wings} px={px} />
+        <WingShape hub={hub} wings={wings} px={px} />
       </g>
     </g>
   );
@@ -128,25 +134,43 @@ export function NutGlyph({
 /**
  * A wing nut seen from above, centred on the rod with its wings across it: a
  * rounded hub and two lobes, in the hub's own units. The end of every
- * ქანჩი + დისკო, and the shape of a placed ჩამკეტი fix.
+ * ქანჩი + დისკო.
  */
-export function LatchShape({ hub, wings, px = 1 }: { hub: number; wings: number; px?: number }) {
+export function WingShape({ hub, wings, px = 1 }: { hub: number; wings: number; px?: number }) {
   const lobe = wings / 2 - hub / 2;
   const w = hub * 0.55;
   return (
-    <g className="latch-shape" style={{ strokeWidth: px }}>
-      <rect className="latch-wing" fill={C.latch.fill} stroke={C.latch.stroke} x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
-      <rect className="latch-hub" fill={C.latch.fill} stroke={C.latch.stroke} x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
-      <circle className="latch-hole" fill={C.latchHole} r={Math.max(hub * 0.16, lobe * 0.05)} />
+    <g className="wing-shape" style={{ strokeWidth: px }}>
+      <rect className="wing-lobe" fill={C.wing.fill} stroke={C.wing.stroke} x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
+      <rect className="wing-hub" fill={C.wing.fill} stroke={C.wing.stroke} x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
+      <circle className="wing-hole" fill={C.wingHole} r={Math.max(hub * 0.16, lobe * 0.05)} />
     </g>
   );
 }
 
 /**
- * A ჩამკეტი fix on the rod end at (`x`, `y`) facing `rot`, just past the nut
- * - see `NutGlyph` for the sizes.
+ * A ჩამკეტი fix seen from above, in its own units: the clamp lying along the
+ * wall across the joint (local y), its jaws on the two frames, and the wedge
+ * driven through it standing out of the face (local +x).
  */
-export function LatchGlyph({
+export function ClampShape({ len, thick, px = 1 }: { len: number; thick: number; px?: number }) {
+  const jaw = len * 0.18;
+  const wedge = Math.max(thick * 0.45, px * 1.5);
+  return (
+    <g className="clamp-shape" style={{ strokeWidth: px }}>
+      <rect className="clamp-body" fill={C.latch.fill} stroke={C.latch.stroke} x={-thick / 2} y={-len / 2} width={thick} height={len} rx={thick / 2.5} />
+      <rect className="clamp-jaw" fill={C.latch.stroke} x={-thick / 2} y={-len / 2} width={thick} height={jaw} rx={thick / 2.5} />
+      <rect className="clamp-jaw" fill={C.latch.stroke} x={-thick / 2} y={len / 2 - jaw} width={thick} height={jaw} rx={thick / 2.5} />
+      <rect className="clamp-wedge" fill={C.latchWedge} stroke={C.latch.stroke} x={-thick / 2} y={-wedge / 2} width={thick * 1.6} height={wedge} rx={wedge / 3} />
+    </g>
+  );
+}
+
+/**
+ * A ჩამკეტი fix at (`x`, `y`) - its middle, on the frame just in from the
+ * outside of the face - facing out `rot`. Sizes as `NutGlyph`.
+ */
+export function ClampGlyph({
   x,
   y,
   rot,
@@ -159,12 +183,11 @@ export function LatchGlyph({
   scale: number;
   px?: number;
 }) {
-  const start = Math.max(WASHER_T_CM * scale, 2 * px) + Math.max(NUT_CM * scale, 4 * px);
-  const hub = Math.max(LATCH_HUB_CM * scale, 4 * px);
-  const wings = Math.max(LATCH_WINGS_CM * scale, 11 * px);
+  const len = Math.max(LATCH_LEN_CM * scale, 9 * px);
+  const thick = Math.max(LATCH_DEPTH_CM * scale, 3.5 * px);
   return (
-    <g className="latch-glyph" transform={`translate(${x} ${y}) rotate(${rot}) translate(${start + hub / 2} 0)`}>
-      <LatchShape hub={hub} wings={wings} px={px} />
+    <g className="clamp-glyph" transform={`translate(${x} ${y}) rotate(${rot})`}>
+      <ClampShape len={len} thick={thick} px={px} />
     </g>
   );
 }
@@ -183,9 +206,13 @@ export function RodGlyph({ length, scale, px = 1 }: { length: number; scale: num
 export function BoltLayer({
   onGrab,
   onGrabRod,
+  onGrabLatch,
+  onGrabNut,
 }: {
   onGrab?: (e: ReactPointerEvent, bolt: Bolt) => void;
   onGrabRod?: (e: ReactPointerEvent, rod: Rod) => void;
+  onGrabLatch?: (e: ReactPointerEvent, spot: LatchSpot) => void;
+  onGrabNut?: (e: ReactPointerEvent, end: RodEnd) => void;
 }) {
   const pieces = useEditorStore((s) => s.pieces);
   const materials = useEditorStore((s) => s.materials);
@@ -205,18 +232,36 @@ export function BoltLayer({
   const spots = shown.connectors ? marks.connectors : [];
   const rods = shown.rods ? marks.rods : [];
   const ends = shown.nuts ? marks.nuts : [];
+  const latches = shown.latches ? marks.latches : [];
 
-  if (spots.length === 0 && rods.length === 0 && ends.length === 0) return null;
+  if (spots.length === 0 && rods.length === 0 && ends.length === 0 && latches.length === 0) return null;
   const r = markRadiusPx(zoom);
   // Only the select tool takes hold of things; with the pen or the measure tool
   // out, a press on a mark is a press on the drawing under it.
   const grabbable = !!onGrab && tool === 'select';
   const rodsGrabbable = !!onGrabRod && tool === 'select';
+  const latchesGrabbable = !!onGrabLatch && tool === 'select';
+  const nutsGrabbable = !!onGrabNut && tool === 'select';
   const thick = Math.max(ROD_MIN_PX, ROD_CM * zoom);
 
   return (
     <svg className="bolt-layer" width={stageW} height={stageH} aria-hidden="true">
-      {/* Rods under the connector marks: a joint can have both. */}
+      {/* Bottom to top: the connector discs, then the rods, nuts and clamps
+          over them - a disc on a joint must never hide what shares it. */}
+      {spots.map((b) => {
+        const x = b.x * zoom + panX;
+        const y = b.y * zoom + panY;
+        if (x < -r || y < -r || x > stageW + r || y > stageH + r) return null;
+        return (
+          <g
+            key={`${b.x}:${b.y}`}
+            className={`bolt${grabbable ? ' grabbable' : ''}`}
+            onPointerDown={grabbable ? (e) => onGrab(e, b) : undefined}
+          >
+            <ConnectorGlyph cx={x} cy={y} r={r} kind={b.kind} />
+          </g>
+        );
+      })}
       {rods.map((rod) => {
         // As long as the catalog rod that would go there, so the tips stand
         // out past the nuts the way they do on site.
@@ -246,28 +291,25 @@ export function BoltLayer({
       })}
       {/* ქანჩი + დისკო on every rod end nothing has been placed on. */}
       {ends.map((e) => (
-        <NutGlyph
+        <g
           key={`nut:${e.x}:${e.y}:${e.rot}`}
-          x={e.x * zoom + panX}
-          y={e.y * zoom + panY}
-          rot={e.rot}
-          scale={zoom}
-        />
+          className={`nut-mark${nutsGrabbable ? ' grabbable' : ''}`}
+          onPointerDown={nutsGrabbable ? (ev) => onGrabNut(ev, e) : undefined}
+        >
+          <NutGlyph x={e.x * zoom + panX} y={e.y * zoom + panY} rot={e.rot} scale={zoom} />
+        </g>
       ))}
-      {spots.map((b) => {
-        const x = b.x * zoom + panX;
-        const y = b.y * zoom + panY;
-        if (x < -r || y < -r || x > stageW + r || y > stageH + r) return null;
-        return (
-          <g
-            key={`${b.x}:${b.y}`}
-            className={`bolt${grabbable ? ' grabbable' : ''}`}
-            onPointerDown={grabbable ? (e) => onGrab(e, b) : undefined}
-          >
-            <ConnectorGlyph cx={x} cy={y} r={r} kind={b.kind} />
-          </g>
-        );
-      })}
+      {/* ჩამკეტი fix by every rod end nothing has been placed on, topmost: the
+          smallest thing here, and taken hold of like a rod. */}
+      {latches.map((l) => (
+        <g
+          key={`latch:${l.x}:${l.y}`}
+          className={`latch-mark${latchesGrabbable ? ' grabbable' : ''}`}
+          onPointerDown={latchesGrabbable ? (e) => onGrabLatch(e, l) : undefined}
+        >
+          <ClampGlyph x={l.x * zoom + panX} y={l.y * zoom + panY} rot={l.rot} scale={zoom} />
+        </g>
+      ))}
     </svg>
   );
 }

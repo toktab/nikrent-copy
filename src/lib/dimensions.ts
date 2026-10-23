@@ -96,6 +96,7 @@ export interface PdfVisibility {
   connectors: boolean;
   rods: boolean;
   nuts: boolean;
+  latches: boolean;
 }
 
 export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
@@ -114,6 +115,7 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   connectors: true,
   rods: true,
   nuts: true,
+  latches: true,
 };
 
 export function normalizePdfVisibility(raw: unknown): PdfVisibility {

@@ -1,9 +1,9 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Material, Piece } from '../types';
 import { PlacedShapeSvg, placedBox } from './ShapeSvg';
-import { ConnectorGlyph, LatchGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
+import { ClampGlyph, ConnectorGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
 import { isConnector, planW, type Rect } from '../lib/geometry';
-import { isLatch, isNut, isRod, LATCH_FIT, outward, pieceCentre } from '../lib/bolts';
+import { isLatch, isNut, isRod, outward, pieceCentre } from '../lib/bolts';
 
 interface Props {
   piece: Piece;
@@ -40,8 +40,9 @@ export const PieceView = memo(function PieceView({
   const box = placedBox(piece, material);
   const connector = isConnector(material);
   const rod = isRod(material);
-  const nut = isNut(material) || isLatch(material);
-  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : '';
+  const nut = isNut(material);
+  const latch = isLatch(material);
+  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : latch ? ' latch' : '';
   return (
     <div
       className={`piece${kind}${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
@@ -51,7 +52,7 @@ export const PieceView = memo(function PieceView({
     >
       {connector ? (
         <ConnectorPieceSvg piece={piece} material={material} box={box} zoom={zoom} atCorner={atCorner} />
-      ) : rod || nut ? (
+      ) : rod || nut || latch ? (
         <FixingPieceSvg piece={piece} material={material} box={box} zoom={zoom} />
       ) : (
         <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
@@ -97,10 +98,8 @@ export function FixingPieceSvg({
 export function FixingBody({ piece, material, px }: { piece: Piece; material: Material; px: number }) {
   const c = pieceCentre(piece, material);
   if (isLatch(material)) {
-    // Its box starts past the nut; the glyph is drawn from the face.
-    const o = outward(piece.rot);
-    const back = planW(material) / 2 + LATCH_FIT.offset;
-    return <LatchGlyph x={c.x - o.x * back} y={c.y - o.y * back} rot={piece.rot} scale={1} px={px} />;
+    // Its middle is the clamp's, on the joint just in from the face.
+    return <ClampGlyph x={c.x} y={c.y} rot={piece.rot} scale={1} px={px} />;
   }
   if (isNut(material)) {
     const o = outward(piece.rot);

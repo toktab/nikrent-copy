@@ -34,7 +34,12 @@ import { createWheelClassifier } from '../lib/wheelInput';
 import { Icon } from './Icon';
 import {
   isFitting,
+  isLatch,
+  latchMaterial,
+  latchParts,
+  latchStack,
   nutMaterial,
+  openLatches,
   nutParts,
   nutStack,
   openRodEnds,
@@ -180,7 +185,10 @@ export function View3D() {
     const nuts = nut
       ? openRodEnds(pieces, byId).flatMap((e) => nutStack(nut, e, [], () => ''))
       : [];
-    return [...rods, ...nuts];
+    // ...and the ჩამკეტი fix up every joint between two panels.
+    const latch = latchMaterial(materials);
+    const latches = latch ? openLatches(pieces, byId).flatMap((s) => latchStack(latch, s, [], () => '')) : [];
+    return [...rods, ...nuts, ...latches];
   }, [showBolts, pieces, byId, materials]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -541,7 +549,7 @@ export function View3D() {
     const solids = [...pieces, ...autoRods].flatMap((piece) => {
       const m = byId.get(piece.materialId);
       if (!m) return [];
-      return isFitting(m) ? nutParts(piece, m) : [{ piece, material: m }];
+      return isFitting(m) ? nutParts(piece, m) : isLatch(m) ? latchParts(piece, m) : [{ piece, material: m }];
     });
     for (const { piece, material: m } of solids) {
       const pickId = map.length;

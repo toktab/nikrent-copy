@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { boltKindOf, boltTotals, markedRodLength, normalizeBoltKinds, planMarks } from '../boltMarks';
-import { connectorCount, nutCount, rodCount } from '../bolts';
+import { boltGroups, boltKindOf, boltTotals, groupsText, markedRodLength, normalizeBoltKinds, planMarks } from '../boltMarks';
+import { connectorCount, latchCount, nutCount, rodCount } from '../bolts';
 import { DEFAULT_PDF_VISIBILITY, normalizePdfVisibility } from '../dimensions';
 import { SEED_MATERIALS } from '../../data/seedCatalog';
 import type { Piece } from '../../types';
@@ -25,11 +25,11 @@ const wall = (z?: number) => [
 ];
 
 describe('planMarks - what the plan and the printed sheet draw', () => {
-  it('draws a rod spot and a ქანჩი + დისკო on each of its two ends - no ჩამკეტი fix of its own', () => {
+  it('draws a rod spot, a ქანჩი + დისკო on each of its two ends and a ჩამკეტი fix on each face', () => {
     const marks = planMarks(wall(), byId);
     expect(marks.rods).toHaveLength(1);
     expect(marks.nuts).toHaveLength(2);
-    expect(Object.keys(marks)).toEqual(['connectors', 'rods', 'nuts']);
+    expect(marks.latches).toHaveLength(2);
   });
 
   it('draws a stacked course once in plan, while the count keeps both courses', () => {
@@ -48,13 +48,42 @@ describe('planMarks - what the plan and the printed sheet draw', () => {
 });
 
 describe('boltTotals', () => {
-  it('is the three counts the ჭანჭიკები menu shows', () => {
+  it('is the four counts the ჭანჭიკები menu shows', () => {
     const pieces = wall();
     expect(boltTotals(pieces, byId)).toEqual({
       connectors: connectorCount(pieces, byId),
       rods: rodCount(pieces, byId),
       nuts: nutCount(pieces, byId),
+      latches: latchCount(pieces, byId),
     });
+  });
+});
+
+describe('boltGroups - places on the plan × how many at each = in all', () => {
+  it('reads one rod spot up a 300 as 1 × 5, and its ends and clamps the same way', () => {
+    const g = boltGroups(wall(), byId);
+    expect(groupsText(g.rods)).toBe('1 × 5 = 5');
+    expect(groupsText(g.nuts)).toBe('2 × 5 = 10');
+    expect(groupsText(g.latches)).toBe('2 × 4 = 8');
+    expect(groupsText(g.connectors)).toBe('0');
+  });
+
+  it('adds up to the totals, stacked courses and mixed heights included', () => {
+    const tall = wall();
+    const low = [
+      put('panel-75x150', 300, 0),
+      put('panel-75x150', 375, 0),
+      put('panel-75x150', 300, 30),
+      put('panel-75x150', 375, 30),
+    ];
+    const pieces = [...tall, ...wall(300), ...low];
+    const g = boltGroups(pieces, byId);
+    const totals = boltTotals(pieces, byId);
+    for (const k of ['connectors', 'rods', 'nuts', 'latches'] as const) {
+      expect(g[k].reduce((n, x) => n + x.places * x.each, 0)).toBe(totals[k]);
+    }
+    // The 300 spot has both courses on it in plan; the 150 one stands alone.
+    expect(groupsText(g.rods)).toBe('1 × 10 + 1 × 2 = 12');
   });
 });
 
@@ -63,8 +92,7 @@ describe('boltKindOf', () => {
     expect(boltKindOf(byId.get('corner-connector')!)).toBe('connectors');
     expect(boltKindOf(byId.get('rod-60')!)).toBe('rods');
     expect(boltKindOf(byId.get('acc-nut-washer')!)).toBe('nuts');
-    // A ჩამკეტი fix placed by hand shows and hides with the nuts it sits on.
-    expect(boltKindOf(byId.get('acc-latch-fix')!)).toBe('nuts');
+    expect(boltKindOf(byId.get('acc-latch-fix')!)).toBe('latches');
     expect(boltKindOf(byId.get('acc-latch-adjustable')!)).toBeNull();
     expect(boltKindOf(byId.get('panel-90x300')!)).toBeNull();
     expect(boltKindOf(byId.get('filler-5x300')!)).toBeNull();
@@ -75,7 +103,7 @@ describe('the PDF switches for the key and the ჭანჭიკები', () 
   it('print everything on a sheet saved before they existed', () => {
     const old = { wall: true, overall: false, pieces: true };
     const v = normalizePdfVisibility(old);
-    expect(v).toMatchObject({ legend: true, connectors: true, rods: true, nuts: true, overall: false });
+    expect(v).toMatchObject({ legend: true, connectors: true, rods: true, nuts: true, latches: true, overall: false });
   });
 
   it('remember a kind switched off', () => {
@@ -85,11 +113,12 @@ describe('the PDF switches for the key and the ჭანჭიკები', () 
 
 describe('which ჭანჭიკები the plan shows', () => {
   it('shows every kind unless one was switched off', () => {
-    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true });
+    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true });
     expect(normalizeBoltKinds({ rods: false, nuts: 'x' })).toEqual({
       connectors: true,
       rods: false,
       nuts: true,
+      latches: true,
     });
   });
 });

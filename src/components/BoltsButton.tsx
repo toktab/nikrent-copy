@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { ALL_BOLT_KINDS, connectorCount, nutCount, rodCount, type BoltKinds } from '../lib/bolts';
+import { ALL_BOLT_KINDS, type BoltKinds } from '../lib/bolts';
+import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
-import { LatchShape } from './BoltLayer';
+import { ClampShape, WingShape } from './BoltLayer';
 
 /**
  * ჭანჭიკები in the top bar: the fixings the drawing needs, in a menu.
@@ -12,7 +13,7 @@ import { LatchShape } from './BoltLayer';
  * general word for this kind of hardware, and more kinds are coming, so the bar
  * carries one button and the menu lists each kind with its count. Each kind is
  * shown or hidden on the plan from its own row; there is no all-at-once switch
- * here any more - three rows already say it, kind by kind.
+ * here any more - four rows already say it, kind by kind.
  */
 
 /** Which kinds ავტომატურად თავიდან დასმა puts back - remembered on this machine. */
@@ -40,6 +41,7 @@ const KIND_NAMES: Array<[keyof BoltKinds, string]> = [
   ['connectors', 'კონექტორები'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
+  ['latches', 'ჩამკეტი fix'],
 ];
 
 export function BoltsButton() {
@@ -56,9 +58,7 @@ export function BoltsButton() {
   const setShowBolts = useEditorStore((s) => s.setShowBolts);
   const resetBolts = useEditorStore((s) => s.resetBolts);
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
-  const connectors = useMemo(() => connectorCount(pieces, byId), [pieces, byId]);
-  const rods = useMemo(() => rodCount(pieces, byId), [pieces, byId]);
-  const nuts = useMemo(() => nutCount(pieces, byId), [pieces, byId]);
+  const groups = useMemo(() => boltGroups(pieces, byId), [pieces, byId]);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -85,7 +85,7 @@ export function BoltsButton() {
       <MenuLabel>ჭანჭიკები ამ ნახაზზე</MenuLabel>
       <MenuItem
         title="T-შეერთება, შიდა კუთხე ჩაკერებასთან და ხელით დასმული"
-        trail={<KindTrail count={connectors} shown={shown.connectors} />}
+        trail={<KindTrail groups={groups.connectors} shown={shown.connectors} />}
         onClick={() => toggleBoltKind('connectors')}
       >
         <span className={`bolts-kind${shown.connectors ? '' : ' off'}`}>
@@ -99,7 +99,7 @@ export function BoltsButton() {
       </MenuItem>
       <MenuItem
         title="შიდა და გარე მხარის ერთმანეთის პირდაპირ მდგარ შეერთებებში და ხელით დასმული"
-        trail={<KindTrail count={rods} shown={shown.rods} />}
+        trail={<KindTrail groups={groups.rods} shown={shown.rods} />}
         onClick={() => toggleBoltKind('rods')}
       >
         <span className={`bolts-kind${shown.rods ? '' : ' off'}`}>
@@ -111,7 +111,7 @@ export function BoltsButton() {
       </MenuItem>
       <MenuItem
         title="ორი თითო შტირზე - ერთი თითო ბოლოზე"
-        trail={<KindTrail count={nuts} shown={shown.nuts} />}
+        trail={<KindTrail groups={groups.nuts} shown={shown.nuts} />}
         onClick={() => toggleBoltKind('nuts')}
       >
         <span className={`bolts-kind${shown.nuts ? '' : ' off'}`}>
@@ -119,10 +119,22 @@ export function BoltsButton() {
             <rect className="nut-washer" x="2.5" y="1" width="2.5" height="12" rx="0.8" />
             <rect className="nut-nut" x="5" y="4.5" width="5" height="5" rx="0.8" />
             <g transform="translate(11.2 7)">
-              <LatchShape hub={2.4} wings={10} px={0.6} />
+              <WingShape hub={2.4} wings={10} px={0.6} />
             </g>
           </svg>
           ქანჩი + დისკო
+        </span>
+      </MenuItem>
+      <MenuItem
+        title="შტირის ორივე მხარეს, კედლის გარე მხარეზე - შტირებს შორის: 8 300-ზე, 2 150 / 90-ზე"
+        trail={<KindTrail groups={groups.latches} shown={shown.latches} />}
+        onClick={() => toggleBoltKind('latches')}
+      >
+        <span className={`bolts-kind${shown.latches ? '' : ' off'}`}>
+          <svg className="latch-mark" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+            <ClampShape len={11} thick={4} px={0.7} />
+          </svg>
+          ჩამკეტი fix
         </span>
       </MenuItem>
       <MenuSep />
@@ -159,13 +171,24 @@ export function BoltsButton() {
 }
 
 /**
- * A kind's count and whether it is on the plan. Clicking the row hides that
+ * A kind's count and whether it is on the plan. The count is written the way
+ * the user reads the drawing: so many places on the plan × so many at each
+ * (one above the other, as the 3D shows) = how many in all.
+ *
+ * Clicking the row hides that
  * kind - marks and placed pieces alike - and clicking again brings it back;
  * the count stays, struck through, because the drawing still needs them.
  */
-function KindTrail({ count, shown }: { count: number; shown: boolean }) {
+function KindTrail({ groups, shown }: { groups: BoltGroup[]; shown: boolean }) {
+  const count = groups.reduce((n, g) => n + g.places * g.each, 0);
+  const calc = groups.map((g) => `${g.places} × ${g.each}`).join(' + ');
   return (
     <span className="bolts-trail" title={shown ? 'ჩანს ნახაზზე - დააჭირე დასამალად' : 'დამალულია - დააჭირე საჩვენებლად'}>
+      {calc && (
+        <span className="bolts-calc" title="ადგილი გეგმაზე × თითო ადგილზე (3D) = სულ">
+          {calc} =
+        </span>
+      )}
       <span className={`bolts-count${shown ? '' : ' off'}`}>{count} ც.</span>
       <Icon name={shown ? 'eye' : 'eye-off'} size={13} />
     </span>

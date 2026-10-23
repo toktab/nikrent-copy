@@ -1,10 +1,10 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { planH, planW, type Rect } from '../lib/geometry';
-import { pieceCentre, type Bolt, type Rod, type RodEnd } from '../lib/bolts';
+import { pieceCentre, type Bolt, type LatchSpot, type Rod, type RodEnd } from '../lib/bolts';
 import { boltKindOf } from '../lib/boltMarks';
 import { BOLT_COLORS } from '../lib/boltStyle';
 import { segments } from '../lib/sketch';
-import { ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
+import { ClampGlyph, ClampShape, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
 import { FixingBody } from './PieceView';
 import { PlacedShapeBody, ShapeSvg } from './ShapeSvg';
 
@@ -12,8 +12,8 @@ import { PlacedShapeBody, ShapeSvg } from './ShapeSvg';
  * The printed sheet's linework, as one SVG in paper millimetres.
  *
  * Everything is drawn with the very components the screen draws with - the
- * piece shapes, the კონექტორი disc, the შტირი bar and the ქანჩი + დისკო -
- * so the paper cannot drift from the screen: a panel, a corner
+ * piece shapes, the კონექტორი disc, the შტირი bar, the ქანჩი + დისკო and the
+ * ჩამკეტი fix - so the paper cannot drift from the screen: a panel, a corner
  * and the rod through them meet on the sheet exactly where they meet on the
  * plan. `drawingPdf` turns this into pixels and writes the text over it with
  * the page's Georgian font, which an SVG drawn as an image cannot reach.
@@ -39,6 +39,7 @@ export interface SheetDrawing {
   connectors: Bolt[];
   rods: Array<{ rod: Rod; length: number }>;
   nuts: RodEnd[];
+  latches: LatchSpot[];
 }
 
 export type LegendIcon =
@@ -47,6 +48,7 @@ export type LegendIcon =
   | { type: 'connector'; kind: 'tee' | 'corner' }
   | { type: 'rod' }
   | { type: 'nut' }
+  | { type: 'latch' }
   | { type: 'sketch' }
   | { type: 'measure' }
   | { type: 'overall' };
@@ -69,11 +71,12 @@ const PX_MM = 0.22;
  * A კონექტორი disc on paper: about a fifth of a panel's thickness across, the
  * way it reads on screen close up - a small mark on the joint, not a coin
  * over it (the user's call, 2026-10-21). Kept between these on paper so it
- * neither vanishes at 1:100 nor swells at 1:10, mm.
+ * neither vanishes at 1:100 nor swells at 1:10, mm. A quarter smaller again
+ * on 2026-10-23, with the screen mark.
  */
-export const CONNECTOR_R_CM = 1.8;
-const CONNECTOR_MIN_MM = 0.75;
-const CONNECTOR_MAX_MM = 1.3;
+export const CONNECTOR_R_CM = 1.35;
+const CONNECTOR_MIN_MM = 0.5625;
+const CONNECTOR_MAX_MM = 0.975;
 /** Its strokes, as a share of its radius - the screen mark's proportions. */
 const CONNECTOR_PX_SHARE = 0.12;
 /** Spacing of the ჩაკერება hatch, mm. */
@@ -171,7 +174,11 @@ function Drawing({ d }: { d: SheetDrawing }) {
         return <PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />;
       })}
 
-      {/* The worked-out marks over the pieces, in the screen's order. */}
+      {/* The worked-out marks over the pieces, in the screen's order: the
+          connector discs first, so nothing that shares a joint hides under one. */}
+      {d.connectors.map((b) => (
+        <ConnectorGlyph key={`${b.x}:${b.y}`} cx={b.x} cy={b.y} r={r} px={rPx} kind={b.kind} />
+      ))}
       <g style={{ strokeWidth: rodStroke }}>
         {d.rods.map(({ rod, length }) => {
           const mid = (rod.from + rod.to) / 2;
@@ -186,8 +193,8 @@ function Drawing({ d }: { d: SheetDrawing }) {
       {d.nuts.map((e) => (
         <NutGlyph key={`nut:${e.x}:${e.y}:${e.rot}`} x={e.x} y={e.y} rot={e.rot} scale={1} px={px} />
       ))}
-      {d.connectors.map((b) => (
-        <ConnectorGlyph key={`${b.x}:${b.y}`} cx={b.x} cy={b.y} r={r} px={rPx} kind={b.kind} />
+      {d.latches.map((l) => (
+        <ClampGlyph key={`latch:${l.x}:${l.y}`} x={l.x} y={l.y} rot={l.rot} scale={1} px={px} />
       ))}
 
       {/* The ჩაკერება last of all, hatched and outlined: a 5 cm filler is the
@@ -256,6 +263,13 @@ function Icon({ icon, box }: PlacedIcon) {
         <g>
           <line x1={box.x} y1={cy} x2={cx - 1} y2={cy} stroke={BOLT_COLORS.rod.fill} strokeWidth={0.7} />
           <NutGlyph x={cx - 1} y={cy} rot={0} scale={0.3} px={PX_MM} />
+        </g>
+      );
+    case 'latch':
+      // Lying across the key's row, as along a wall.
+      return (
+        <g transform={`translate(${cx} ${cy}) rotate(90)`}>
+          <ClampShape len={4.4} thick={1.4} px={PX_MM} />
         </g>
       );
     case 'sketch':

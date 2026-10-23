@@ -62,14 +62,18 @@ import {
   connectorsAtCorners,
   fittingCentre,
   isFitting,
+  isLatch,
   isRod,
   rodPieceAt,
   rodStackOf,
+  snapLatch,
   snapNut,
   snapConnector,
   snapRod,
   type Bolt,
+  type LatchSpot,
   type Rod,
+  type RodEnd,
 } from '../lib/bolts';
 import { boltKindOf } from '../lib/boltMarks';
 import { ElevationPieceView } from './ElevationPieceView';
@@ -787,7 +791,14 @@ export function StageCanvas() {
       }
     }
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      s.toggleSelect(id);
+      // A stack of rods, nuts or clamps is one thing on the plan: in or out together.
+      const piece = s.pieces.find((p) => p.id === id);
+      const stack = piece ? rodStackOf(piece, s.pieces, new Map(s.materials.map((m) => [m.id, m]))) : [];
+      if (stack.length > 1) {
+        const ids = stack.map((p) => p.id);
+        const all = ids.every((x) => s.selectedIds.includes(x));
+        s.setSelection(all ? s.selectedIds.filter((x) => !ids.includes(x)) : [...new Set([...s.selectedIds, ...ids])]);
+      } else s.toggleSelect(id);
       return; // modifier-click adjusts the selection, it does not start a drag
     }
     // Clicking an already-selected piece keeps the group so it can be dragged.
@@ -823,7 +834,10 @@ export function StageCanvas() {
     const m = connectorMaterial(s.materials);
     if (!m) return; // a catalog without one has nothing to place
     e.stopPropagation();
-    s.takeBolt(bolt, m.id);
+    // With Ctrl it joins the selection - picking pieces to replace - and stays put.
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeBolt(bolt, m.id, add);
+    if (add) return;
     const after = useEditorStore.getState();
     interaction.current = {
       type: 'move',
@@ -842,9 +856,52 @@ export function StageCanvas() {
     if (s.tool !== 'select') return;
     e.stopPropagation();
     const before = s.pieces.length;
-    s.takeRod(rod);
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeRod(rod, add);
     const after = useEditorStore.getState();
-    if (after.pieces.length === before) return; // a catalog without rods has none to place
+    if (add || after.pieces.length === before) return; // a catalog without rods has none to place
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
+  /** The same for a worked-out ჩამკეტი fix: its column of real ones, dragged. */
+  const onLatchPointerDown = useCallback((e: ReactPointerEvent, spot: LatchSpot) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    e.stopPropagation();
+    const before = s.pieces.length;
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeLatch(spot, add);
+    const after = useEditorStore.getState();
+    if (add || after.pieces.length === before) return; // a catalog without one has none to place
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
+  /** The same for a worked-out ქანჩი + დისკო: one up every rod at its end. */
+  const onNutPointerDown = useCallback((e: ReactPointerEvent, end: RodEnd) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    e.stopPropagation();
+    const before = s.pieces.length;
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeNut(end, add);
+    const after = useEditorStore.getState();
+    if (add || after.pieces.length === before) return;
     interaction.current = {
       type: 'move',
       sx: e.clientX,
@@ -1221,7 +1278,19 @@ export function StageCanvas() {
       }
     }
 
-    // A nut or a ჩამკეტი finds the rod end it belongs on, facing out.
+    // A ჩამკეტი fix finds the panel joint it belongs on, facing out of the face.
+    if (view === 'plan' && isLatch(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapLatch(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      if (spot) {
+        const u = spot.x - pw / 2;
+        const v = spot.y - ph / 2;
+        return { u, v, w: pw, h: ph, world: { x: u, y: v, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
+      }
+    }
+
+    // A nut finds the rod end it belongs on, facing out.
     if (view === 'plan' && isFitting(material)) {
       const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
       const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
@@ -1307,7 +1376,24 @@ export function StageCanvas() {
       const materialId = e.dataTransfer.getData('text/plain') || s.draggingMaterialId;
       const material = s.materials.find((m) => m.id === materialId);
       if (!material) return;
-      // A nut or a ჩამკეტი let go near a rod end goes on it, one for every rod up it.
+      // A ჩამკეტი fix let go near a panel joint goes on it, every one the joint takes.
+      if (s.surfaceView === 'plan' && isLatch(material)) {
+        const r = stageRef.current?.getBoundingClientRect();
+        const spot =
+          r &&
+          snapLatch(
+            { x: (e.clientX - r.left - s.panX) / s.zoom, y: (e.clientY - r.top - s.panY) / s.zoom },
+            s.pieces,
+            new Map(s.materials.map((mm) => [mm.id, mm])),
+            CONNECTOR_SNAP_PX / s.zoom,
+          );
+        if (spot) {
+          s.placeLatchStack(material.id, spot);
+          s.setDraggingMaterial(null);
+          return;
+        }
+      }
+      // A nut let go near a rod end goes on it, one for every rod up it.
       if (s.surfaceView === 'plan' && isFitting(material)) {
         const r = stageRef.current?.getBoundingClientRect();
         const end =
@@ -1581,7 +1667,7 @@ export function StageCanvas() {
       )}
 
       {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
-      {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} onGrabRod={onRodPointerDown} />}
+      {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} onGrabRod={onRodPointerDown} onGrabLatch={onLatchPointerDown} onGrabNut={onNutPointerDown} />}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text
           stays readable at any zoom. Amber, because an unclosed gap is

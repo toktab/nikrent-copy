@@ -15,7 +15,7 @@ import {
 } from './dimensions';
 import { sheetBounds, type SheetSize } from './exportOptions';
 import { stampedName } from './files';
-import { connectorsAtCorners, openBolts, pieceCentre } from './bolts';
+import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, openBolts, pieceCentre } from './bolts';
 import { boltKindOf, boltTotals, markedRodLength, planMarks, type BoltKindName } from './boltMarks';
 import { CATEGORY_ORDER } from '../data/categories';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
@@ -26,8 +26,8 @@ export type { SheetSize };
  * Prints the drawing itself - to scale, dimensioned, with a key and a title
  * block - as opposed to the parts list. This is the thing a foreman takes to
  * site, so it has to show what the screen shows: every panel, ჩაკერება and
- * კუთხე where it lies, every შტირი with its ქანჩი + დისკო, and every
- * კონექტორი.
+ * კუთხე where it lies, every შტირი with its ქანჩი + დისკო, every ჩამკეტი fix
+ * and every კონექტორი.
  *
  * Two layers make one sheet:
  *
@@ -201,6 +201,7 @@ export async function renderDrawingSheet(options: DrawingSheetOptions): Promise<
     connectors: content.marks.connectors,
     rods: content.marks.rods,
     nuts: content.marks.nuts,
+    latches: content.marks.latches,
   };
   const legendTop = paper.h - MARGIN_MM - titleH - legendH;
   const icons: PlacedIcon[] = [];
@@ -286,13 +287,14 @@ interface SheetContent {
     connectors: ReturnType<typeof planMarks>['connectors'];
     rods: SheetDrawing['rods'];
     nuts: ReturnType<typeof planMarks>['nuts'];
+    latches: ReturnType<typeof planMarks>['latches'];
   };
   /** where the worked-out marks reach, world cm */
   markRects: Rect[];
   markBounds: Rect | null;
 }
 
-const NO_MARKS = { connectors: [], rods: [], nuts: [] };
+const NO_MARKS = { connectors: [], rods: [], nuts: [], latches: [] };
 
 function sheetContent(
   doc: DrawingDoc,
@@ -321,6 +323,7 @@ function sheetContent(
     connectors: vis.connectors ? all.connectors : [],
     rods: vis.rods ? all.rods.map((rod) => ({ rod, length: markedRodLength(materials, rod) })) : [],
     nuts: vis.nuts ? all.nuts : [],
+    latches: vis.latches ? all.latches : [],
   };
 
   const markRects: Rect[] = [];
@@ -346,6 +349,12 @@ function sheetContent(
   }
   // A nut, and the wing nut past it, reach about 10 cm out from the face and
   // the washer 6 either side.
+  // A ჩამკეტი fix is half its length either side of the joint along the wall.
+  for (const l of marks.latches) {
+    const along = l.rot === 0 || l.rot === 180 ? 'v' : 'h';
+    const half = LATCH_LEN_CM / 2;
+    markRects.push(along === 'v' ? { x: l.x - 2, y: l.y - half, w: 4, h: half * 2 } : { x: l.x - half, y: l.y - 2, w: half * 2, h: 4 });
+  }
   for (const e of marks.nuts) {
     const out = e.rot === 0 || e.rot === 180 ? 'h' : 'v';
     const sign = e.rot === 0 || e.rot === 90 ? 1 : -1;
@@ -440,12 +449,17 @@ function legendEntries(
         if (atCorner.has(p.id)) corner++;
         else tee++;
       }
-      if (tee) out.push({ icon: { type: 'connector', kind: 'tee' }, label: 'კონექტორი', note: 'T-შეერთება', count: pcs(tee) });
+      // Each mark is five connectors - see `CONNECTORS_PER_JOINT`.
+      tee *= CONNECTORS_PER_JOINT;
+      corner *= CONNECTORS_PER_JOINT;
+      if (tee) {
+        out.push({ icon: { type: 'connector', kind: 'tee' }, label: 'კონექტორი', note: 'T-შეერთება - 5 ც. ნიშანზე', count: pcs(tee) });
+      }
       if (corner) {
         out.push({
           icon: { type: 'connector', kind: 'corner' },
           label: 'კონექტორი',
-          note: 'კუთხესთან, ჩაკერებაზე',
+          note: 'კუთხესთან, ჩაკერებაზე - 5 ც. ნიშანზე',
           count: pcs(corner),
         });
       }
@@ -460,6 +474,14 @@ function legendEntries(
     }
     if (vis.nuts && totals.nuts > 0) {
       out.push({ icon: { type: 'nut' }, label: 'ქანჩი + დისკო', note: 'შტირის ორივე ბოლოზე', count: pcs(totals.nuts) });
+    }
+    if (vis.latches && totals.latches > 0) {
+      out.push({
+        icon: { type: 'latch' },
+        label: 'ჩამკეტი fix',
+        note: 'შტირის ორივე მხარეს - 8 ც. 300-ზე, 2 ც. 150 / 90-ზე',
+        count: pcs(totals.latches),
+      });
     }
   }
 

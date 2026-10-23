@@ -25,6 +25,7 @@ import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 import { RemainingButton } from './RemainingButton';
 import { BoltsButton } from './BoltsButton';
+import { ReplaceButton } from './ReplaceButton';
 import { ProblemsButton } from './ProblemsButton';
 import { FillAllButton } from './FillAllButton';
 import { SimpleSteps } from './SimpleSteps';
@@ -327,6 +328,7 @@ export function Header() {
         <ProblemsButton />
         <RemainingButton />
         <BoltsButton />
+        <ReplaceButton />
 
         {/* The architect's own sheet, faint under the drawing. Up here with
             the views rather than among the tools: it sets what you are

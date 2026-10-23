@@ -63,7 +63,11 @@ import {
   CONNECTOR_SNAP_PX,
   fittingStack,
   isFitting,
+  isLatch,
   isRod,
+  latchMaterial,
+  latchStack,
+  nutMaterial,
   pieceCentre,
   resetBolts,
   rodMaterialFor,
@@ -71,6 +75,7 @@ import {
   rodStack,
   rodStackOf,
   snapConnector,
+  snapLatch,
   snapNut,
   snapRod,
   withBoltOff,
@@ -78,11 +83,13 @@ import {
   ALL_BOLT_KINDS,
   type Bolt,
   type BoltKinds,
+  type LatchSpot,
   type Rod,
   type RodEnd,
   type RodSpot,
 } from '../lib/bolts';
 import { boltKindOf, normalizeBoltKinds } from '../lib/boltMarks';
+import { materializeBolts, replacePieces, type SelectTarget } from '../lib/replace';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
 import {
@@ -573,14 +580,28 @@ export interface EditorState {
    * Take hold of a worked-out კონექტორი mark: a real connector goes on that
    * spot, selected, and the joint stops making a mark of its own - so moving
    * the connector moves it, and deleting it removes it. One undo step.
+   * `add` keeps what was selected and adds the new piece - Ctrl + click.
    */
-  takeBolt: (bolt: Bolt, materialId: string) => void;
+  takeBolt: (bolt: Bolt, materialId: string, add?: boolean) => void;
   /** The same for a worked-out შტირი: a real rod of the length it needs goes there. */
-  takeRod: (rod: Rod) => void;
+  takeRod: (rod: Rod, add?: boolean) => void;
+  /** The same for a worked-out ჩამკეტი fix: its column of real ones goes there. */
+  takeLatch: (spot: LatchSpot, add?: boolean) => void;
+  /** The same for a worked-out ქანჩი + დისკო: one for every rod up its end. */
+  takeNut: (end: RodEnd, add?: boolean) => void;
+  /**
+   * ჩანაცვლება -> select every piece of a catalog item, or every one of a
+   * ჭანჭიკი kind (its marks made real pieces first, so they can be). One undo step.
+   */
+  selectAllOf: (target: SelectTarget) => void;
+  /** ჩანაცვლება: the selected pieces become `materialId`, where they stand. */
+  replaceSelected: (materialId: string) => void;
   /** A catalog rod let go on a rod spot: the whole stack that spot takes. */
   placeRodStack: (materialId: string, spot: RodSpot) => void;
-  /** A catalog ქანჩი + დისკო or ჩამკეტი fix let go on a rod end: one for every rod up it. */
+  /** A catalog ქანჩი + დისკო let go on a rod end: one for every rod up it. */
   placeNutStack: (materialId: string, end: RodEnd) => void;
+  /** A catalog ჩამკეტი fix let go on a panel joint: every one that joint takes. */
+  placeLatchStack: (materialId: string, spot: LatchSpot) => void;
   /** ჭანჭიკები -> ავტომატურად თავიდან დასმა: the kinds asked, back where the rule puts them. */
   resetBolts: (kinds?: BoltKinds) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
@@ -1177,10 +1198,7 @@ export const useEditorStore = create<EditorState>()(
              */
             const lifted = baseline.filter((p) => selected.has(p.id));
             const rm = lifted.length ? byId.get(lifted[0].materialId) : undefined;
-            /**
-             * ქანჩი + დისკო and ჩამკეტი fix the same way: from rod end to rod
-             * end, one for every rod up it, facing out.
-             */
+            /** ქანჩი + დისკო the same way: from rod end to rod end, one for every rod up it, facing out. */
             if (
               view === 'plan' &&
               !freehand &&
@@ -1200,6 +1218,29 @@ export const useEditorStore = create<EditorState>()(
               );
               const stack = end
                 ? fittingStack(rm, end, now, uid)
+                : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: [...others, ...stack],
+                selectedIds: stack.map((p) => p.id),
+              };
+            }
+            /** ჩამკეტი fix too: from joint to joint, as many as the joint takes. */
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isLatch(rm) &&
+              !sketchBaseline?.length &&
+              rodStackOf(lifted[0], lifted, byId).length === lifted.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const now = s.pieces.filter((p) => selected.has(p.id)).map((p) => p.id);
+              const spot = snapLatch({ x: centre.x + duCm, y: centre.y + dvCm }, others, byId, CONNECTOR_SNAP_PX / s.zoom);
+              const stack = spot
+                ? latchStack(rm, spot, now, uid)
                 : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
               return {
                 guideX: null,
@@ -2047,7 +2088,7 @@ export const useEditorStore = create<EditorState>()(
         setShowGaps: (on) => set({ showGaps: on }),
         setShowBolts: (on) => set({ showBolts: on }),
         toggleBoltKind: (kind) => set((s) => ({ boltsShown: { ...s.boltsShown, [kind]: !s.boltsShown[kind] } })),
-        takeBolt: (bolt, materialId) =>
+        takeBolt: (bolt, materialId, add) =>
           commit((s) => {
             const m = s.materials.find((mm) => mm.id === materialId);
             if (!m) return {};
@@ -2059,20 +2100,75 @@ export const useEditorStore = create<EditorState>()(
               rot: 0,
               z: Math.max(0, bolt.z),
             };
-            return { pieces: [...withBoltOff(s.pieces, bolt.a, bolt.b), piece], selectedIds: [piece.id] };
+            return {
+              pieces: [...withBoltOff(s.pieces, bolt.a, bolt.b), piece],
+              selectedIds: add ? [...s.selectedIds, piece.id] : [piece.id],
+            };
           }),
-        takeRod: (rod) =>
+        takeRod: (rod, add) =>
           commit((s) => {
             const m = rodMaterialFor(s.materials, rod.to - rod.from);
             if (!m) return {};
             const stack = rodStack(m, rodSpot(rod), [], uid);
-            return { pieces: [...withRodOff(s.pieces, rod), ...stack], selectedIds: stack.map((p) => p.id) };
+            const ids = stack.map((p) => p.id);
+            return { pieces: [...withRodOff(s.pieces, rod), ...stack], selectedIds: add ? [...s.selectedIds, ...ids] : ids };
           }),
         placeNutStack: (materialId, end) =>
           commit((s) => {
             const m = s.materials.find((mm) => mm.id === materialId);
             if (!m) return {};
             const stack = fittingStack(m, end, [], uid);
+            return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        takeLatch: (spot, add) =>
+          commit((s) => {
+            const m = latchMaterial(s.materials);
+            if (!m) return {};
+            const stack = latchStack(m, spot, [], uid);
+            const ids = stack.map((p) => p.id);
+            return { pieces: [...s.pieces, ...stack], selectedIds: add ? [...s.selectedIds, ...ids] : ids };
+          }),
+        takeNut: (end, add) =>
+          commit((s) => {
+            const m = nutMaterial(s.materials);
+            if (!m) return {};
+            const stack = fittingStack(m, end, [], uid);
+            const ids = stack.map((p) => p.id);
+            return { pieces: [...s.pieces, ...stack], selectedIds: add ? [...s.selectedIds, ...ids] : ids };
+          }),
+        selectAllOf: (target) =>
+          commit((s) => {
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
+            let pieces = s.pieces;
+            if ('bolts' in target) {
+              pieces = materializeBolts(s.pieces, byId, s.materials, target.bolts, uid).pieces;
+            }
+            const picked = pieces.filter((p) => {
+              const m = byId.get(p.materialId);
+              if (!m) return false;
+              return 'bolts' in target ? boltKindOf(m) === target.bolts : m.id === target.materialId;
+            });
+            // A kind switched off in the ჭანჭიკები menu comes back on: what is
+            // selected has to be seen.
+            const kind = 'bolts' in target ? target.bolts : null;
+            return {
+              pieces,
+              selectedIds: picked.map((p) => p.id),
+              ...(kind && !s.boltsShown[kind] ? { boltsShown: { ...s.boltsShown, [kind]: true }, showBolts: true } : {}),
+            };
+          }),
+        replaceSelected: (materialId) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m || !s.selectedIds.length) return {};
+            const byId = new Map(s.materials.map((mm) => [mm.id, mm]));
+            return { pieces: replacePieces(s.pieces, new Set(s.selectedIds), m, byId) };
+          }),
+        placeLatchStack: (materialId, spot) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const stack = latchStack(m, spot, [], uid);
             return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
           }),
         placeRodStack: (materialId, spot) =>

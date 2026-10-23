@@ -16,9 +16,15 @@ import {
   rodStackOf,
   snapRod,
   withRodOff,
-  LATCH_FIT,
   fittingCentre,
   fittingParts,
+  findLatches,
+  latchCount,
+  latchMaterial,
+  latchParts,
+  latchStack,
+  openLatches,
+  snapLatch,
   nutCount,
   nutStack,
   openRodEnds,
@@ -114,7 +120,8 @@ describe('placed კონექტორები', () => {
   it('takes the joint it stands on - no mark there, and not counted twice', () => {
     const pieces = [...tee(), connectorAt(44.5, 9)];
     expect(openBolts(pieces, byId)).toHaveLength(0);
-    expect(connectorCount(pieces, byId)).toBe(1);
+    // five at the joint, the placed piece standing for all of them
+    expect(connectorCount(pieces, byId)).toBe(5);
   });
 
   it('still takes it when slid along the joint', () => {
@@ -125,7 +132,7 @@ describe('placed კონექტორები', () => {
   it('counts one placed away from the joint as well as the joint', () => {
     const pieces = [...tee(), connectorAt(44.5, 40)];
     expect(openBolts(pieces, byId)).toHaveLength(1);
-    expect(connectorCount(pieces, byId)).toBe(2);
+    expect(connectorCount(pieces, byId)).toBe(10);
   });
 
   it('snaps to the middle of a worked-out joint in reach', () => {
@@ -204,7 +211,7 @@ describe('შტირები', () => {
     const off = withRodOff(pieces, rod);
     expect(findRods(off, byId)).toHaveLength(0);
     expect(findRods(off, byId, true)).toHaveLength(1);
-    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false });
+    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false, latches: false });
     expect(findRods(back, byId)).toHaveLength(1);
   });
 
@@ -295,33 +302,93 @@ describe('ქანჩი + დისკო', () => {
   });
 });
 
+describe('the wing piece on a ქანჩი + დისკო', () => {
+  it('is part of the nut, drawn past it in 3D', () => {
+    const nut = byId.get('acc-nut-washer')!;
+    const [end] = openRodEnds([put('panel-90x300', 0, 0), put('panel-90x300', 90, 0), put('panel-90x300', 0, 30), put('panel-90x300', 90, 30)], byId);
+    const [piece] = nutStack(nut, end, [], () => 'n');
+    const parts = fittingParts(piece, nut).map((p) => p.material.id.split(':')[1]);
+    expect(parts).toEqual(['washer', 'nut', 'hub', 'wings']);
+  });
+});
+
 describe('ჩამკეტი fix', () => {
+  // Two faces of a wall along x, 21 cm of concrete between, a joint at x 90 on each.
   const wall = () => [
     put('panel-90x300', 0, 0),
     put('panel-90x300', 90, 0),
     put('panel-90x300', 0, 30),
     put('panel-90x300', 90, 30),
   ];
+  const low = () => [
+    put('panel-75x150', 0, 0),
+    put('panel-75x150', 75, 0),
+    put('panel-75x150', 0, 30),
+    put('panel-75x150', 75, 30),
+  ];
 
-  it('is no longer worked out per rod end - the wing piece is part of the ქანჩი + დისკო', () => {
-    const nut = byId.get('acc-nut-washer')!;
-    const [end] = openRodEnds(wall(), byId);
-    const [piece] = nutStack(nut, end, [], () => 'n');
-    const parts = fittingParts(piece, nut).map((p) => p.material.id.split(':')[1]);
-    expect(parts).toEqual(['washer', 'nut', 'hub', 'wings']);
-    expect(openRodEnds(wall(), byId, LATCH_FIT)).toHaveLength(2);
+  it('goes with every შტირი, one column on the outside of each face it goes through', () => {
+    const spots = findLatches(wall(), byId);
+    expect(spots).toHaveLength(2);
+    const near = spots.find((s) => s.y < 20)!;
+    const far = spots.find((s) => s.y > 20)!;
+    // Face y 0..9 has the concrete towards +y, so out is -y and the clamp sits
+    // 2 cm in from y 0; the other face the mirror of it.
+    expect(near).toMatchObject({ x: 90, y: 2, rot: 270 });
+    expect(far).toMatchObject({ x: 90, y: 37, rot: 90 });
   });
 
-  it('snaps past the nut on a rod end, and only covers its own kind', () => {
-    const latch = byId.get('acc-latch-fix')!;
-    const end = snapNut({ x: 90, y: 50 }, wall(), byId, 15)!;
-    // washer 1.5 + nut 4 out from the face at y 39, then half its 10 cm
-    expect(fittingCentre(end, latch)).toEqual({ x: 90, y: 39 + 5.5 + 5 });
+  it('takes one between each pair of შტირი up a face: 4 + 4 on a 300, 1 + 1 on a 150 or a 90', () => {
+    const [s300] = findLatches(wall(), byId);
+    expect(s300.levels).toEqual([60, 120, 180, 240]);
+    expect(latchCount(wall(), byId)).toBe(8);
+    const [s150] = findLatches(low(), byId);
+    expect(s150.levels).toEqual([75]);
+    expect(latchCount(low(), byId)).toBe(2);
+  });
+
+  it('stays on the outside edge of the panel when a loose rod sticks out past it', () => {
+    // Two lone panels, no joint between them, and a 150 rod through both
+    // standing out far past each face - its nuts out at its tips.
+    const panels = [put('panel-90x300', 0, 0), put('panel-90x300', 0, 30)];
+    const rods = rodStack(byId.get('rod-150')!, { x: 45, y: 19.5, z: 0, rot: 90, h: 300, count: 5 }, [], () => `r${n++}`);
+    const spots = findLatches([...panels, ...rods], byId);
+    expect(spots.map((s) => ({ x: s.x, y: s.y })).sort((a, b) => a.y - b.y)).toEqual([
+      { x: 45, y: 2 },
+      { x: 45, y: 37 },
+    ]);
+  });
+
+  it('is only where a შტირი goes: none on a lone face, and none once the rod is taken off', () => {
+    const face = [put('panel-90x300', 0, 0), put('panel-90x300', 90, 0)];
+    expect(findLatches(face, byId)).toHaveLength(0);
+    const w = wall();
+    const [rod] = findRods(w, byId);
+    expect(latchCount(withRodOff(w, rod), byId)).toBe(0);
+  });
+
+  it('snaps onto the joint when placed by hand, and that joint stops counting by itself', () => {
+    const latch = latchMaterial(SEED_MATERIALS)!;
+    const spot = snapLatch({ x: 92, y: 5 }, wall(), byId, 15)!;
+    expect(spot).toMatchObject({ x: 90, y: 2 });
     let n = 0;
-    const placed = [...wall(), ...nutStack(latch, end, [], () => `l${n++}`)];
-    expect(openRodEnds(placed, byId, LATCH_FIT)).toHaveLength(1);
-    expect(openRodEnds(placed, byId)).toHaveLength(2);
-    // ...and is not counted as a ქანჩი + დისკო.
-    expect(nutCount(placed, byId)).toBe(10);
+    const stack = latchStack(latch, spot, [], () => `l${n++}`);
+    expect(stack).toHaveLength(4);
+    expect(pieceCentre(stack[0], latch)).toEqual({ x: 90, y: 2 });
+    const placed = [...wall(), ...stack];
+    expect(openLatches(placed, byId)).toHaveLength(1);
+    expect(latchCount(placed, byId)).toBe(8);
+  });
+
+  it('is drawn in 3D as a small clamp on the outside of the face, with its wedge', () => {
+    const latch = latchMaterial(SEED_MATERIALS)!;
+    const [spot] = findLatches(wall(), byId).filter((s) => s.rot === 270);
+    const [piece] = latchStack(latch, spot, [], () => 'l');
+    const [clamp, wedge] = latchParts(piece, latch);
+    expect(clamp.material.id).toBe('acc-latch-fix:clamp');
+    expect(wedge.material.h).toBeGreaterThan(clamp.material.h);
+    // Out of the face, which is at y 0: the clamp stands in front of it.
+    const b = { y: clamp.piece.y, depth: clamp.material.depth };
+    expect(b.y + b.depth / 2).toBeLessThan(0);
   });
 });

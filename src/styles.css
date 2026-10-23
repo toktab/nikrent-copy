@@ -1145,6 +1145,14 @@ input.stock-input.bad {
 .piece .shape > * {
   pointer-events: visiblePainted;
 }
+/* Placed fittings over the panels and over a placed კონექტორი's disc: they are
+   small and share its joint, and under the disc they simply vanished. A
+   selected one still comes up to 50 with the rest. */
+.piece.rod:not(.selected),
+.piece.nut:not(.selected),
+.piece.latch:not(.selected) {
+  z-index: 12;
+}
 /* An elevation piece is a solid rectangle: box and shape are the same thing. */
 .piece.elevation {
   pointer-events: auto;
@@ -6335,6 +6343,55 @@ kbd {
   align-items: center;
   gap: 6px;
 }
+/* ჩანაცვლება with something selected: a blue border and a slow glow round
+   it, so the button that can act on the selection is the one that stands out. */
+.replace-btn.ready {
+  border-color: var(--sel);
+  color: var(--sel);
+  animation: replace-ready 1.6s ease-in-out infinite;
+}
+@keyframes replace-ready {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(112, 166, 245, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(112, 166, 245, 0.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .replace-btn.ready {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(112, 166, 245, 0.35);
+  }
+}
+/* ჩანაცვლება: two lists that can run long on a big job, so each scrolls. */
+.replace-menu {
+  min-width: 260px;
+  max-width: 340px;
+}
+.replace-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.replace-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.replace-hint {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 10px 6px;
+  line-height: 1.4;
+}
+/* "14 × 5 =" before the total: places on the plan × how many at each. */
+.bolts-calc {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .bolts-count.off {
   text-decoration: line-through;
   opacity: 0.6;
@@ -6356,7 +6413,9 @@ kbd {
   pointer-events: none;
 }
 .bolt-layer .rod-mark.grabbable,
-.bolt-layer .rod-mark.grabbable .rod-hit {
+.bolt-layer .rod-mark.grabbable .rod-hit,
+.bolt-layer .latch-mark.grabbable,
+.bolt-layer .nut-mark.grabbable {
   pointer-events: auto;
   cursor: grab;
 }
@@ -6368,26 +6427,28 @@ kbd {
   fill: #5c636d;
   stroke: #2c3137;
 }
-/* The light wing nut past the dark nut on a ქანჩი + დისკო (and a placed
-   ჩამკეტი fix), so the two read apart. */
-.latch-wing,
-.latch-hub {
+/* The light wing nut past the dark nut on a ქანჩი + დისკო, so the two read apart. */
+.wing-lobe,
+.wing-hub {
   fill: #e4e7eb;
   stroke: #59606a;
 }
-.latch-hole {
+.wing-hole {
   fill: #8a919a;
 }
-.piece.nut.selected .latch-wing,
-.piece.nut.selected .latch-hub {
+.piece.nut.selected .wing-lobe,
+.piece.nut.selected .wing-hub,
+.piece.latch.selected .clamp-body {
   stroke: var(--sel);
 }
 .piece.rod > svg,
-.piece.nut > svg {
+.piece.nut > svg,
+.piece.latch > svg {
   overflow: visible;
 }
 .piece.rod.selected,
-.piece.nut.selected {
+.piece.nut.selected,
+.piece.latch.selected {
   outline: none;
 }
 .piece.rod.selected .rod-bar,

@@ -22,7 +22,10 @@ export const BOLT_COLORS = {
   /** ქანჩი + დისკო: the washer, then the nut on it */
   washer: { fill: '#b7bfc8', stroke: '#4b525b' },
   nut: { fill: '#5c636d', stroke: '#2c3137' },
-  /** ჩამკეტი fix */
-  latch: { fill: '#e4e7eb', stroke: '#59606a' },
-  latchHole: '#8a919a',
+  /** the wing piece at the end of a ქანჩი + დისკო */
+  wing: { fill: '#e4e7eb', stroke: '#59606a' },
+  wingHole: '#8a919a',
+  /** ჩამკეტი fix: blue, so a clamp on a joint never reads as a rod-end fitting */
+  latch: { fill: '#4f86ee', stroke: '#1d3f8f' },
+  latchWedge: '#c9dafc',
 } as const;
