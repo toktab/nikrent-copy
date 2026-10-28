@@ -275,9 +275,16 @@ export function openBolts(pieces: Piece[], byId: Map<string, Material>, anyCours
  */
 export const CONNECTORS_PER_JOINT = 5;
 
-/** How many connectors the drawing needs: five at every open joint and every one placed. */
+/**
+ * How many connectors the drawing has: five for every one placed.
+ *
+ * Only placed ones (the user, 2026-10-23): a drawing gets its connectors when
+ * ჭანჭიკები -> ავტომატურად თავიდან დასმა puts them on the joints the rule
+ * names, or by hand - never by itself the moment panels go down. The joints are
+ * still worked out (`findBolts`) for that button and for snapping.
+ */
 export function connectorCount(pieces: Piece[], byId: Map<string, Material>): number {
-  return (openBolts(pieces, byId).length + placedConnectors(pieces, byId).length) * CONNECTORS_PER_JOINT;
+  return placedConnectors(pieces, byId).length * CONNECTORS_PER_JOINT;
 }
 
 /** Every stretch where two pieces on one course touch - anywhere a connector can go. */
@@ -557,6 +564,28 @@ export function findRods(pieces: Piece[], byId: Map<string, Material>, all = fal
   const reach = longestRod(byId) - ROD_OVERHANG_CM * 2;
   const gapBetween = (j: Joint, k: Joint) =>
     k.from >= j.to ? k.from - j.to : j.from >= k.to ? j.from - k.to : -1;
+  /**
+   * A rod goes through one wall: between its two faces there is concrete and
+   * nothing else. Two joints with another face between them - the far side of
+   * a room, through the panels of the wall in its middle - are not a rod
+   * (the user's ნახაზი 3, 2026-10-23), however well they line up.
+   */
+  const boxes: Array<{ r: Rect; z: number; h: number }> = [];
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (m && !isConnector(m) && ['panel', 'filler', 'corner'].includes(m.category)) {
+      boxes.push({ r: pieceBounds(p, m), z: p.z ?? 0, h: m.h });
+    }
+  }
+  const blocked = (j: Joint, k: Joint) => {
+    const [lo, hi] = k.from >= j.to ? [j.to, k.from] : [k.to, j.from];
+    const at = (j.at + k.at) / 2;
+    return boxes.some(({ r, z, h }) => {
+      if (z > j.z + TOUCH_CM || z + h < j.z + TOUCH_CM) return false;
+      const [a0, a1, c0, c1] = j.dir === 'v' ? [r.y, r.y + r.h, r.x, r.x + r.w] : [r.x, r.x + r.w, r.y, r.y + r.h];
+      return at > c0 + TOUCH_CM && at < c1 - TOUCH_CM && Math.min(a1, hi) - Math.max(a0, lo) > MIN_SHARED_CM;
+    });
+  };
   const nearest = joints.map((j) => {
     let best = -1;
     let bestGap = Infinity;
@@ -567,7 +596,7 @@ export function findRods(pieces: Piece[], byId: Map<string, Material>, all = fal
       // Faces that touch are one face, not a wall with concrete between.
       if (gap < MIN_SHARED_CM) return;
       if (Math.max(j.to, k.to) - Math.min(j.from, k.from) > reach) return;
-      if (gap < bestGap) {
+      if (gap < bestGap && !blocked(j, k)) {
         bestGap = gap;
         best = ki;
       }

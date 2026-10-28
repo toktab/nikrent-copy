@@ -2,7 +2,7 @@ import type { Material, Piece, SketchPath } from '../types';
 import { uid } from './ids';
 import { pieceBounds, type Rect } from './geometry';
 import { isOrthogonal, segments, type Point } from './sketch';
-import { cornersOnly, legDir, leftNormal, sidesFromNeighbours } from './sketchFill';
+import { cornersOnly, legDir, leftNormal, MAX_WALL_CM, sidesFromNeighbours } from './sketchFill';
 
 /**
  * The other face of a wall, drawn for you from the face already built.
@@ -249,4 +249,37 @@ export function enclosed(
     return inside(poly, { x: b.x + b.w / 2, y: b.y + b.h / 2 });
   }).length;
   return { lines, pieces: count };
+}
+
+/** The shortest distance from `p` to the segment `a`-`b`. */
+function toSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/**
+ * The closed lines a line sits inside, a wall's thickness away at most - the
+ * other face of its wall, when that face was drawn first.
+ *
+ * `enclosed` covers the outer line picked after the inner one. This is the
+ * other way round (the user's ნახაზი 3, 2026-10-23): the outer line drawn and
+ * filled, the inner one made from it and picked alone. Without the outer face
+ * in the solve the inner face was filled blind, its joints nowhere near the
+ * outer ones, and no შტირი could go through the wall.
+ */
+export function enclosing(path: SketchPath, sketch: SketchPath[]): string[] {
+  if (!path.points.length) return [];
+  return sketch
+    .filter((k) => {
+      if (k.id === path.id || !k.closed || k.points.length < 3) return false;
+      if (!path.points.every((p) => inside(k.points, p))) return false;
+      const near = Math.min(
+        ...path.points.flatMap((p) => segments(k).map(([a, b]) => toSegment(p, a, b))),
+      );
+      return near <= MAX_WALL_CM;
+    })
+    .map((k) => k.id);
 }

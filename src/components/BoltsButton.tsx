@@ -84,7 +84,7 @@ export function BoltsButton() {
     >
       <MenuLabel>ჭანჭიკები ამ ნახაზზე</MenuLabel>
       <MenuItem
-        title="T-შეერთება, შიდა კუთხე ჩაკერებასთან და ხელით დასმული"
+        title="დაისმება მხოლოდ ღილაკით „ავტომატურად თავიდან დასმა“ ან ხელით - T-შეერთებაზე და შიდა კუთხე ჩაკერებასთან"
         trail={<KindTrail groups={groups.connectors} shown={shown.connectors} />}
         onClick={() => toggleBoltKind('connectors')}
       >

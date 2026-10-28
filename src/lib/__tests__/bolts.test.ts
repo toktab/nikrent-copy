@@ -129,10 +129,11 @@ describe('placed კონექტორები', () => {
     expect(openBolts(pieces, byId)).toHaveLength(0);
   });
 
-  it('counts one placed away from the joint as well as the joint', () => {
+  it('counts only the ones placed - a joint has none until the ჭანჭიკები button puts one there', () => {
+    expect(connectorCount(tee(), byId)).toBe(0);
     const pieces = [...tee(), connectorAt(44.5, 40)];
     expect(openBolts(pieces, byId)).toHaveLength(1);
-    expect(connectorCount(pieces, byId)).toBe(10);
+    expect(connectorCount(pieces, byId)).toBe(5);
   });
 
   it('snaps to the middle of a worked-out joint in reach', () => {

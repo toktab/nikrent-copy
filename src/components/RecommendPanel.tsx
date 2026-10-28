@@ -14,8 +14,10 @@ import {
   towardsLabel,
 } from '../lib/outerLines';
 import type { Material, Piece, SketchPath } from '../types';
+import { findRods } from '../lib/bolts';
 import {
   solveLayout,
+  wallMates,
   type LayoutFilters,
   type LayoutVariant,
   type OverhangEnds,
@@ -66,13 +68,14 @@ export function RecommendPanel({
   );
 
   /**
-   * What a picked closed line has inside it. The outer line of a wall picked
+   * What a picked closed line has inside it, and what it sits inside. The outer line of a wall picked
    * alone still has to be solved against the inner face it goes round - its
    * panels are the ones the outer face must match - so whatever lines are
    * inside it come into the suggestion with it, built pieces and all.
    */
   const inside = useMemo(() => {
     const lines = new Set<string>();
+    const around = new Set<string>();
     let count = 0;
     const flagged: string[] = [];
     for (const path of selected) {
@@ -82,12 +85,20 @@ export function RecommendPanel({
       // Something inside it means the concrete is inside it: a გარე line.
       if ((found.lines.length || found.pieces) && path.perimeter === 'inner') flagged.push(path.id);
     }
-    for (const path of selected) lines.delete(path.id);
-    return { lines: [...lines], pieces: count, flagged };
+    // ...and every other face of the walls picked - inside or round it, open or
+    // closed: a wall is filled as one thing, or its joints do not line up and
+    // no შტირი goes through (`wallMates`).
+    wallMates(sketch, selected.map((p) => p.id)).forEach((id) => around.add(id));
+    for (const path of selected) {
+      lines.delete(path.id);
+      around.delete(path.id);
+    }
+    for (const id of around) lines.delete(id);
+    return { lines: [...lines], around: [...around], pieces: count, flagged };
   }, [selected, sketch, pieces, materials]);
 
   const paths = useMemo(
-    () => [...selected, ...sketch.filter((k) => inside.lines.includes(k.id))],
+    () => [...selected, ...sketch.filter((k) => inside.lines.includes(k.id) || inside.around.includes(k.id))],
     [selected, sketch, inside],
   );
 
@@ -144,6 +155,17 @@ export function RecommendPanel({
   );
   const variants = result?.variants ?? [];
   const chosen = Math.min(picked, Math.max(0, variants.length - 1));
+  /**
+   * How many შტირი spots each variant leaves the drawing with - the thing the
+   * two faces are matched for, counted the way the ჭანჭიკები menu counts it.
+   */
+  const rodSpots = useMemo(() => {
+    const byId = new Map(materials.map((m) => [m.id, m]));
+    return variants.map((v) => {
+      const gone = new Set(v.remove);
+      return findRods([...pieces.filter((p) => !gone.has(p.id)), ...v.add], byId).length;
+    });
+  }, [variants, pieces, materials]);
 
   // What is picked - or pointed at - shown faint on the drawing.
   useEffect(() => {
@@ -207,6 +229,13 @@ export function RecommendPanel({
             onChange={(e) => setFilter('keepPlaced', e.target.checked)}
           />
           <span>დადებულის შენარჩუნება</span>
+        </label>
+        <label
+          className="check-row"
+          title="ორივე მხარის ყველა შეერთება ერთმანეთის პირისპირ, რომ ყველგან შტირი დაჯდეს - თუნდაც მეტი ელემენტის ან ჩაკერების ფასად"
+        >
+          <input type="checkbox" checked={filters.rodsFirst} onChange={(e) => setFilter('rodsFirst', e.target.checked)} />
+          <span>შტირები პირველ რიგში</span>
         </label>
       </div>
 
@@ -323,6 +352,21 @@ export function RecommendPanel({
             : ''}
         </p>
       )}
+      {inside.around.length > 0 && (
+        <p className="hint-note" style={{ margin: 0 }}>
+          კედლის მეორე მხარე ({inside.around.length} ხაზი) ვარიანტებში ჩართულია - ორივე მხარე ერთად
+          შეირჩევა, შეერთებები ერთმანეთის პირისპირ, რომ შტირები დაჯდეს.
+        </p>
+      )}
+      {filters.keepPlaced && (variants[chosen]?.unmatched ?? 0) > 0 && (
+        <div className="alert warn rec-switch" style={{ margin: 0 }}>
+          {variants[chosen].unmatched} პანელს პირისპირ წყვილი არ აქვს - იქ შტირი ვერ ჩადგება, რადგან მეორე მხარე
+          უკვე დაწყობილია. ორივე მხარე ერთად თავიდან შეირჩევა, რომ ყველა შეერთება ერთმანეთის პირისპირ დადგეს.
+          <button className="btn small primary" onClick={() => setFilter('keepPlaced', false)}>
+            ორივე მხარის თავიდან შერჩევა
+          </button>
+        </div>
+      )}
       <OuterLineMaker lines={selected} sketch={sketch} pieces={pieces} materials={materials} />
       {result?.warnings.map((w) => (
         <p key={w} className="alert warn" style={{ margin: 0 }}>
@@ -345,7 +389,9 @@ export function RecommendPanel({
               #{i + 1}
               {i === 0 ? ' საუკეთესო' : ''}
             </span>
-            <span className="rec-count">{countLine(v)}</span>
+            <span className="rec-count">
+              {countLine(v)} · შტირი {rodSpots[i] ?? 0}
+            </span>
           </div>
           {v.walls.map((wall, k) => (
             <WallRow key={wall.key} wall={wall} index={k} many={v.walls.length > 1} />
@@ -488,9 +534,13 @@ function OuterLineMaker({
   const [distance, setDistance] = useState('20');
   const [perLeg, setPerLeg] = useState<Record<string, string>>({});
 
-  const built = useMemo(
-    () => lines.filter((l) => piecesOnLines([l], pieces, materials).length > 0 && !hasPartner(l, sketch)),
-    [lines, pieces, materials, sketch],
+  // Any line still on its own - built or not. Making the other face BEFORE
+  // filling is the better way round: both are then filled together and every
+  // joint lines up for a შტირი (the user's ნახაზი 3, 2026-10-23).
+  const built = useMemo(() => lines.filter((l) => !hasPartner(l, sketch)), [lines, sketch]);
+  const empty = useMemo(
+    () => built.every((l) => piecesOnLines([l], pieces, materials).length === 0),
+    [built, pieces, materials],
   );
   if (!built.length) return null;
 
@@ -522,6 +572,12 @@ function OuterLineMaker({
   return (
     <section className="rec-outer">
       <div className="rec-wall-head">ახალი ხაზის შექმნა - მანძილი ამ ხაზიდან (კედლის სისქე)</div>
+      {empty && (
+        <p className="hint-note" style={{ margin: 0 }}>
+          რჩევა: ჯერ კედლის მეორე მხარე შექმენი და მერე შეავსე - ორივე მხარე ერთად შეირჩევა, შეერთებები
+          ერთმანეთის პირისპირ დადგება და ყველგან შტირი დაჯდება.
+        </p>
+      )}
       <span className="pen-face">
         {(
           [

@@ -2140,7 +2140,8 @@ export const useEditorStore = create<EditorState>()(
           commit((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
             let pieces = s.pieces;
-            if ('bolts' in target) {
+            // Connectors are pieces already (or not there yet): only marks are made real.
+            if ('bolts' in target && target.bolts !== 'connectors') {
               pieces = materializeBolts(s.pieces, byId, s.materials, target.bolts, uid).pieces;
             }
             const picked = pieces.filter((p) => {
@@ -2180,7 +2181,11 @@ export const useEditorStore = create<EditorState>()(
           }),
         resetBolts: (kinds) =>
           commit((s) => {
-            const pieces = resetBolts(s.pieces, new Map(s.materials.map((m) => [m.id, m])), kinds);
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
+            let pieces = resetBolts(s.pieces, byId, kinds);
+            // Connectors are never there by themselves: this is what puts them
+            // on the joints the rule names - see `connectorCount`.
+            if (!kinds || kinds.connectors) pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
             const left = new Set(pieces.map((p) => p.id));
             return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
           }),

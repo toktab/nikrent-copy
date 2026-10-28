@@ -58,7 +58,9 @@ const endKey = (e: RodEnd) => `${Math.round(e.x)}:${Math.round(e.y)}:${e.rot}`;
 
 export function planMarks(pieces: Piece[], byId: Map<string, Material>): PlanMarks {
   return {
-    connectors: once(openBolts(pieces, byId, true), (b) => `${Math.round(b.x)}:${Math.round(b.y)}`),
+    // No connector marks: connectors are placed by the ჭანჭიკები button, as pieces
+    // - see `connectorCount`.
+    connectors: [],
     rods: once(openRods(pieces, byId, true), (r) => `${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}`),
     nuts: once(openRodEnds(pieces, byId), endKey),
     latches: once(openLatches(pieces, byId, true), (l) => `${Math.round(l.x)}:${Math.round(l.y)}`),
@@ -127,7 +129,6 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
     });
 
   const connectors: Array<[string, number]> = [
-    ...openBolts(pieces, byId).map((b): [string, number] => [spotKey(b), CONNECTORS_PER_JOINT]),
     ...placed(isConnector).map(({ p, m }): [string, number] => [spotKey(pieceCentre(p, m)), CONNECTORS_PER_JOINT]),
   ];
   const rods: Array<[string, number]> = [

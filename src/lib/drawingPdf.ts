@@ -15,7 +15,7 @@ import {
 } from './dimensions';
 import { sheetBounds, type SheetSize } from './exportOptions';
 import { stampedName } from './files';
-import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, openBolts, pieceCentre } from './bolts';
+import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, pieceCentre } from './bolts';
 import { boltKindOf, boltTotals, markedRodLength, planMarks, type BoltKindName } from './boltMarks';
 import { CATEGORY_ORDER } from '../data/categories';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
@@ -439,10 +439,10 @@ function legendEntries(
     const totals = boltTotals(doc.pieces, byId);
     if (vis.connectors && totals.connectors > 0) {
       // The total split by where it stands, so each colour has its own row.
-      const open = openBolts(doc.pieces, byId);
+      // Only placed ones - see `connectorCount`.
       const atCorner = connectorsAtCorners(doc.pieces, byId);
-      let tee = open.filter((b) => b.kind === 'tee').length;
-      let corner = open.length - tee;
+      let tee = 0;
+      let corner = 0;
       for (const p of doc.pieces) {
         const m = byId.get(p.materialId);
         if (!m || !isConnector(m)) continue;

@@ -66,6 +66,12 @@ export interface LayoutFilters {
   keepPlaced: boolean;
   /** prefer stacked shorter courses to 300-high panels (P3) */
   fewer300: boolean;
+  /**
+   * შტირები პირველ რიგში: every joint opposite its twin above all else, so a
+   * tie rod goes through every one - more pieces, more fillers, whatever it
+   * takes (the user, 2026-10-23). Off, a panel with no twin is dear but can lose.
+   */
+  rodsFirst: boolean;
 }
 
 export const DEFAULT_LAYOUT_FILTERS: LayoutFilters = {
@@ -78,6 +84,7 @@ export const DEFAULT_LAYOUT_FILTERS: LayoutFilters = {
   useStock: true,
   keepPlaced: true,
   fewer300: false,
+  rodsFirst: false,
 };
 
 /** Anything saved - junk included - as usable filters. */
@@ -100,6 +107,7 @@ export function normalizeLayoutFilters(value: unknown): LayoutFilters {
     useStock: typeof saved.useStock === 'boolean' ? saved.useStock : d.useStock,
     keepPlaced: typeof saved.keepPlaced === 'boolean' ? saved.keepPlaced : d.keepPlaced,
     fewer300: typeof saved.fewer300 === 'boolean' ? saved.fewer300 : d.fewer300,
+    rodsFirst: typeof saved.rodsFirst === 'boolean' ? saved.rodsFirst : d.rodsFirst,
   };
 }
 
@@ -599,6 +607,8 @@ interface Catalog {
   maxFillers: number;
   maxOverhang: number;
   spare: Set<number>;
+  /** what a panel with no twin opposite costs - see `LayoutFilters.rodsFirst` */
+  unmatched: number;
 }
 
 /** Score weights, lowest wins - see the table in docs/LAYOUT-SOLVER.md. */
@@ -621,6 +631,8 @@ const WEIGHT = {
   // that it never sticks out for nothing.
   overhangCm: 4,
   unmatched: 5000, // A3 - a panel with nothing opposite has no tie rod
+  // ...and with შტირები პირველ რიგში on: dearer than fifty extra pieces.
+  unmatchedRodsFirst: 60000,
   distinct: 200, // P5
   nonWidest: 60, // R2
   narrow: 40, // P4
@@ -905,7 +917,7 @@ function derive(ref: Laid[], lo: Resolved, hi: Resolved, cat: Catalog, cache: Ma
       hiSeq = [...hiFill.seq].reverse();
       const laid = [...layFrom(s - loFill.len, loSeq), ...middle, ...layFrom(e, hiSeq)];
       const unmatched = panelIdx.length - keep.length;
-      const cost = loFill.cost + hiFill.cost + unmatched * WEIGHT.unmatched;
+      const cost = loFill.cost + hiFill.cost + unmatched * cat.unmatched;
       if (!best || cost < best.cost) best = { laid, unmatched, cost };
     }
   }
@@ -999,7 +1011,7 @@ function scoreWall(faces: FaceFill[], unmatched: number, cat: Catalog, ref: numb
     extraFillers * WEIGHT.extraFiller +
     adjacent * WEIGHT.adjacentFillers +
     overhang * WEIGHT.overhangCm +
-    unmatched * WEIGHT.unmatched +
+    unmatched * cat.unmatched +
     widths.size * WEIGHT.distinct +
     nonWidest * WEIGHT.nonWidest +
     narrow * WEIGHT.narrow +
@@ -1012,10 +1024,33 @@ const fillKey = (faces: FaceFill[]) =>
   faces.map((f) => f.laid.map((l) => `${l.opt.material.id}@${Math.round(l.from * 10) / 10}`).join(',')).join('|');
 
 /**
+ * How many of a built face's panels have no twin at the same place on `laid`
+ * (A3) - only those the face's own ends leave room for.
+ */
+function unmatchedAgainst(reference: Laid[], laid: Laid[], lo: Resolved, hi: Resolved): number {
+  const loLimit = lo.t === 'fixed' ? lo.p : lo.far;
+  const hiLimit = hi.t === 'fixed' ? hi.p : hi.far;
+  let n = 0;
+  for (const r of reference) {
+    if (r.filler || r.from < loLimit - EPS || r.from + r.opt.w > hiLimit + EPS) continue;
+    if (!laid.some((l) => !l.filler && Math.abs(l.from - r.from) < FLUSH_TOL && Math.abs(l.opt.w - r.opt.w) < FLUSH_TOL)) n++;
+  }
+  return n;
+}
+
+/**
  * The ranked answers for one wall (one or two segments) at one choice of its
  * lapped corners.
+ *
+ * `reference` is the other face of the wall when that face is already built
+ * and kept: a lone segment is then scored against it - every built panel
+ * without a twin opposite costs what an unmatched panel does - and is also
+ * offered the face derived from it (A3), so its joints line up for the tie
+ * rods. Before, the built face's panels were forced onto this one as fixed
+ * pieces, and where the ends then could not be closed exactly there was no
+ * answer at all - the user's ნახაზი 3 (2026-10-23).
  */
-function solveWall(segments: Segment[], passes: Passes, cat: Catalog): WallFill[] {
+function solveWall(segments: Segment[], passes: Passes, cat: Catalog, reference?: Laid[]): WallFill[] {
   const resolved = segments.map((s) => ({
     segment: s,
     lo: resolve(s.lo, s.face, passes, cat),
@@ -1042,7 +1077,7 @@ function solveWall(segments: Segment[], passes: Passes, cat: Catalog): WallFill[
           const laid = layFrom(span.from, seq);
           const refFill: FaceFill = { segment: ref.segment, laid, lo: ref.lo, hi: ref.hi };
           if (resolved.length === 1) {
-            add([refFill], 0, 0);
+            add([refFill], reference ? unmatchedAgainst(reference, laid, ref.lo, ref.hi) : 0, 0);
             continue;
           }
           const other = resolved[1 - r];
@@ -1054,6 +1089,17 @@ function solveWall(segments: Segment[], passes: Passes, cat: Catalog): WallFill[
       }
     }
   }
+  if (reference && resolved.length === 1) {
+    const only = resolved[0];
+    const derived = derive(reference, only.lo, only.hi, cat, gapCache);
+    if (derived) {
+      add(
+        [{ segment: only.segment, laid: derived.laid, lo: only.lo, hi: only.hi }],
+        unmatchedAgainst(reference, derived.laid, only.lo, only.hi),
+        0,
+      );
+    }
+  }
   return [...out.values()]
     .sort((a, b) => a.cost - b.cost || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
     .slice(0, KEEP_PER_WALL);
@@ -1063,6 +1109,8 @@ function solveWall(segments: Segment[], passes: Passes, cat: Catalog): WallFill[
 
 interface Wall {
   segments: Segment[];
+  /** the built other face, for a lone segment - see `solveWall` */
+  reference?: Laid[];
   /** lapped corners this wall's ends hang on */
   vars: number[];
   /** answers per choice of `vars`, as a bit string */
@@ -1111,6 +1159,7 @@ function solveHeight(
     maxFillers: filters.maxFillers,
     maxOverhang: filters.maxOverhang,
     spare: new Set(filters.spareWidths),
+    unmatched: filters.rodsFirst ? WEIGHT.unmatchedRodsFirst : WEIGHT.unmatched,
   };
 
   const geometry = readFaces(chains, sides, { depth, profile, filters });
@@ -1178,13 +1227,38 @@ function solveHeight(
     });
   }
 
-  // A kept panel needs its twin opposite it (A3): stand one there if the
-  // other face is free at that place.
+  // A kept panel needs its twin opposite it (A3). A face with nothing built on
+  // it is solved against the built one (`reference`) - matched where it can be,
+  // never left with no answer. A face part built already has the twins stood
+  // there as fixed pieces, between its own.
+  const own = new Map([...locks].map(([k, v]) => [k, [...v]]));
+  const references = new Map<number, Laid[]>();
+  const optionFor = (id: string, w: number): PanelOption | null => {
+    const known = [...catalog.panels, ...catalog.fillers].find((o) => o.material.id === id);
+    if (known) return known;
+    const m = byId.get(id);
+    return m ? { material: m, w } : null;
+  };
   for (const [i, j] of pairs) {
     for (const [from, to] of [
       [i, j],
       [j, i],
     ]) {
+      if (own.get(to)?.length || !own.get(from)?.length) continue;
+      const laid: Laid[] = [];
+      for (const lock of [...own.get(from)!].sort((a, b) => a.from - b.from)) {
+        const opt = optionFor(lock.materialId, lock.to - lock.from);
+        if (opt) laid.push({ opt, from: lock.from, filler: opt.material.category === 'filler' });
+      }
+      references.set(to, laid);
+    }
+  }
+  for (const [i, j] of pairs) {
+    for (const [from, to] of [
+      [i, j],
+      [j, i],
+    ]) {
+      if (references.has(to)) continue;
       const theirs = locks.get(to) ?? [];
       for (const lock of locks.get(from) ?? []) {
         const m = byId.get(lock.materialId);
@@ -1225,8 +1299,9 @@ function solveHeight(
     used.add(i);
     const j = paired.get(i);
     const mine = segmentsOf(i);
+    const lone = (s: Segment): Wall => ({ segments: [s], vars: lapVars([s]), table: new Map(), reference: references.get(s.face) });
     if (j === undefined) {
-      for (const s of mine) walls.push({ segments: [s], vars: lapVars([s]), table: new Map() });
+      for (const s of mine) walls.push(lone(s));
       return;
     }
     used.add(j);
@@ -1249,10 +1324,10 @@ function solveHeight(
         takenTheirs.add(best);
         const segs = [s, theirs[best]];
         walls.push({ segments: segs, vars: lapVars(segs), table: new Map() });
-      } else walls.push({ segments: [s], vars: lapVars([s]), table: new Map() });
+      } else walls.push(lone(s));
     }
     theirs.forEach((t, k) => {
-      if (!takenTheirs.has(k)) walls.push({ segments: [t], vars: lapVars([t]), table: new Map() });
+      if (!takenTheirs.has(k)) walls.push(lone(t));
     });
   });
 
@@ -1266,7 +1341,7 @@ function solveHeight(
         const on = !!(mask & (1 << wall.vars.indexOf(corner)));
         return (on ? corners[corner].b.face : corners[corner].a.face) === face;
       };
-      wall.table.set(mask, solveWall(wall.segments, passes, catalog));
+      wall.table.set(mask, solveWall(wall.segments, passes, catalog, wall.reference));
     }
   }
 
@@ -1382,6 +1457,46 @@ function solveHeight(
 /** The least a face end can be - a lap counted at its butt. */
 function boundOf(e: EndSpec): number {
   return e.t === 'fixed' ? e.p : e.t === 'reach' ? e.near : e.v;
+}
+
+// ── Walls across the drawing ────────────────────────────────────────────────
+
+/**
+ * Every line that is a face of the same wall as one of `ids` - and of the
+ * walls those faces make in turn - `ids` included.
+ *
+ * A wall is filled as one thing (A3) or its joints do not line up and no
+ * tie rod goes through. So whichever face is picked, the rest of the wall
+ * comes into the solve with it: drawn inside it or round it, open or closed,
+ * in one stroke or several (the user, 2026-10-23). Faces pair the way the
+ * solver pairs them, `pairFaces`.
+ */
+export function wallMates(paths: SketchPath[], ids: string[]): string[] {
+  if (!paths.length || !ids.length) return [...ids];
+  const chains = joinLines(paths);
+  const sides = sidesFromNeighbours(
+    chains.map((c) => c.path),
+    { height: 300, includeCorners: true },
+  );
+  const { faces } = readFaces(chains, sides, { depth: 9, profile: null, filters: DEFAULT_LAYOUT_FILTERS });
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    const p = parent.get(x) ?? x;
+    if (p === x) return x;
+    const root = find(p);
+    parent.set(x, root);
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  for (const c of chains) for (const s of c.sources.slice(1)) union(c.sources[0], s);
+  const sourcesOf = (i: number) => faces[i].key.slice(0, faces[i].key.lastIndexOf(':')).split('+');
+  for (const [i, j] of pairFaces(faces)) union(sourcesOf(i)[0], sourcesOf(j)[0]);
+  const roots = new Set(ids.map(find));
+  return paths.map((p) => p.id).filter((id) => roots.has(find(id)));
 }
 
 // ── Entry point ─────────────────────────────────────────────────────────────
