@@ -222,13 +222,13 @@ export function RecommendPanel({
           <input type="checkbox" checked={includeCorners} onChange={(e) => setIncludeCorners(e.target.checked)} />
           <span>შიდა კუთხის პროფილები</span>
         </label>
-        <label className="check-row" title="ხაზზე უკვე მდგომი ელემენტები რჩება და ვარიანტები მათ გარშემო იწყობა; გამორთულზე - იცვლება">
+        <label className="check-row" title="ხაზზე ხელით დასმული ელემენტები (კუთხე, ჩაკერება...) რჩება და დანარჩენი მათ შორის იწყობა; ავტომატურად დასმული ყოველთვის იცვლება. გამორთულზე - ყველაფერი იცვლება">
           <input
             type="checkbox"
             checked={filters.keepPlaced}
             onChange={(e) => setFilter('keepPlaced', e.target.checked)}
           />
-          <span>დადებულის შენარჩუნება</span>
+          <span>ხელით დასმულის შენარჩუნება</span>
         </label>
         <label
           className="check-row"
@@ -348,7 +348,7 @@ export function RecommendPanel({
           შიგნით მყოფი {inside.lines.length} ხაზი და {inside.pieces} ელემენტი ვარიანტებში ჩართულია -
           გარე მხარე მათ შეეწყობა.
           {filters.keepPlaced && inside.pieces > 0
-            ? ' შიდა მხარის ხელახლა, ორივე მხარის ერთად შესარჩევად გამორთე დადებულის შენარჩუნება.'
+            ? ' შიდა მხარის ხელახლა, ორივე მხარის ერთად შესარჩევად გამორთე ხელით დასმულის შენარჩუნება.'
             : ''}
         </p>
       )}

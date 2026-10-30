@@ -1,5 +1,5 @@
 import type { Category, Material, Piece, SketchPath } from '../types';
-import { pieceBounds } from './geometry';
+import { pieceBounds, planH } from './geometry';
 import { isOrthogonal } from './sketch';
 import {
   MAX_WALL_CM,
@@ -173,7 +173,7 @@ function standingOn(leg: Leg, outward: 1 | -1, piece: Piece, m: Material): Stand
   const clipTo = Math.min(to, leg.hi);
   if (clipTo - clipFrom <= TOL) return null;
 
-  const along = m.shape !== 'L' && Math.abs(far - near - m.depth) <= TOL;
+  const along = m.shape !== 'L' && Math.abs(far - near - planH(m)) <= TOL;
   const width = round1(to - from);
   const backed = round1(clipTo - clipFrom);
   const label =
@@ -193,7 +193,7 @@ function standingOn(leg: Leg, outward: 1 | -1, piece: Piece, m: Material): Stand
     along,
     rawFrom: from,
     rawTo: to,
-    depth: m.depth,
+    depth: planH(m),
   };
 }
 

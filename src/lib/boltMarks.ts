@@ -136,24 +136,16 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
     ...placed(isRod).map(({ p, m }): [string, number] => [spotKey(pieceCentre(p, m)), 1]),
   ];
 
-  // A placed nut belongs to the rod end it stands on, so a part-placed end is
-  // still one place.
-  const ends = rodEnds(pieces, byId);
-  const endKey = (e: RodEnd) => `${spotKey(e)}:${normalizeRot(e.rot)}`;
-  const onEnd = new Map<string, number>();
-  const nuts: Array<[string, number]> = [];
-  for (const { p, m } of placed(isNut)) {
-    const c = pieceCentre(p, m);
-    const o = outward(p.rot);
-    const at = { x: c.x - (o.x * planW(m)) / 2, y: c.y - (o.y * planW(m)) / 2 };
-    const end = ends.find(
-      (e) => normalizeRot(e.rot) === normalizeRot(p.rot) && Math.hypot(e.x - at.x, e.y - at.y) <= 3,
-    );
-    const k = end ? endKey(end) : `nut:${spotKey(c)}`;
-    if (end) onEnd.set(k, (onEnd.get(k) ?? 0) + 1);
-    nuts.push([k, 1]);
-  }
-  for (const e of ends) nuts.push([endKey(e), Math.max(0, e.levels.length - (onEnd.get(endKey(e)) ?? 0))]);
+  // ქანჩი + დისკო by the rule, not by what stands on the plan: as many at each
+  // end of a შტირი spot as rods go up it, and one at every კონექტორი - see
+  // `nutCount`, whose total this has to match.
+  const nuts: Array<[string, number]> = [
+    ...rods.flatMap(([k, n]): Array<[string, number]> => [
+      [`${k}:a`, n],
+      [`${k}:b`, n],
+    ]),
+    ...connectors.map(([k, n]): [string, number] => [`c:${k}`, n]),
+  ];
 
   const latches: Array<[string, number]> = [
     ...openLatches(pieces, byId).map((s): [string, number] => [spotKey(s), s.levels.length]),

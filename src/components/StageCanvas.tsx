@@ -76,6 +76,8 @@ import {
   type RodEnd,
 } from '../lib/bolts';
 import { boltKindOf } from '../lib/boltMarks';
+import { isMaterialShown } from '../lib/objectVisibility';
+import { isPost, snapPost } from '../lib/posts';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
@@ -228,6 +230,8 @@ export function StageCanvas() {
   const showGaps = useEditorStore((s) => s.showGaps);
   const showBolts = useEditorStore((s) => s.showBolts);
   const boltsShown = useEditorStore((s) => s.boltsShown);
+  const objectVisibility = useEditorStore((s) => s.objectVisibility);
+  const snapStep = useEditorStore((s) => s.snapStep);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const measures = useEditorStore((s) => s.measures);
   const recommendPreview = useEditorStore((s) => s.recommendPreview);
@@ -536,7 +540,7 @@ export function StageCanvas() {
               // Nothing hidden is picked up: a band dragged over a wall must not
               // carry off კონექტორები nobody can see, to be deleted with it.
               const kind = boltKindOf(m);
-              if (kind && !s.boltsShown[kind]) return false;
+              if (kind ? !s.boltsShown[kind] : !isMaterialShown(s.objectVisibility, m)) return false;
               // Tested against what the view actually shows, so a rubber band
               // in an elevation catches the course it was drawn around.
               const b = projectPiece(p, m, s.surfaceView);
@@ -681,9 +685,10 @@ export function StageCanvas() {
         e.preventDefault();
         return;
       }
-
       // Arrow keys nudge: one grid step, or 1 cm with Shift for fine work.
-      const step = e.shiftKey ? 1 : s.snap ? s.snapStep : 1;
+      // Arrows move by the move step from პარამეტრები whether or not the grid
+      // snap is on - it is how far a piece moves, not where it lands. Shift: 1 cm.
+      const step = e.shiftKey ? 1 : s.snapStep;
       const nudge: Record<string, [number, number]> = {
         ArrowLeft: [-step, 0],
         ArrowRight: [step, 0],
@@ -1268,6 +1273,17 @@ export function StageCanvas() {
      * turned to run across it - see `findRods`. Where there is none in reach
      * it lands loose, the way any other piece does.
      */
+    // A დგარი goes on the outside of a panel face, square to it, head on the
+    // face - on whichever side of the panel it was let go.
+    if (view === 'plan' && isPost(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapPost(at, material, s.pieces, lookup, Math.max(40, 60 / s.zoom), s.snapStep);
+      if (spot) {
+        return { u: spot.x, v: spot.y, w: pw, h: ph, world: { x: spot.x, y: spot.y, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
+      }
+    }
+
     if (view === 'plan' && isRod(material)) {
       const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
       const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
@@ -1499,6 +1515,28 @@ export function StageCanvas() {
         setHoverPieceId(null);
       }}
       onDoubleClick={(e) => {
+        // A double click on a leg of a drawn line: straight into its length,
+        // to be typed rather than dragged to (the user, 2026-10-30). The first
+        // click of the pair has already picked the leg.
+        if (tool === 'select') {
+          const s = useEditorStore.getState();
+          const part = s.selectedSketchPart;
+          if (part?.kind !== 'leg') return;
+          e.preventDefault();
+          s.setInspectorOpen(true);
+          s.setInspectorTab('recommend');
+          // After the panel has rendered the field.
+          requestAnimationFrame(() => {
+            const input = document.querySelector<HTMLInputElement>(
+              `[data-leg-field="${part.pathId}:${part.index}"]`,
+            );
+            if (!input) return;
+            input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            input.focus();
+            input.select();
+          });
+          return;
+        }
         // Finishing an open run, the way every polyline tool ends one.
         if (tool !== 'pen') return;
         e.preventDefault();
@@ -1538,7 +1576,7 @@ export function StageCanvas() {
               // WIDTH scales too: at 4x the old fixed 1px was a 4px band, which
               // is what made a zoomed-in drawing look furred. Divide it back.
               '--gw': `${1 / zoom}px`,
-              '--gf': `${gridStep(zoom)}px`,
+              '--gf': `${gridStep(zoom, snapStep)}px`,
               '--gm': `${GRID_MAJOR_CM}px`,
             } as CSSProperties
           }
@@ -1600,7 +1638,7 @@ export function StageCanvas() {
           // A ჭანჭიკი kind switched off in its menu is hidden placed or not -
           // the menu's switch is about seeing the kind, not where it came from.
           const kind = boltKindOf(material);
-          if (kind && !boltsShown[kind]) return null;
+          if (kind ? !boltsShown[kind] : !isMaterialShown(objectVisibility, material)) return null;
           return elevation ? (
             <ElevationPieceView
               key={piece.id}

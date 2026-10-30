@@ -13,9 +13,10 @@ import { Icon } from './Icon';
  * `FillDefaults`) and with the recommendation tab's filters, so the button and
  * the tab's #1 are the same answer.
  *
- * With "keep placed pieces" on, what already stands on a line stays and the
- * rest is built around it, so a line filled before is not filled twice; with
- * it off, what stands on the lines is replaced.
+ * With "keep hand-placed pieces" on, what was placed by hand on a line stays
+ * and the rest is built around it - the corners set first, the runs filled
+ * between them - while what an earlier fill put there is worked out again;
+ * with it off, everything on the lines is replaced.
  *
  * A function as well as a button, so the search box can run it too.
  */
@@ -44,7 +45,7 @@ export function runFillAll(): void {
   if (!best || (!best.add.length && !best.remove.length)) {
     s.setToast(
       result.warnings[0] ??
-        (s.layoutFilters.keepPlaced ? 'ყველა ხაზზე ელემენტები უკვე დგას - შესავსები არაფერი დარჩა.' : 'ყალიბი ვერ აიწყო.'),
+        (s.layoutFilters.keepPlaced ? 'ყველა ხაზზე ხელით დასმული ელემენტები დგას - შესავსები არაფერი დარჩა.' : 'ყალიბი ვერ აიწყო.'),
     );
     return;
   }

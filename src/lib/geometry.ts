@@ -27,7 +27,30 @@ export const MAX_ZOOM = 8;
  * Everything that positions or hit-tests a piece must go through these two.
  */
 export const planW = (m: Material): number => m.w;
-export const planH = (m: Material): number => m.depth;
+export const planH = (m: Material): number =>
+  panelDepthOverride !== null && (m.category === 'panel' || m.category === 'filler')
+    ? panelDepthOverride
+    : m.category === 'post'
+      ? // A დგარი is drawn as the strut it is, out from the face to its foot -
+        // see `postReach` in posts.ts, which this has to agree with.
+        Math.max(m.depth, Math.round(Math.max(m.w, m.h) / 2))
+      : m.depth;
+
+/**
+ * The thickness every panel and ჩაკერება is drawn at, whatever its catalog
+ * entry says - the პარამეტრები window's "ელემენტის სისქე" (10 cm unless
+ * changed). Null means each material's own `depth`, which is what the tests
+ * and the pure library code see unless they set it.
+ *
+ * A module setting rather than an edit to the catalog: the catalog is the
+ * company's and syncs to everyone, this is how one person wants the plan
+ * drawn, and every plan size already goes through `planH`.
+ */
+let panelDepthOverride: number | null = null;
+
+export function setPanelDepthOverride(cm: number | null): void {
+  panelDepthOverride = cm !== null && Number.isFinite(cm) && cm > 0 ? cm : null;
+}
 
 export function worldToScreen(wx: number, wy: number, v: ViewTransform) {
   return { x: wx * v.zoom + v.panX, y: wy * v.zoom + v.panY };
@@ -360,11 +383,16 @@ export function drawStep(snap: boolean, snapStep: number): number {
  *
  * It steps up as the drawing is zoomed out, at the point where the lines would
  * be closer together than they are wide and the surface would go grey.
+ *
+ * `base` is the move step from პარამეტრები: one square is one step (the
+ * user, 2026-10-30 - "one box on the scheme is 5 cm"), so the square is that
+ * size for as long as it can be seen at all.
  */
-export function gridStep(zoom: number): number {
-  const steps = [DRAW_STEP_CM, 10, 20, 50, GRID_MAJOR_CM, 200, 500];
-  const target = 4.5 / zoom;
-  return steps.find((s) => s >= target) ?? 500;
+export function gridStep(zoom: number, base: number = DRAW_STEP_CM): number {
+  const first = Math.max(DRAW_STEP_CM, base);
+  const steps = [1, 2, 4, 10, 20, 40, 100].map((k) => first * k);
+  const target = 3 / zoom;
+  return steps.find((s) => s >= target) ?? steps[steps.length - 1];
 }
 
 /** Ruler step that keeps ticks ≈70 px apart at the current zoom. */

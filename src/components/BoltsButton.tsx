@@ -110,7 +110,7 @@ export function BoltsButton() {
         </span>
       </MenuItem>
       <MenuItem
-        title="ორი თითო შტირზე - ერთი თითო ბოლოზე"
+        title="შტირი × 2 (თითო ბოლოზე) + კონექტორები - თითო თითოზე"
         trail={<KindTrail groups={groups.nuts} shown={shown.nuts} />}
         onClick={() => toggleBoltKind('nuts')}
       >

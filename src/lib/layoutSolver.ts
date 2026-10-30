@@ -62,7 +62,10 @@ export interface LayoutFilters {
   maxFillers: number;
   /** sink variants that need more than is free */
   useStock: boolean;
-  /** keep what already stands on the lines and build around it */
+  /**
+   * keep what was placed BY HAND on the lines and build around it; what an
+   * earlier fill put there (`Piece.auto`) is replaced either way
+   */
   keepPlaced: boolean;
   /** prefer stacked shorter courses to 300-high panels (P3) */
   fewer300: boolean;
@@ -1210,10 +1213,12 @@ function solveHeight(
     faces.forEach((f, i) => {
       if (skipped.has(i)) return;
       // Off: anything on the face or hanging off its ends goes. On: only what
-      // stands on the drawn line itself is built around.
-      const hit = standing(f, filters.keepPlaced ? 0 : reachWindow, piece, m);
+      // was placed by hand and stands on the drawn line itself is built
+      // around - a piece an earlier fill put there is fair game.
+      const keep = filters.keepPlaced && !piece.auto;
+      const hit = standing(f, keep ? 0 : reachWindow, piece, m);
       if (!hit) return;
-      if (!filters.keepPlaced) {
+      if (!keep) {
         faceRemovals.add(piece.id);
         return;
       }
@@ -1693,7 +1698,9 @@ function buildVariant(
         const b = pieceBounds(p, m);
         return Math.min(b.x + b.w, box.x + box.w) - Math.max(b.x, box.x) > 1 && Math.min(b.y + b.h, box.y + box.h) - Math.max(b.y, box.y) > 1;
       });
-      if (clash.length && filters.keepPlaced) continue;
+      // A hand-placed profile stays and this one stands down; one a fill put
+      // there is replaced.
+      if (filters.keepPlaced && clash.some((p) => !p.auto)) continue;
       for (const c of clash) remove.add(c.id);
       add.push(piece);
       count(piece.materialId);

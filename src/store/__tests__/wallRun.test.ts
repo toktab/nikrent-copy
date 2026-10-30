@@ -50,8 +50,10 @@ describe('generateWallRun', () => {
     const tops = useEditorStore
       .getState()
       .pieces.map((p) => pieceBounds(p, byId.get(p.materialId)!).y);
-    // Panels above the near face at 100, and below the far face at 120.
-    expect(new Set(tops)).toEqual(new Set([91, 120]));
+    // Panels above the near face at 100, and below the far face at 120 - at
+    // the thickness the store draws them (პარამეტრები, 10 cm unless changed).
+    const depth = useEditorStore.getState().panelDepth;
+    expect(new Set(tops)).toEqual(new Set([100 - depth, 120]));
   });
 
   it('orders the face and nothing behind it', () => {

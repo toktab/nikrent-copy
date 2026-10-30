@@ -686,6 +686,18 @@ export function Header() {
           </>
         )}
 
+        {/* The editor's own defaults - move step, panel thickness, what the
+            plan shows. In simple mode too: hiding things is for everyone. */}
+        <Tooltip label="პარამეტრები" reason="გადაადგილების ბიჯი, ელემენტის სისქე, ხილვადობა">
+          <button
+            className="btn icon"
+            onClick={() => openDialog({ kind: 'settings' })}
+            aria-label="პარამეტრები"
+          >
+            <Icon name="gear" size={16} />
+          </button>
+        </Tooltip>
+
         <span className="sep" />
 
         {/* Draw the layout first, fill it with formwork after. Grouped with the

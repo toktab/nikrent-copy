@@ -323,7 +323,15 @@ describe('gridStep', () => {
     expect(gridStep(0.08)).toBeGreaterThan(gridStep(0.4));
     // Whatever the zoom, the lines stay further apart than they are wide.
     for (const zoom of [0.08, 0.2, 0.5, 1, 2, 8]) {
-      expect(gridStep(zoom) * zoom).toBeGreaterThanOrEqual(4.5);
+      expect(gridStep(zoom) * zoom).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it('rules one square per move step, as long as it can be seen', () => {
+    expect(gridStep(1, 5)).toBe(5);
+    expect(gridStep(0.7, 5)).toBe(5);
+    expect(gridStep(1, 15)).toBe(15);
+    // Never finer than the drawing is snapped in.
+    expect(gridStep(8, 1)).toBe(5);
   });
 });

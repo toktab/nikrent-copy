@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
+  Category,
   ArrayOptions,
   ColumnSpec,
   WallRunSpec,
@@ -19,7 +20,7 @@ import type {
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { withCompanyWeights } from '../data/companyWeights';
-import { normalizeWallThickness, wallPartner } from '../lib/wallPen';
+import { findWallMate, flipWall, normalizeWallThickness, wallPartner } from '../lib/wallPen';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -33,6 +34,7 @@ import {
   planH,
   planW,
   rotatedOnGrid,
+  setPanelDepthOverride,
   snapValue,
   unionRect,
 } from '../lib/geometry';
@@ -89,6 +91,13 @@ import {
   type RodSpot,
 } from '../lib/bolts';
 import { boltKindOf, normalizeBoltKinds } from '../lib/boltMarks';
+import {
+  DEFAULT_PANEL_DEPTH_CM,
+  isMaterialShown,
+  normalizeObjectVisibility,
+  normalizePanelDepth,
+  type ObjectVisibility,
+} from '../lib/objectVisibility';
 import { materializeBolts, replacePieces, type SelectTarget } from '../lib/replace';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
 import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
@@ -183,6 +192,8 @@ const PREF_KEYS = [
   'showGaps',
   'showBolts',
   'boltsShown',
+  'objectVisibility',
+  'panelDepth',
   'showSketch',
   'measureStyle',
   'viewMode',
@@ -322,6 +333,10 @@ export interface EditorState {
   showBolts: boolean;
   /** each ჭანჭიკი kind shown on the plan or not - marks and placed pieces alike */
   boltsShown: BoltKinds;
+  /** which kinds of thing the plan draws - see `ObjectVisibility` */
+  objectVisibility: ObjectVisibility;
+  /** the thickness every panel and ჩაკერება is drawn at, cm - see `setPanelDepthOverride` */
+  panelDepth: number;
   /**
    * Simple mode: only what drawing and filling need stays on screen - drawing,
    * measuring, the parts, the recommendation tab. Everything else comes back
@@ -431,6 +446,8 @@ export interface EditorState {
 
   // ── actions: pieces ──
   addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number, rot?: number) => void;
+  /** mark the selected pieces as placed by hand (false) or by the fill (true) - see `Piece.auto` */
+  setSelectedAuto: (auto: boolean) => void;
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
   /**
@@ -558,6 +575,10 @@ export interface EditorState {
   // ── actions: settings ──
   setSnap: (on: boolean) => void;
   setSnapStep: (step: number) => void;
+  /** show or hide a whole category, or one material, on the plan */
+  setObjectShown: (target: { category: Category } | { materialId: string }, shown: boolean) => void;
+  resetObjectVisibility: () => void;
+  setPanelDepth: (cm: number) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
   setShowLengths: (on: boolean) => void;
@@ -667,6 +688,8 @@ export interface EditorState {
   setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
   /** Change which face already-drawn runs are, and so which way they fill. */
   setSketchPerimeter: (pathIds: string[], perimeter: 'outer' | 'inner') => void;
+  /** a wall drawn as one line: its body, and so its other face, to the other side of this line */
+  flipWallSide: (pathId: string) => void;
   /** Put finished lines on the drawing - the generated other face of a wall - and select them, as one undo step. */
   addSketchPaths: (paths: SketchPath[]) => void;
   /** Add a vertex to the path in progress, already snapped by the caller. */
@@ -976,6 +999,8 @@ export const useEditorStore = create<EditorState>()(
         showGaps: false,
         showBolts: true,
         boltsShown: { ...ALL_BOLT_KINDS },
+        objectVisibility: normalizeObjectVisibility(undefined),
+        panelDepth: DEFAULT_PANEL_DEPTH_CM,
         simpleMode: false,
         fillDefaults: { height: 300, includeCorners: true },
         layoutFilters: { ...DEFAULT_LAYOUT_FILTERS },
@@ -1115,8 +1140,10 @@ export const useEditorStore = create<EditorState>()(
               selectedIds: s.pieces
                 .filter((p) => {
                   const m = byId.get(p.materialId);
-                  const kind = m ? boltKindOf(m) : null;
-                  return !kind || s.boltsShown[kind];
+                  if (!m) return true;
+                  const kind = boltKindOf(m);
+                  // Nor anything hidden from the plan in პარამეტრები.
+                  return kind ? s.boltsShown[kind] : isMaterialShown(s.objectVisibility, m);
                 })
                 .map((p) => p.id),
               selectedSketchIds: s.sketch.map((k) => k.id),
@@ -1141,7 +1168,36 @@ export const useEditorStore = create<EditorState>()(
               rot,
               z: Math.max(0, worldZ),
             };
-            return { pieces: [...s.pieces, piece], selectedIds: [piece.id] };
+            // A kind hidden from the plan comes back on for the one just put
+            // down: placing something you then cannot see looks like nothing
+            // happened, and invites placing it again.
+            const m = s.materials.find((mm) => mm.id === materialId)!;
+            const hidden = !boltKindOf(m) && !isMaterialShown(s.objectVisibility, m);
+            return {
+              pieces: [...s.pieces, piece],
+              selectedIds: [piece.id],
+              ...(hidden
+                ? {
+                    objectVisibility: {
+                      ...s.objectVisibility,
+                      materials: { ...s.objectVisibility.materials, [materialId]: true },
+                    },
+                  }
+                : {}),
+            };
+          }),
+
+        setSelectedAuto: (auto) =>
+          commit((s) => {
+            const picked = new Set(s.selectedIds);
+            return {
+              pieces: s.pieces.map((p) => {
+                if (!picked.has(p.id) || !!p.auto === auto) return p;
+                if (auto) return { ...p, auto: true as const };
+                const { auto: _auto, ...rest } = p;
+                return rest;
+              }),
+            };
           }),
 
         setDraggingMaterial: (materialId) => set({ draggingMaterialId: materialId }),
@@ -1651,7 +1707,8 @@ export const useEditorStore = create<EditorState>()(
           const plan = planColumn(spec, get().materials);
           if (plan.pieces.length) {
             commit((s) => ({
-              pieces: [...s.pieces, ...plan.pieces],
+              // Marked as the fill's, so a later fill may replace them.
+              pieces: [...s.pieces, ...plan.pieces.map((p): Piece => ({ ...p, auto: true }))],
               selectedIds: plan.pieces.map((p) => p.id),
             }));
           }
@@ -2087,6 +2144,35 @@ export const useEditorStore = create<EditorState>()(
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
         setShowBolts: (on) => set({ showBolts: on }),
+        setObjectShown: (target, shown) =>
+          set((s) => {
+            const vis = s.objectVisibility;
+            return {
+              objectVisibility:
+                'category' in target
+                  ? {
+                      categories: { ...vis.categories, [target.category]: shown },
+                      // The category's switch speaks for every one of its
+                      // materials: a row turned the other way before goes back
+                      // to following it.
+                      materials: Object.fromEntries(
+                        Object.entries(vis.materials).filter(
+                          ([id]) => s.materials.find((m) => m.id === id)?.category !== target.category,
+                        ),
+                      ),
+                    }
+                  : { ...vis, materials: { ...vis.materials, [target.materialId]: shown } },
+            };
+          }),
+        resetObjectVisibility: () => set({ objectVisibility: normalizeObjectVisibility(undefined) }),
+        setPanelDepth: (cm) => {
+          const depth = normalizePanelDepth(cm);
+          setPanelDepthOverride(depth);
+          // A new array of the same materials: nothing in the catalog changed
+          // (the sync engine compares them one by one and sends nothing), but
+          // everything drawn from it is worked out again at the new thickness.
+          set((s) => ({ panelDepth: depth, materials: [...s.materials] }));
+        },
         toggleBoltKind: (kind) => set((s) => ({ boltsShown: { ...s.boltsShown, [kind]: !s.boltsShown[kind] } })),
         takeBolt: (bolt, materialId, add) =>
           commit((s) => {
@@ -2379,6 +2465,25 @@ export const useEditorStore = create<EditorState>()(
             selectedIds: [],
           })),
 
+        flipWallSide: (pathId) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path) return {};
+            const found = findWallMate(path, s.sketch);
+            if (!found) {
+              // One line on its own: its panels to the other side.
+              return {
+                sketch: s.sketch.map((k) =>
+                  k.id === pathId ? { ...k, perimeter: k.perimeter === 'inner' ? ('outer' as const) : ('inner' as const) } : k,
+                ),
+              };
+            }
+            const [turned, mate] = flipWall(path, found.mate, found.thickness);
+            return {
+              sketch: s.sketch.map((k) => (k.id === turned.id ? turned : k.id === mate.id ? mate : k)),
+            };
+          }),
+
         setSketchPerimeter: (pathIds, perimeter) =>
           commit((s) => ({
             sketch: s.sketch.map((k) =>
@@ -2490,7 +2595,8 @@ export const useEditorStore = create<EditorState>()(
           const gone = new Set(remove);
           const removed = get().pieces.filter((p) => gone.has(p.id)).length;
           commit((s) => ({
-            pieces: [...s.pieces.filter((p) => !gone.has(p.id)), ...add],
+            // The recommendation's pieces are marked as such - see `Piece.auto`.
+            pieces: [...s.pieces.filter((p) => !gone.has(p.id)), ...add.map((p): Piece => ({ ...p, auto: true }))],
             selectedIds: add.map((p) => p.id),
             selectedSketchIds: [],
           }));
@@ -2647,6 +2753,8 @@ export const useEditorStore = create<EditorState>()(
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
             layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
             boltsShown: normalizeBoltKinds(saved.boltsShown),
+            objectVisibility: normalizeObjectVisibility(saved.objectVisibility),
+            panelDepth: normalizePanelDepth(saved.panelDepth),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
             pdfSheet: normalizeSheetSize(saved.pdfSheet),
             pdfScale: normalizePdfScale(saved.pdfScale),
@@ -2691,6 +2799,8 @@ export const useEditorStore = create<EditorState>()(
           lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
           layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
           boltsShown: normalizeBoltKinds(saved.boltsShown),
+          objectVisibility: normalizeObjectVisibility(saved.objectVisibility),
+          panelDepth: normalizePanelDepth(saved.panelDepth),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
           pdfSheet: normalizeSheetSize(saved.pdfSheet),
           pdfScale: normalizePdfScale(saved.pdfScale),
@@ -2711,6 +2821,13 @@ export const useEditorStore = create<EditorState>()(
     },
   ),
 );
+
+// The plan's panel thickness lives in geometry (`planH`), where every plan
+// size is read; keep it with the setting from the first state on.
+setPanelDepthOverride(useEditorStore.getState().panelDepth);
+useEditorStore.subscribe((s, prev) => {
+  if (s.panelDepth !== prev.panelDepth) setPanelDepthOverride(s.panelDepth);
+});
 
 // Route storage failures into the store so the header can show a warning.
 onStorageFailure = (message) => {

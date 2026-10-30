@@ -43,9 +43,12 @@ export const PieceView = memo(function PieceView({
   const nut = isNut(material);
   const latch = isLatch(material);
   const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : latch ? ' latch' : '';
+  // Placed by hand, not by the fill (`Piece.auto`): a dot in its corner, so
+  // what the architect set himself reads apart from what was filled in.
+  const hand = !kind && !piece.auto ? ' hand' : '';
   return (
     <div
-      className={`piece${kind}${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
+      className={`piece${kind}${hand}${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
       data-piece-id={piece.id}
       style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
       onPointerDown={(e) => onPointerDown(e, piece.id)}

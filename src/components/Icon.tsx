@@ -12,6 +12,7 @@
  */
 
 export type IconName =
+  | 'gear'
   | 'plus'
   | 'minus'
   | 'pencil'
@@ -104,6 +105,8 @@ const PATHS: Record<IconName, string> = {
   // Three rails with three handles: settings you slide, not a list you read.
   // A plain hamburger here would be indistinguishable from a menu.
   sliders: 'M4 7h16 M4 12h16 M4 17h16 M9 5v4 M16 10v4 M7 15v4',
+  // A toothed wheel: the app's own settings, apart from the view's sliders.
+  gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M4.9 19.1 7 17 M17 7l2.1-2.1',
   // Permission, not progress — carried by a padlock so read-only never rests
   // on colour alone.
   lock: 'M5 11h14v9H5z M8 11V7a4 4 0 0 1 8 0v4',

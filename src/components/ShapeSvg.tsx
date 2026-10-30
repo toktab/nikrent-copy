@@ -63,6 +63,9 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
+  // A დგარი as the prop it is - see `PostShape`.
+  if (m.category === 'post') return <PostShape m={m} stroke={stroke} strokeWidth={strokeWidth} />;
+
   return m.shape === 'L' ? (
     <polygon points={pointsAttr(drawnOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />
   ) : m.shape === 'line' ? (
@@ -148,6 +151,48 @@ export function PlacedShapeBody({
     >
       <ShapeBody material={m} strokeWidth={strokeWidth} />
     </g>
+  );
+}
+
+/**
+ * A დგარი from above: the head plate on the panel face (the box's top edge,
+ * `y = 0`), the tube with its adjusting collar, and the foot plate on the
+ * ground with its anchor holes (the far edge). A plain bar the colour of the
+ * category was all it used to be, and read as one more waler.
+ */
+function PostShape({ m, stroke, strokeWidth }: { m: Material; stroke: string; strokeWidth: number }) {
+  const pw = planW(m);
+  const ph = planH(m);
+  const sw = Math.min(strokeWidth, pw / 8);
+  const head = Math.min(2, ph / 10);
+  const foot = Math.min(4, ph / 6);
+  const tube = pw * 0.36;
+  const collar = pw * 0.6;
+  const mid = ph * 0.55;
+  return (
+    <>
+      {/* faint footprint, so the drag / hit area stays obvious */}
+      <rect x={0} y={0} width={pw} height={ph} fill={m.color} opacity={0.1} />
+      {/* the tube, inner and outer, the inner one narrower past the collar */}
+      <rect x={(pw - tube) / 2} y={head} width={tube} height={mid - head} fill={m.color} stroke={stroke} strokeWidth={sw} />
+      <rect
+        x={(pw - tube * 0.7) / 2}
+        y={mid}
+        width={tube * 0.7}
+        height={ph - foot - mid}
+        fill={m.color}
+        stroke={stroke}
+        strokeWidth={sw}
+      />
+      {/* the adjusting collar */}
+      <rect x={(pw - collar) / 2} y={mid - 1.5} width={collar} height={3} rx={0.6} fill={m.color} stroke={stroke} strokeWidth={sw} />
+      {/* head plate, on the panel */}
+      <rect x={0} y={0} width={pw} height={head} fill="#5b6470" stroke={stroke} strokeWidth={sw} />
+      {/* foot plate, on the ground, with its two anchor holes */}
+      <rect x={0} y={ph - foot} width={pw} height={foot} fill="#5b6470" stroke={stroke} strokeWidth={sw} />
+      <circle cx={pw * 0.25} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="rgba(0,0,0,.6)" />
+      <circle cx={pw * 0.75} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="rgba(0,0,0,.6)" />
+    </>
   );
 }
 

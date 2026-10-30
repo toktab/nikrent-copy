@@ -212,6 +212,13 @@ describe('one line', () => {
     const replaced = solve([LINE], { keepPlaced: false }, [mine]).variants[0];
     expect(replaced.remove).toEqual(['mine']);
   });
+
+  it('replaces what an earlier fill put on the line, even with keeping on', () => {
+    const filled: Piece = { id: 'filled', materialId: 'panel-60x300', x: 300, y: -9, rot: 0, z: 0, auto: true };
+    const v = solve([LINE], { keepPlaced: true }, [filled]).variants[0];
+    expect(v.remove).toEqual(['filled']);
+    expect(v.add.every((p) => p.id !== 'filled')).toBe(true);
+  });
 });
 
 describe('an L-shaped wall, both faces', { timeout: 20000 }, () => {

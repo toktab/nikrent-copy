@@ -89,6 +89,16 @@ export interface Piece {
    * ავტომატურად დასმა clears it.
    */
   boltsOff?: string[];
+  /**
+   * Put there by the fill or a recommendation, not by hand. Absent means hand
+   * placed - which is what everything placed before this existed was.
+   *
+   * The architect draws a wall, sets the corners by hand (კუთხე, ჩაკერება) and
+   * has the rest filled between them; with "ხელით დასმულის შენარჩუნება" on, a
+   * fill keeps what he placed and freely replaces what an earlier fill put
+   * there. The inspector switches a piece between the two.
+   */
+  auto?: true;
 }
 
 /** Everything a material needs except its identity flags. */
@@ -294,6 +304,7 @@ export type DialogState =
   | { kind: 'errors' }
   | { kind: 'password' }
   | { kind: 'display-settings' }
+  | { kind: 'settings' }
   | { kind: 'remaining' }
   | { kind: 'project'; docId: string }
   | { kind: 'export'; tab: 'pdf' | 'json' }

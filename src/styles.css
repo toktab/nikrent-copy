@@ -6492,3 +6492,51 @@ kbd {
 .bolts-reset-kind {
   padding-left: 22px;
 }
+
+/* პარამეტრები - a category per row, opened out into its materials. */
+.settings-vis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 16px;
+}
+.settings-vis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-vis-items {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 8px 22px;
+}
+
+/* Placed by hand (no Piece.auto): an amber dot in the corner, the same size on
+   screen at any zoom, so the hand-set corners read apart from the filled runs. */
+.piece.hand::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(7px / var(--z, 1));
+  height: calc(7px / var(--z, 1));
+  border-radius: 50%;
+  background: #f0a530;
+  box-shadow: 0 0 0 calc(1px / var(--z, 1)) rgba(0, 0, 0, 0.55);
+  transform: translate(-35%, -35%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* The pen's "a length can be typed" hint: quiet until a digit is pressed. */
+.pen-typed.idle {
+  padding: 3px 8px;
+  background: rgba(20, 24, 30, 0.82);
+  color: var(--muted, #9aa4b2);
+  font-weight: 500;
+  font-size: 12px;
+}
+.pen-typed.idle small {
+  margin-left: 0;
+  opacity: 1;
+}
