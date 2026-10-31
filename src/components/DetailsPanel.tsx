@@ -353,7 +353,9 @@ function SketchDetails({ path }: { path: SketchPath }) {
   const closeSketchPath = useEditorStore((s) => s.closeSketchPath);
   const setSketchPerimeter = useEditorStore((s) => s.setSketchPerimeter);
   const legs = segments(path);
-  const perimeter = path.perimeter ?? 'outer';
+  // Unset on a line drawn with the free კედელი pen until a side is picked
+  // here; the fill reads it as გარე meanwhile.
+  const perimeter = path.perimeter;
   const closed = !!path.closed && path.points.length > 2;
   const picked = part?.pathId === path.id && part.kind === 'leg' ? part.index : null;
 
@@ -391,6 +393,11 @@ function SketchDetails({ path }: { path: SketchPath }) {
           ))}
         </span>
       </div>
+      {!perimeter && (
+        <p className="hint-note" style={{ margin: 0 }}>
+          კედლის ხაზი - აირჩიე, რომელ მხარეს დადგეს პანელები: გარე თუ შიდა.
+        </p>
+      )}
       <WallSideRow path={path} />
       {part?.pathId === path.id && part.kind === 'vertex' && (
         <div className="kv">
