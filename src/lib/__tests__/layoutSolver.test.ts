@@ -213,6 +213,17 @@ describe('one line', () => {
     expect(replaced.remove).toEqual(['mine']);
   });
 
+  it('fills between hand-placed pieces set a centimetre off the module', () => {
+    // The architect places by eye: 1 cm off left 549 cm to close, which no
+    // set of 5 cm parts makes, and every variant used to be thrown away.
+    const left: Piece = { id: 'left', materialId: 'panel-60x300', x: 1, y: -9, rot: 0, z: 0 };
+    const right: Piece = { id: 'right', materialId: 'panel-60x300', x: 540, y: -9, rot: 0, z: 0 };
+    const v = solve([LINE], { keepPlaced: true }, [left, right]).variants[0];
+    expect(v).toBeDefined();
+    expect(v.remove).toEqual([]);
+    expect(v.add.length).toBeGreaterThan(0);
+  });
+
   it('replaces what an earlier fill put on the line, even with keeping on', () => {
     const filled: Piece = { id: 'filled', materialId: 'panel-60x300', x: 300, y: -9, rot: 0, z: 0, auto: true };
     const v = solve([LINE], { keepPlaced: true }, [filled]).variants[0];

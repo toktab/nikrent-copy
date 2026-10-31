@@ -195,6 +195,23 @@ const JOIN_TOL = 0.5;
 /** a piece is standing on a face when it is this close to flush */
 const FLUSH_TOL = 0.5;
 
+/**
+ * A hand-placed piece is read as standing on the 5 cm module when it is this
+ * close to it. The architect places by eye: his job (ნახაზი 4, 2026-10-31)
+ * had a corner panel 1 cm off, which left 549 cm to close between it and the
+ * next corner - a length no set of 5 cm parts makes - and a half-centimetre
+ * sliver where a turned panel met a profile. Either one used to sink every
+ * variant of the whole layout.
+ */
+const HAND_SNAP_CM = 1.5;
+const onModule = (v: number) => {
+  const m = Math.round(v / 5) * 5;
+  return Math.abs(v - m) <= HAND_SNAP_CM ? m : v;
+};
+
+/** A stretch between kept pieces shorter than this is a placing error, not a gap to fill. */
+const SLIVER_CM = 2.5;
+
 const same = (a: Point, b: Point) => Math.abs(a.x - b.x) <= JOIN_TOL && Math.abs(a.y - b.y) <= JOIN_TOL;
 
 export interface Chain {
@@ -642,6 +659,8 @@ const WEIGHT = {
   spare: 400, // filter
   widthStep: 1,
   infeasible: 1e9,
+  /** a wall nothing closes, left open - see `open` in the height solve */
+  openWall: 1e6,
 };
 
 /** how far past the fewest pieces a reference face is still worth trying */
@@ -1222,6 +1241,8 @@ function solveHeight(
         faceRemovals.add(piece.id);
         return;
       }
+      hit.from = onModule(hit.from);
+      hit.to = onModule(hit.to);
       const list = locks.get(i) ?? [];
       const z = Math.round(piece.z ?? 0);
       const same = list.find((l) => Math.abs(l.from - hit.from) < FLUSH_TOL && Math.abs(l.to - hit.to) < FLUSH_TOL);
@@ -1286,10 +1307,10 @@ function solveHeight(
     let lo: EndSpec = f.lo;
     for (const lock of list) {
       const hi: EndSpec = { t: 'fixed', p: lock.from, next: 'piece' };
-      if (lock.from - boundOf(lo) > EPS) out.push({ face: i, lo, hi });
+      if (lock.from - boundOf(lo) > SLIVER_CM) out.push({ face: i, lo, hi });
       lo = { t: 'fixed', p: lock.to, next: 'piece' };
     }
-    if (boundOf(f.hi) - boundOf(lo) > EPS) out.push({ face: i, lo, hi: f.hi });
+    if (boundOf(f.hi) - boundOf(lo) > SLIVER_CM) out.push({ face: i, lo, hi: f.hi });
     return out;
   };
 
@@ -1421,9 +1442,24 @@ function solveHeight(
   // best, then the best choice with one wall at a time at its next answers.
   const picks: Array<{ fills: WallFill[]; cost: number; family: number }> = [];
   const seen = new Set<string>();
+  /**
+   * A wall with no answer at all is left open - laid with nothing and costed
+   * as a hole - rather than taking every other wall's answer down with it. One
+   * stretch between two hand-placed corners that nothing closes used to leave
+   * the whole layout with no recommendation (ნახაზი 4, 2026-10-31).
+   */
+  const open = (k: number): WallFill => ({
+    key: `open${k}`,
+    faces: [],
+    cost: WEIGHT.openWall,
+    pieces: 0,
+    fillers: 0,
+    nianguri: 0,
+    overhang: 0,
+    unmatched: 0,
+  });
   const push = (fills: Array<WallFill | undefined>, extra: number, family: number) => {
-    if (fills.some((f) => !f)) return;
-    const ok = fills as WallFill[];
+    const ok = fills.map((f, k) => f ?? open(k));
     const key = ok.map((f) => f.key).join('#');
     if (seen.has(key)) return;
     seen.add(key);
