@@ -20,7 +20,7 @@ import type {
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { withCompanyWeights } from '../data/companyWeights';
-import { findWallMate, flipWall, normalizeWallThickness, wallPartner } from '../lib/wallPen';
+import { findWallMate, flipWall } from '../lib/wallPen';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -397,10 +397,20 @@ export interface EditorState {
    * outside of the slab or inside a lift shaft, and the coordinates that come
    * out are identical either way. Starts on the outside every time, which is
    * the order a layout is actually drawn in.
+   *
+   * `free` is the კედელი pen: one line, its face left unsaid until it is
+   * picked in the line's details (the user, 2026-10-31) - read as outer
+   * meanwhile, like every line drawn before `perimeter` existed.
    */
-  penPerimeter: 'outer' | 'inner';
+  penPerimeter: 'outer' | 'inner' | 'free';
   /** vertices of the path being drawn, before it is committed */
   penPoints: Array<{ x: number; y: number }>;
+  /**
+   * Points taken back off the line being drawn, newest last, for redo to put
+   * back. A line still being drawn is not in the history yet - it goes in as
+   * one step when it is finished - so undo and redo walk its points first.
+   */
+  penRedo: Array<{ x: number; y: number }>;
   clipboard: Piece[];
   paletteQuery: string;
   dialog: DialogState;
@@ -685,7 +695,7 @@ export interface EditorState {
   setMeasureStyle: (patch: Partial<MeasureStyle>) => void;
   resetMeasureStyle: () => void;
   /** Switch the pen between the outside and the inside of the pour. */
-  setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
+  setPenPerimeter: (perimeter: 'outer' | 'inner' | 'free') => void;
   /** Change which face already-drawn runs are, and so which way they fill. */
   setSketchPerimeter: (pathIds: string[], perimeter: 'outer' | 'inner') => void;
   /** a wall drawn as one line: its body, and so its other face, to the other side of this line */
@@ -960,8 +970,9 @@ export const useEditorStore = create<EditorState>()(
         tool: 'select',
         measureFirst: null,
         selectedMeasureId: null,
-        penPerimeter: 'outer',
+        penPerimeter: 'free',
         penPoints: [],
+        penRedo: [],
         removedBuiltins: [],
         documents: [firstDoc],
         activeDocId: firstDoc.id,
@@ -1910,6 +1921,14 @@ export const useEditorStore = create<EditorState>()(
         // ── history ───────────────────────────────────────────────────────
         undo: () =>
           set((s) => {
+            // Drawing: Ctrl + Z takes the last point off the line in hand
+            // (the user, 2026-10-30), not the line finished before it.
+            if (s.tool === 'pen' && s.penPoints.length) {
+              return {
+                penPoints: s.penPoints.slice(0, -1),
+                penRedo: [...s.penRedo, s.penPoints[s.penPoints.length - 1]],
+              };
+            }
             const previous = s.past[s.past.length - 1];
             if (!previous) return {};
             return {
@@ -1938,6 +1957,13 @@ export const useEditorStore = create<EditorState>()(
 
         redo: () =>
           set((s) => {
+            // ...and Ctrl + Y puts the points undo took off back on it.
+            if (s.tool === 'pen' && s.penRedo.length) {
+              return {
+                penPoints: [...s.penPoints, s.penRedo[s.penRedo.length - 1]],
+                penRedo: s.penRedo.slice(0, -1),
+              };
+            }
             const next = s.future[0];
             if (!next) return {};
             return {
@@ -2452,6 +2478,7 @@ export const useEditorStore = create<EditorState>()(
             // Leaving a tool abandons whatever it was halfway through, rather
             // than keeping a dangling path or point that reappears next time.
             penPoints: tool === 'pen' ? s.penPoints : [],
+            penRedo: tool === 'pen' ? s.penRedo : [],
             measureFirst: tool === 'measure' ? s.measureFirst : null,
           })),
 
@@ -2507,12 +2534,13 @@ export const useEditorStore = create<EditorState>()(
             if (last && Math.hypot(x - last.x, y - last.y) * s.zoom < DRAG_THRESHOLD_PX) {
               return {};
             }
-            return { penPoints: [...s.penPoints, { x, y }] };
+            // A new point is a new way forward: what undo took off is gone.
+            return { penPoints: [...s.penPoints, { x, y }], penRedo: [] };
           }),
 
         penUndoPoint: () => set((s) => ({ penPoints: s.penPoints.slice(0, -1) })),
 
-        penCancel: () => set({ penPoints: [] }),
+        penCancel: () => set({ penPoints: [], penRedo: [] }),
 
         penFinish: (closed = false) =>
           commit((s) => {
@@ -2522,13 +2550,13 @@ export const useEditorStore = create<EditorState>()(
               id: uid('sk'),
               points: s.penPoints,
               ...(closed ? { closed: true } : {}),
-              perimeter: s.penPerimeter,
+              ...(s.penPerimeter === 'free' ? {} : { perimeter: s.penPerimeter }),
             };
-            // With a wall thickness set, the pen draws a wall: the other face of
-            // the pour goes in with the line, as one undo step - see `wallPartner`.
-            const thickness = normalizeWallThickness(s.wallThickness);
-            const added = thickness === null ? [path] : [path, wallPartner(path, thickness)];
-            return { sketch: [...s.sketch, ...added], penPoints: [] };
+            // One line, always. The pen used to draw a wall's second face too
+            // when a thickness was set, and the user took the extra line for
+            // the pen doubling what he drew; the second face is made from the
+            // recommendation tab instead.
+            return { sketch: [...s.sketch, path], penPoints: [], penRedo: [] };
           }),
 
         dragSketch: (hit, dx, dy, baseline, whole = false) =>
@@ -2805,7 +2833,7 @@ export const useEditorStore = create<EditorState>()(
           pdfSheet: normalizeSheetSize(saved.pdfSheet),
           pdfScale: normalizePdfScale(saved.pdfScale),
           jsonExport: normalizeJsonExport(saved.jsonExport),
-          penPerimeter: 'outer',
+          penPerimeter: 'free',
           penPoints: [],
           clipboard: [],
           past: [],

@@ -29,7 +29,6 @@ import { ReplaceButton } from './ReplaceButton';
 import { ProblemsButton } from './ProblemsButton';
 import { FillAllButton } from './FillAllButton';
 import { SimpleSteps } from './SimpleSteps';
-import { WallThicknessField } from './WallThicknessField';
 import { UnderlayControls } from './UnderlayControls';
 
 /**
@@ -85,8 +84,9 @@ export function Header() {
   const sketch = useEditorStore((s) => s.sketch);
   const measures = useEditorStore((s) => s.measures);
   const selectedIds = useEditorStore((s) => s.selectedIds);
-  const canUndo = useEditorStore((s) => s.past.length > 0);
-  const canRedo = useEditorStore((s) => s.future.length > 0);
+  // While drawing, undo and redo walk the points of the line in hand first.
+  const canUndo = useEditorStore((s) => s.past.length > 0 || (s.tool === 'pen' && s.penPoints.length > 0));
+  const canRedo = useEditorStore((s) => s.future.length > 0 || (s.tool === 'pen' && s.penRedo.length > 0));
   const documents = useEditorStore((s) => s.documents);
   const activeDocId = useEditorStore((s) => s.activeDocId);
   const warehouses = useEditorStore((s) => s.warehouses);
@@ -103,8 +103,6 @@ export function Header() {
   const setTool = useEditorStore((s) => s.setTool);
   const penPerimeter = useEditorStore((s) => s.penPerimeter);
   const setPenPerimeter = useEditorStore((s) => s.setPenPerimeter);
-  const setWallThickness = useEditorStore((s) => s.setWallThickness);
-  const wallOn = useEditorStore((s) => s.wallThickness !== null);
   const setShowSketch = useEditorStore((s) => s.setShowSketch);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
@@ -731,27 +729,23 @@ export function Header() {
               [
                 ['outer', 'გარე', 'ბეტონი ხაზის შიგნითაა - პანელები გარეთ დგება'],
                 ['inner', 'შიდა', 'ბეტონი ხაზის გარეთაა - პანელები შიგნით დგება'],
+                // A free line, one line only: which face it is gets picked
+                // once it is drawn, in the line's details (the user,
+                // 2026-10-31). It used to draw the wall's second face as
+                // well, which looked like the pen doubling the line.
+                ['free', 'კედელი', 'თავისუფალი ხაზი - გარე თუ შიდა, მერე აირჩევ ხაზზე დაწკაპუნებით'],
               ] as const
             ).map(([face, label, why]) => (
               <button
                 key={face}
-                className={`btn small${penPerimeter === face && !wallOn ? ' engaged' : ''}`}
-                onClick={() => {
-                  // One face at a time: picking გარე or შიდა puts the
-                  // two-face კედელი pen down, so a finished line never brings
-                  // a second one with it unasked. The other face is made from
-                  // the recommendation tab once this one is built.
-                  setPenPerimeter(face);
-                  setWallThickness(null);
-                }}
-                aria-pressed={penPerimeter === face && !wallOn}
+                className={`btn small${penPerimeter === face ? ' engaged' : ''}`}
+                onClick={() => setPenPerimeter(face)}
+                aria-pressed={penPerimeter === face}
                 title={why}
               >
                 {label}
               </button>
             ))}
-            {/* One line for a whole wall: its other face drawn for you. */}
-            <WallThicknessField />
           </span>
         )}
 
