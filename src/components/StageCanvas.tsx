@@ -78,6 +78,7 @@ import {
 import { boltKindOf } from '../lib/boltMarks';
 import { isMaterialShown } from '../lib/objectVisibility';
 import { isPost, snapPost } from '../lib/posts';
+import { spanAt } from '../lib/span';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
@@ -1204,6 +1205,11 @@ export function StageCanvas() {
                   kind: grab.vertex !== undefined ? 'vertex' : 'leg',
                   index: grab.vertex ?? grab.index,
                 },
+          );
+          // A click on an empty stretch of a line that has pieces on it picks
+          // that stretch, corner to corner - see `spanAt`.
+          s.setSelectedSpan(
+            !whole && grab.vertex === undefined ? spanAt(path.id, world, s.sketch, s.pieces, s.materials) : null,
           );
         }
         // Selecting and grabbing are the same press: a layout is adjusted by

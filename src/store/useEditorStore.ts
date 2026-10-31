@@ -21,6 +21,7 @@ import type {
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { withCompanyWeights } from '../data/companyWeights';
 import { findWallMate, flipWall } from '../lib/wallPen';
+import type { LineSpan } from '../lib/span';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -378,6 +379,12 @@ export interface EditorState {
    */
   selectedSketchPart: { pathId: string; kind: 'leg' | 'vertex'; index: number } | null;
   /**
+   * The empty stretch of the selected line that was clicked, between the
+   * pieces standing either side of it - see `spanAt`. The recommendation tab
+   * fills only this while it is set.
+   */
+  selectedSpan: LineSpan | null;
+  /**
    * What a press on the surface does. The pen draws the layout; select does
    * everything else. Deliberately not persisted: reopening the app in a mode
    * that swallows clicks would be baffling.
@@ -733,6 +740,7 @@ export interface EditorState {
   selectSketchMany: (ids: string[], additive?: boolean) => void;
   /** Pick out one leg or one junction of a run. */
   selectSketchPart: (part: EditorState['selectedSketchPart']) => void;
+  setSelectedSpan: (span: LineSpan | null) => void;
   /** Put a new junction on an existing leg, at a point already on it. */
   insertSketchVertex: (pathId: string, index: number, at: Point) => void;
   /** Swing one leg of an open run to an exact bearing, in degrees. */
@@ -967,6 +975,7 @@ export const useEditorStore = create<EditorState>()(
         measures: [],
         selectedSketchIds: [],
         selectedSketchPart: null,
+        selectedSpan: null,
         tool: 'select',
         measureFirst: null,
         selectedMeasureId: null,
@@ -2582,7 +2591,8 @@ export const useEditorStore = create<EditorState>()(
                   : { x: snapValue(p.x, step, true), y: snapValue(p.y, step, true) },
               ),
             };
-            return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)) };
+            // A moved line is not the line the picked stretch was read off.
+            return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)), selectedSpan: null };
           }),
 
         setLegLength: (pathId, index, cm) =>
@@ -2646,8 +2656,11 @@ export const useEditorStore = create<EditorState>()(
             };
           }),
 
+        setSelectedSpan: (span) => set({ selectedSpan: span }),
+
         selectSketchMany: (ids, additive = false) =>
           set((s) => ({
+            selectedSpan: null,
             selectedSketchIds: additive
               ? [...new Set([...s.selectedSketchIds, ...ids])]
               : ids,

@@ -1,3 +1,4 @@
+import { spanPath } from '../lib/span';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
 import { useStockView } from '../store/useStockView';
@@ -66,6 +67,15 @@ export function RecommendPanel({
     () => sketch.filter((k) => selectedSketchIds.includes(k.id)),
     [sketch, selectedSketchIds],
   );
+  /**
+   * One empty stretch of the line picked, corner to corner (`spanAt`): then
+   * that stretch is the whole question - filled alone, against what stands
+   * either side of it, nothing on the drawing replaced.
+   */
+  const selectedSpan = useEditorStore((s) => s.selectedSpan);
+  const span =
+    selectedSpan && selectedSketchIds.length === 1 && selectedSketchIds[0] === selectedSpan.pathId ? selectedSpan : null;
+  const setSelectedSpan = useEditorStore((s) => s.setSelectedSpan);
 
   /**
    * What a picked closed line has inside it, and what it sits inside. The outer line of a wall picked
@@ -98,8 +108,11 @@ export function RecommendPanel({
   }, [selected, sketch, pieces, materials]);
 
   const paths = useMemo(
-    () => [...selected, ...sketch.filter((k) => inside.lines.includes(k.id) || inside.around.includes(k.id))],
-    [selected, sketch, inside],
+    () =>
+      span
+        ? [spanPath(span)]
+        : [...selected, ...sketch.filter((k) => inside.lines.includes(k.id) || inside.around.includes(k.id))],
+    [span, selected, sketch, inside],
   );
 
   // Opened at the job's remembered height and corners, and remembering any
@@ -145,13 +158,18 @@ export function RecommendPanel({
             height: h,
             includeCorners,
             materials,
-            pieces,
+            // A stretch is filled between what stands either side of it, and
+            // all of that stays - the fill of the stretch next door included.
+            pieces: span ? pieces.map((p) => (p.auto ? { ...p, auto: undefined } : p)) : pieces,
             free,
-            filters: { ...filters, useStock: filters.useStock && hasStock },
+            filters: span
+              ? { ...filters, keepPlaced: true, overhangEnds: 'none', useStock: filters.useStock && hasStock }
+              : { ...filters, useStock: filters.useStock && hasStock },
+            sides: span ? { [spanPath(span).id]: span.side } : undefined,
             limit: 8,
           })
         : null,
-    [paths, h, includeCorners, materials, pieces, free, filters, hasStock],
+    [paths, span, h, includeCorners, materials, pieces, free, filters, hasStock],
   );
   const variants = result?.variants ?? [];
   const chosen = Math.min(picked, Math.max(0, variants.length - 1));
@@ -343,7 +361,16 @@ export function RecommendPanel({
           </button>
         </div>
       )}
-      {inside.lines.length > 0 && (
+      {span && (
+        <div className="alert rec-switch" style={{ margin: 0 }}>
+          არჩეულია მონაკვეთი კუთხიდან კუთხემდე - {span.length} სმ. შეივსება მხოლოდ ის, დანარჩენი ხაზი
+          ხელუხლებელი რჩება.
+          <button className="btn small" onClick={() => setSelectedSpan(null)}>
+            მთელი ხაზი
+          </button>
+        </div>
+      )}
+      {!span && inside.lines.length > 0 && (
         <p className="hint-note" style={{ margin: 0 }}>
           შიგნით მყოფი {inside.lines.length} ხაზი და {inside.pieces} ელემენტი ვარიანტებში ჩართულია -
           გარე მხარე მათ შეეწყობა.
@@ -352,7 +379,7 @@ export function RecommendPanel({
             : ''}
         </p>
       )}
-      {inside.around.length > 0 && (
+      {!span && inside.around.length > 0 && (
         <p className="hint-note" style={{ margin: 0 }}>
           კედლის მეორე მხარე ({inside.around.length} ხაზი) ვარიანტებში ჩართულია - ორივე მხარე ერთად
           შეირჩევა, შეერთებები ერთმანეთის პირისპირ, რომ შტირები დაჯდეს.

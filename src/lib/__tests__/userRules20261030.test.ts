@@ -97,3 +97,25 @@ describe('visibility on the plan', () => {
     expect(isMaterialShown(one, byId.get('post-200')!)).toBe(false);
   });
 });
+
+describe('a stretch of a line, corner to corner', async () => {
+  const { spanAt } = await import('../span');
+  const line: SketchPath = { id: 'l', points: [{ x: 0, y: 0 }, { x: 600, y: 0 }] };
+  // Hand-placed panels at both ends, the middle left empty.
+  const left: Piece = { id: 'a', materialId: 'panel-60x300', x: 0, y: -9, rot: 0, z: 0 };
+  const right: Piece = { id: 'b', materialId: 'panel-60x300', x: 540, y: -9, rot: 0, z: 0 };
+
+  it('picks only the empty part between the pieces either side of the click', () => {
+    const span = spanAt('l', { x: 300, y: 0 }, [line], [left, right], SEED_MATERIALS)!;
+    expect(span.points).toEqual([
+      { x: 60, y: 0 },
+      { x: 540, y: 0 },
+    ]);
+    expect(span.length).toBe(480);
+  });
+
+  it('picks nothing on a piece, or on a line with nothing on it', () => {
+    expect(spanAt('l', { x: 30, y: 0 }, [line], [left, right], SEED_MATERIALS)).toBeNull();
+    expect(spanAt('l', { x: 300, y: 0 }, [line], [], SEED_MATERIALS)).toBeNull();
+  });
+});
