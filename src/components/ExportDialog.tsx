@@ -2,19 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DrawingDoc, LayoutFile } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
+import { boltTotals } from '../lib/boltMarks';
 import { buildLayoutFile, exportLayoutFile, layoutFileHasContent } from '../lib/catalogFile';
 import type { PdfVisibility } from '../lib/dimensions';
-import { SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
+import { PDF_SCALES, SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
 import { segments } from '../lib/sketch';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 type Tab = 'pdf' | 'json';
 
-/** 0 = auto: the largest standard scale that still fits the sheet. */
-const SCALES = [0, 10, 20, 25, 50, 100, 200];
-/** About 56 dpi: enough to judge the sheet, quick enough to redraw on every tick. */
-const PREVIEW_PX_PER_MM = 2.2;
+/** About 90 dpi: enough to judge the sheet and read its key, quick enough to redraw on every tick. */
+const PREVIEW_PX_PER_MM = 3.5;
 const PREVIEW_DELAY_MS = 150;
 const JSON_PREVIEW_LINES = 80;
 
@@ -48,6 +47,7 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
   const activeDocId = useEditorStore((s) => s.activeDocId);
   const vis = useEditorStore((s) => s.pdfVisibility);
   const sheet = useEditorStore((s) => s.pdfSheet);
+  const pdfScale = useEditorStore((s) => s.pdfScale);
   const json = useEditorStore((s) => s.jsonExport);
   const resetPdfVisibility = useEditorStore((s) => s.resetPdfVisibility);
   const resetJsonExport = useEditorStore((s) => s.resetJsonExport);
@@ -83,6 +83,7 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
         doc,
         materials,
         sheet,
+        scale: pdfScale,
         visibility: vis,
         bom: bomOn ? buildBom(materials, pieces, documents, activeDocId) : null,
       });
@@ -91,7 +92,7 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
         return;
       }
       if (result.sheet?.rescaled) {
-        setToast(`ნახაზი არ ეტეოდა 1:${doc.scale}-ში - დაიბეჭდა 1:${result.sheet.scale} მასშტაბით.`);
+        setToast(`ნახაზი არ ეტეოდა 1:${pdfScale}-ში - დაიბეჭდა 1:${result.sheet.scale} მასშტაბით.`);
       }
       closeDialog();
     } catch (e) {
@@ -194,14 +195,44 @@ function Check({ label, checked, onChange, note, count, disabledWhy }: CheckProp
   );
 }
 
+/** Whether the advanced switches are open - remembered on this machine. */
+const ADVANCED_KEY = 'kubi.pdfAdvanced';
+
+function loadAdvanced(): boolean {
+  try {
+    return localStorage.getItem(ADVANCED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveAdvanced(open: boolean) {
+  try {
+    localStorage.setItem(ADVANCED_KEY, open ? '1' : '0');
+  } catch {
+    // Not remembered this time - it still stays open until the window closes.
+  }
+}
+
+/**
+ * The PDF side: the few things nearly every print needs up front - sheet,
+ * scale, key, title block, parts list - and everything else behind
+ * გაფართოებული პარამეტრები: what is drawn, which ჭანჭიკები are printed and
+ * which left off, and which lengths are written on.
+ */
 function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
   const materials = useEditorStore((s) => s.materials);
   const vis = useEditorStore((s) => s.pdfVisibility);
   const sheet = useEditorStore((s) => s.pdfSheet);
   const setPdfVisibility = useEditorStore((s) => s.setPdfVisibility);
   const setPdfSheet = useEditorStore((s) => s.setPdfSheet);
-  const setTitleBlock = useEditorStore((s) => s.setTitleBlock);
+  const pdfScale = useEditorStore((s) => s.pdfScale);
+  const setPdfScale = useEditorStore((s) => s.setPdfScale);
   const set = (key: keyof PdfVisibility) => (on: boolean) => setPdfVisibility({ [key]: on });
+  const [advanced, setAdvanced] = useState(loadAdvanced);
+
+  const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
+  const bolts = useMemo(() => boltTotals(doc.pieces, byId), [doc.pieces, byId]);
 
   const [preview, setPreview] = useState<
     { url: string; scale: number; rescaled: boolean } | 'empty' | null
@@ -211,82 +242,28 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
-      void import('../lib/drawingPdf').then(({ renderDrawingSheet }) => {
-        if (!live) return;
-        const r = renderDrawingSheet({ doc, materials, sheet, visibility: vis, pxPerMm: PREVIEW_PX_PER_MM });
-        setPreview(r ? { url: r.dataUrl, scale: r.scale, rescaled: r.rescaled } : 'empty');
-      });
+      void import('../lib/drawingPdf')
+        .then(({ renderDrawingSheet }) =>
+          renderDrawingSheet({ doc, materials, sheet, scale: pdfScale, visibility: vis, pxPerMm: PREVIEW_PX_PER_MM }),
+        )
+        .then((r) => {
+          if (live) setPreview(r ? { url: r.dataUrl, scale: r.scale, rescaled: r.rescaled } : 'empty');
+        });
     }, PREVIEW_DELAY_MS);
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [doc, materials, sheet, vis]);
+  }, [doc, materials, sheet, pdfScale, vis]);
 
   const noPieces = counts.pieces === 0 ? 'ნახაზზე ელემენტები არ არის' : undefined;
   const piecesOff = noPieces ?? (vis.pieces ? undefined : 'ჯერ ჩართე ყალიბის ელემენტები');
+  const boltWhy = (n: number) => piecesOff ?? (n ? undefined : 'ამ ნახაზზე არ არის');
   const bomOn = vis.bomPage && counts.pieces > 0;
 
   return (
     <div className="export-grid">
       <div>
-        <h4 className="vis-section">ნახაზზე</h4>
-        <div className="vis-extra">
-          <Check
-            label="ყალიბის ელემენტები"
-            note="პანელები, ჩაკერება, კუთხეები"
-            count={counts.pieces}
-            checked={vis.pieces}
-            onChange={set('pieces')}
-            disabledWhy={noPieces}
-          />
-          <Check
-            label="ხაზვის ხაზები"
-            count={counts.lines}
-            checked={vis.sketchLines}
-            onChange={set('sketchLines')}
-            disabledWhy={counts.lines ? undefined : 'ნახაზზე ხაზები არ არის'}
-          />
-          <Check
-            label="გაზომვის ხაზები"
-            count={counts.measures}
-            checked={vis.measureLines}
-            onChange={set('measureLines')}
-            disabledWhy={counts.measures ? undefined : 'ნახაზზე ზომის ხაზები არ არის'}
-          />
-        </div>
-
-        <h4 className="vis-section">ზომები</h4>
-        <div className="vis-extra">
-          <Check
-            label="ხაზვის ხაზების სიგრძეები"
-            checked={vis.line}
-            onChange={set('line')}
-            disabledWhy={counts.lines ? undefined : 'ნახაზზე ხაზები არ არის'}
-          />
-          <Check
-            label="გაზომვის სიგრძეები"
-            checked={vis.measure}
-            onChange={set('measure')}
-            disabledWhy={counts.measures ? undefined : 'ნახაზზე ზომის ხაზები არ არის'}
-          />
-          <Check label="პანელების და ჩაკერების ზომები" checked={vis.wall} onChange={set('wall')} disabledWhy={piecesOff} />
-          <Check label="კუთხეების ზომები" checked={vis.corner} onChange={set('corner')} disabledWhy={piecesOff} />
-          <Check
-            label="დანარჩენი ელემენტების ზომები"
-            note="რიგელები, ჭანჭიკები..."
-            checked={vis.other}
-            onChange={set('other')}
-            disabledWhy={piecesOff}
-          />
-          <Check
-            label="ჯამური ზომები"
-            note="სიგანე და სიმაღლე ნახაზის გარეთ"
-            checked={vis.overall}
-            onChange={set('overall')}
-          />
-        </div>
-
         <h4 className="vis-section">ფურცელი</h4>
         <div className="export-sheet-row">
           <div className="seg" role="group" aria-label="ფურცლის ზომა">
@@ -298,8 +275,8 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
           </div>
           <label className="export-scale">
             <span>მასშტაბი</span>
-            <select value={doc.scale} onChange={(e) => setTitleBlock({ scale: Number(e.target.value) })}>
-              {SCALES.map((s) => (
+            <select value={pdfScale} onChange={(e) => setPdfScale(Number(e.target.value))}>
+              {PDF_SCALES.map((s) => (
                 <option key={s} value={s}>
                   {s === 0 ? 'ავტომატური' : `1:${s}`}
                 </option>
@@ -307,7 +284,13 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
             </select>
           </label>
         </div>
-        <div className="vis-extra" style={{ marginTop: 10 }}>
+        <div className="vis-extra" style={{ marginTop: 12 }}>
+          <Check
+            label="პირობითი აღნიშვნები"
+            note="ფურცლის ბოლოში: ყველა ელემენტი და ჭანჭიკი, რაოდენობით"
+            checked={vis.legend}
+            onChange={set('legend')}
+          />
           <Check
             label="შტამპი"
             note="ობიექტი, ნახაზი, მასშტაბი, რევიზია, თარიღი"
@@ -322,6 +305,115 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
             disabledWhy={noPieces}
           />
         </div>
+
+        <button
+          type="button"
+          className={`btn export-advanced${advanced ? ' on' : ''}`}
+          aria-expanded={advanced}
+          onClick={() => {
+            setAdvanced(!advanced);
+            saveAdvanced(!advanced);
+          }}
+        >
+          <Icon name="sliders" size={14} />
+          <span>გაფართოებული პარამეტრები</span>
+          <Icon name="chevron-down" size={14} />
+        </button>
+
+        {advanced && (
+          <div className="export-advanced-body">
+            <h4 className="vis-section">ნახაზზე</h4>
+            <div className="vis-extra">
+              <Check
+                label="ყალიბის ელემენტები"
+                note="პანელები, ჩაკერება, კუთხეები"
+                count={counts.pieces}
+                checked={vis.pieces}
+                onChange={set('pieces')}
+                disabledWhy={noPieces}
+              />
+              <Check
+                label="ხაზვის ხაზები"
+                count={counts.lines}
+                checked={vis.sketchLines}
+                onChange={set('sketchLines')}
+                disabledWhy={counts.lines ? undefined : 'ნახაზზე ხაზები არ არის'}
+              />
+              <Check
+                label="გაზომვის ხაზები"
+                count={counts.measures}
+                checked={vis.measureLines}
+                onChange={set('measureLines')}
+                disabledWhy={counts.measures ? undefined : 'ნახაზზე ზომის ხაზები არ არის'}
+              />
+            </div>
+
+            <h4 className="vis-section">ჭანჭიკები</h4>
+            <div className="vis-extra">
+              <Check
+                label="კონექტორები"
+                note="T-შეერთება და შიდა კუთხე ჩაკერებასთან"
+                count={bolts.connectors}
+                checked={vis.connectors}
+                onChange={set('connectors')}
+                disabledWhy={boltWhy(bolts.connectors)}
+              />
+              <Check
+                label="შტირები"
+                note="ერთი ნიშანი - 5 ც. 300-ზე, 2 ც. 150 / 90-ზე"
+                count={bolts.rods}
+                checked={vis.rods}
+                onChange={set('rods')}
+                disabledWhy={boltWhy(bolts.rods)}
+              />
+              <Check
+                label="ქანჩი + დისკო"
+                count={bolts.nuts}
+                checked={vis.nuts}
+                onChange={set('nuts')}
+                disabledWhy={boltWhy(bolts.nuts)}
+              />
+              <Check
+                label="ჩამკეტი fix"
+                count={bolts.latches}
+                checked={vis.latches}
+                onChange={set('latches')}
+                disabledWhy={boltWhy(bolts.latches)}
+              />
+            </div>
+
+            <h4 className="vis-section">ზომები</h4>
+            <div className="vis-extra">
+              <Check label="პანელების და ჩაკერების ზომები" checked={vis.wall} onChange={set('wall')} disabledWhy={piecesOff} />
+              <Check label="კუთხეების ზომები" checked={vis.corner} onChange={set('corner')} disabledWhy={piecesOff} />
+              <Check
+                label="დანარჩენი ელემენტების ზომები"
+                note="რიგელები, დგარები..."
+                checked={vis.other}
+                onChange={set('other')}
+                disabledWhy={piecesOff}
+              />
+              <Check
+                label="ხაზვის ხაზების სიგრძეები"
+                checked={vis.line}
+                onChange={set('line')}
+                disabledWhy={counts.lines ? undefined : 'ნახაზზე ხაზები არ არის'}
+              />
+              <Check
+                label="გაზომვის სიგრძეები"
+                checked={vis.measure}
+                onChange={set('measure')}
+                disabledWhy={counts.measures ? undefined : 'ნახაზზე ზომის ხაზები არ არის'}
+              />
+              <Check
+                label="ჯამური ზომები"
+                note="ყალიბის სიგანე და სიმაღლე ნახაზის გარეთ"
+                checked={vis.overall}
+                onChange={set('overall')}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="export-preview">
@@ -338,7 +430,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
             <img src={preview.url} alt="PDF-ის ფურცლის გადახედვა" />
             <small className="export-meta">
               {sheet} · 1:{preview.scale}
-              {preview.rescaled ? ` (1:${doc.scale}-ში არ ეტეოდა)` : ''}
+              {preview.rescaled ? ` (1:${pdfScale}-ში არ ეტეოდა)` : ''}
               {bomOn ? ' · + მასალების უწყისი' : ''}
             </small>
           </>

@@ -86,6 +86,17 @@ export interface PdfVisibility {
   titleBlock: boolean;
   /** the bill of materials, on pages of its own after the drawing */
   bomPage: boolean;
+  /** a key along the bottom of the sheet: every kind of thing drawn on it, and how many */
+  legend: boolean;
+  /**
+   * The ჭანჭიკები, each kind on its own - worked out and placed alike. A sheet
+   * for the crew putting up panels can leave them off; the one for whoever
+   * ties the wall wants every one.
+   */
+  connectors: boolean;
+  rods: boolean;
+  nuts: boolean;
+  latches: boolean;
 }
 
 export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
@@ -100,6 +111,11 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   pieces: true,
   titleBlock: true,
   bomPage: false,
+  legend: true,
+  connectors: true,
+  rods: true,
+  nuts: true,
+  latches: true,
 };
 
 export function normalizePdfVisibility(raw: unknown): PdfVisibility {

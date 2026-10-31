@@ -1,6 +1,6 @@
 import type { Material, Piece } from '../types';
 import { coverExact, optionsAt, panelHeights, type PanelOption } from './formwork';
-import { totalStock } from './inventory';
+import { OPEN_YARD, availableFor, totalStock, type StockView } from './inventory';
 
 /**
  * Every sensible way to fill one run with panels and ჩაკერება, ranked.
@@ -181,13 +181,13 @@ export function courseStacks(height: number, heights: number[], maxCourses = 4):
 }
 
 /** One entry per width, first material wins - the catalog order breaks ties. */
-function byWidth(options: PanelOption[]): PanelOption[] {
+export function byWidth(options: PanelOption[]): PanelOption[] {
   const seen = new Set<number>();
   return options.filter((o) => (seen.has(o.w) ? false : (seen.add(o.w), true)));
 }
 
 /** Every multiset of filler widths of at most `max` pieces, as count arrays. */
-function fillerCombos(widths: number[], max: number): number[][] {
+export function fillerCombos(widths: number[], max: number): number[][] {
   const out: number[][] = [];
   const counts = new Array(widths.length).fill(0);
   const walk = (i: number, left: number) => {
@@ -209,7 +209,7 @@ function fillerCombos(widths: number[], max: number): number[][] {
  * Every multiset of panel widths (widest first) summing to `target`, using at
  * most `maxPanels` pieces. Pruned by the fewest pieces the rest could still take.
  */
-function panelCombos(target: number, widths: number[], maxPanels: number): number[][] {
+export function panelCombos(target: number, widths: number[], maxPanels: number): number[][] {
   const out: number[][] = [];
   const counts = new Array(widths.length).fill(0);
   const walk = (i: number, rest: number, used: number) => {
@@ -569,16 +569,20 @@ export function choiceFromVariant(variant: Variant): {
 
 /**
  * How many of each material is free for this drawing: owned, minus what the
- * open drawing already has placed.
+ * other active jobs hold (`view`), minus what the open drawing already has
+ * placed - the same figure the ნაშთი sheet shows.
  *
- * The open drawing only - the same figure the ნაშთი sheet shows. Which job gets
- * the last 90s when several run at once is decided by a person, not by quietly
- * ranking one drawing's answers against another drawing's placements.
+ * An unimportant drawing has no limit at all; callers pass no `free` for it
+ * rather than a map of very large numbers.
  */
-export function freeStock(materials: Material[], pieces: Piece[]): Map<string, number> {
+export function freeStock(
+  materials: Material[],
+  pieces: Piece[],
+  view: StockView = OPEN_YARD,
+): Map<string, number> {
   const used = countByMaterial(pieces);
   return new Map(
-    materials.map((m) => [m.id, Math.max(0, totalStock(m) - (used.get(m.id) ?? 0))]),
+    materials.map((m) => [m.id, Math.max(0, availableFor(m, view) - (used.get(m.id) ?? 0))]),
   );
 }
 
@@ -587,11 +591,15 @@ export function freeStock(materials: Material[], pieces: Piece[]): Map<string, n
  * 0 is untouched, 1 is all of it used here, above 1 is short. Materials nobody
  * owns any of count as fully pressed, so they are spared.
  */
-export function stockPressure(materials: Material[], pieces: Piece[]): Map<string, number> {
+export function stockPressure(
+  materials: Material[],
+  pieces: Piece[],
+  view: StockView = OPEN_YARD,
+): Map<string, number> {
   const used = countByMaterial(pieces);
   return new Map(
     materials.map((m) => {
-      const owned = totalStock(m);
+      const owned = availableFor(m, view);
       return [m.id, owned > 0 ? (used.get(m.id) ?? 0) / owned : 1];
     }),
   );

@@ -17,6 +17,17 @@ export function normalizeSheetSize(raw: unknown): SheetSize {
   return raw === 'A3' ? 'A3' : 'A4';
 }
 
+/**
+ * The scales the PDF can be printed at. 0 is ავტომატური - the largest round
+ * scale that puts the whole drawing on the sheet - and is where a print starts:
+ * a fixed 1:50 left most drawings a quarter of the page.
+ */
+export const PDF_SCALES: readonly number[] = [0, 10, 20, 25, 50, 100, 200];
+
+export function normalizePdfScale(raw: unknown): number {
+  return typeof raw === 'number' && PDF_SCALES.includes(raw) ? raw : 0;
+}
+
 /** Which parts of the drawing the JSON file carries. */
 export interface JsonExportOptions {
   /** the placed formwork */

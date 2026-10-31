@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { useStockView } from '../store/useStockView';
 import { remainingRows } from '../lib/remaining';
 import { Icon } from './Icon';
 
@@ -13,9 +14,10 @@ export function RemainingButton() {
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
   const openDialog = useEditorStore((s) => s.openDialog);
+  const view = useStockView();
   const shortages = useMemo(
-    () => remainingRows(materials, pieces, { show: 'short' }).shortages,
-    [materials, pieces],
+    () => remainingRows(materials, pieces, { show: 'short', view }).shortages,
+    [materials, pieces, view],
   );
 
   return (

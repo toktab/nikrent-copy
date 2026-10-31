@@ -14,6 +14,7 @@ import {
   computeEdgeSnap,
   drawStep,
   findOverlaps,
+  isConnector,
   GRID_MAJOR_CM,
   gridStep,
   pieceBounds,
@@ -44,18 +45,43 @@ import {
 } from '../lib/projection';
 import {
   closestOnLeg,
+  connectedLines,
   orthogonal,
   segmentAt,
   segments,
   snapToSketch,
   type SegmentHit,
 } from '../lib/sketch';
+import { piecesOnLines } from '../lib/outerLines';
 import { overrideHeld } from '../lib/platform';
 import { createWheelClassifier } from '../lib/wheelInput';
-import { PieceView } from './PieceView';
+import { ConnectorPieceSvg, PieceView } from './PieceView';
+import {
+  CONNECTOR_SNAP_PX,
+  connectorMaterial,
+  connectorsAtCorners,
+  fittingCentre,
+  isFitting,
+  isLatch,
+  isRod,
+  rodPieceAt,
+  rodStackOf,
+  snapLatch,
+  snapNut,
+  snapConnector,
+  snapRod,
+  type Bolt,
+  type LatchSpot,
+  type Rod,
+  type RodEnd,
+} from '../lib/bolts';
+import { boltKindOf } from '../lib/boltMarks';
+import { isMaterialShown } from '../lib/objectVisibility';
+import { isPost, snapPost } from '../lib/posts';
 import { ElevationPieceView } from './ElevationPieceView';
-import { ShapeSvg } from './ShapeSvg';
+import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
+import { BoltLayer } from './BoltLayer';
 import { MeasureLayer } from './MeasureLayer';
 import {
   collinearRun,
@@ -105,6 +131,7 @@ type Interaction =
 
 /** A press has to travel this far before it counts as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 3;
+
 
 /**
  * Hold a drag to one axis while Shift is down.
@@ -182,6 +209,8 @@ export function StageCanvas() {
     y: number;
     w: number;
     h: number;
+    /** a შტირი that has found its spot is turned to it */
+    rot?: number;
   } | null>(null);
 
   const pieces = useEditorStore((s) => s.pieces);
@@ -199,6 +228,10 @@ export function StageCanvas() {
   const penPoints = useEditorStore((s) => s.penPoints);
   const showSketch = useEditorStore((s) => s.showSketch);
   const showGaps = useEditorStore((s) => s.showGaps);
+  const showBolts = useEditorStore((s) => s.showBolts);
+  const boltsShown = useEditorStore((s) => s.boltsShown);
+  const objectVisibility = useEditorStore((s) => s.objectVisibility);
+  const snapStep = useEditorStore((s) => s.snapStep);
   const surfaceView = useEditorStore((s) => s.surfaceView);
   const measures = useEditorStore((s) => s.measures);
   const recommendPreview = useEditorStore((s) => s.recommendPreview);
@@ -212,6 +245,10 @@ export function StageCanvas() {
     // is a wall.
     () => (showOverlaps && !elevation ? findOverlaps(pieces, byId) : new Set<string>()),
     [showOverlaps, elevation, pieces, byId],
+  );
+  const atCorners = useMemo(
+    () => (elevation ? new Set<string>() : connectorsAtCorners(pieces, byId)),
+    [elevation, pieces, byId],
   );
   const ranks = useMemo(
     () => depthRanks(pieces, byId, surfaceView),
@@ -500,6 +537,10 @@ export function StageCanvas() {
             const hits = s.pieces.filter((p) => {
               const m = lookup.get(p.materialId);
               if (!m) return false;
+              // Nothing hidden is picked up: a band dragged over a wall must not
+              // carry off კონექტორები nobody can see, to be deleted with it.
+              const kind = boltKindOf(m);
+              if (kind ? !s.boltsShown[kind] : !isMaterialShown(s.objectVisibility, m)) return false;
               // Tested against what the view actually shows, so a rubber band
               // in an elevation catches the course it was drawn around.
               const b = projectPiece(p, m, s.surfaceView);
@@ -644,9 +685,10 @@ export function StageCanvas() {
         e.preventDefault();
         return;
       }
-
       // Arrow keys nudge: one grid step, or 1 cm with Shift for fine work.
-      const step = e.shiftKey ? 1 : s.snap ? s.snapStep : 1;
+      // Arrows move by the move step from პარამეტრები whether or not the grid
+      // snap is on - it is how far a piece moves, not where it lands. Shift: 1 cm.
+      const step = e.shiftKey ? 1 : s.snapStep;
       const nudge: Record<string, [number, number]> = {
         ArrowLeft: [-step, 0],
         ArrowRight: [step, 0],
@@ -736,12 +778,42 @@ export function StageCanvas() {
     if (s.tool === 'measure') return;
     e.stopPropagation();
 
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      /**
+       * Shift + click on a piece standing on a drawn line picks up the whole
+       * built wall, the same as Shift + click on the line: the lines joined to
+       * it and every piece on them. Panels cover the line they stand on, so
+       * this is where the click usually lands.
+       */
+      const piece = s.pieces.find((p) => p.id === id);
+      const under = piece ? s.sketch.filter((k) => piecesOnLines([k], [piece], s.materials).length > 0) : [];
+      if (under.length) {
+        const lines = [...new Set(under.flatMap((k) => connectedLines(s.sketch, k.id)))];
+        s.selectSketchMany(lines);
+        s.selectSketchPart(null);
+        s.setSelection(piecesOnLines(s.sketch.filter((k) => lines.includes(k.id)), s.pieces, s.materials));
+        return;
+      }
+    }
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      s.toggleSelect(id);
+      // A stack of rods, nuts or clamps is one thing on the plan: in or out together.
+      const piece = s.pieces.find((p) => p.id === id);
+      const stack = piece ? rodStackOf(piece, s.pieces, new Map(s.materials.map((m) => [m.id, m]))) : [];
+      if (stack.length > 1) {
+        const ids = stack.map((p) => p.id);
+        const all = ids.every((x) => s.selectedIds.includes(x));
+        s.setSelection(all ? s.selectedIds.filter((x) => !ids.includes(x)) : [...new Set([...s.selectedIds, ...ids])]);
+      } else s.toggleSelect(id);
       return; // modifier-click adjusts the selection, it does not start a drag
     }
     // Clicking an already-selected piece keeps the group so it can be dragged.
-    if (!s.selectedIds.includes(id)) s.select(id);
+    if (!s.selectedIds.includes(id)) {
+      // Rods one above the other are one thing on the plan: take them all.
+      const piece = s.pieces.find((p) => p.id === id);
+      const stack = piece ? rodStackOf(piece, s.pieces, new Map(s.materials.map((m) => [m.id, m]))) : [];
+      if (stack.length > 1) s.setSelection(stack.map((p) => p.id));
+      else s.select(id);
+    }
 
     const after = useEditorStore.getState();
     interaction.current = {
@@ -751,6 +823,96 @@ export function StageCanvas() {
       baseline: after.pieces,
       // Anything drawn that is also selected travels with them.
       sketchBaseline: after.sketch.filter((k) => after.selectedSketchIds.includes(k.id)),
+      moved: false,
+    };
+  }, []);
+
+  /**
+   * A press on a worked-out კონექტორი mark: a real კუთხის კონექტორი goes
+   * there, selected, and the press carries on as a drag of it - so the mark
+   * moves under the pointer like any piece, and lets go onto another joint.
+   */
+  const onBoltPointerDown = useCallback((e: ReactPointerEvent, bolt: Bolt) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    const m = connectorMaterial(s.materials);
+    if (!m) return; // a catalog without one has nothing to place
+    e.stopPropagation();
+    // With Ctrl it joins the selection - picking pieces to replace - and stays put.
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeBolt(bolt, m.id, add);
+    if (add) return;
+    const after = useEditorStore.getState();
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
+  /** The same for a worked-out შტირი: a real rod of the right length, dragged. */
+  const onRodPointerDown = useCallback((e: ReactPointerEvent, rod: Rod) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    e.stopPropagation();
+    const before = s.pieces.length;
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeRod(rod, add);
+    const after = useEditorStore.getState();
+    if (add || after.pieces.length === before) return; // a catalog without rods has none to place
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
+  /** The same for a worked-out ჩამკეტი fix: its column of real ones, dragged. */
+  const onLatchPointerDown = useCallback((e: ReactPointerEvent, spot: LatchSpot) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    e.stopPropagation();
+    const before = s.pieces.length;
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeLatch(spot, add);
+    const after = useEditorStore.getState();
+    if (add || after.pieces.length === before) return; // a catalog without one has none to place
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
+      moved: false,
+    };
+  }, []);
+
+  /** The same for a worked-out ქანჩი + დისკო: one up every rod at its end. */
+  const onNutPointerDown = useCallback((e: ReactPointerEvent, end: RodEnd) => {
+    if (e.button !== 0 || spaceRef.current) return;
+    const s = useEditorStore.getState();
+    if (s.tool !== 'select') return;
+    e.stopPropagation();
+    const before = s.pieces.length;
+    const add = e.ctrlKey || e.metaKey || e.shiftKey;
+    s.takeNut(end, add);
+    const after = useEditorStore.getState();
+    if (add || after.pieces.length === before) return;
+    interaction.current = {
+      type: 'move',
+      sx: e.clientX,
+      sy: e.clientY,
+      baseline: after.pieces,
+      sketchBaseline: [],
       moved: false,
     };
   }, []);
@@ -995,6 +1157,32 @@ export function StageCanvas() {
       const path = grab && s.sketch.find((k) => k.id === grab.pathId);
       if (grab && path) {
         /**
+         * Picking lines rather than grabbing one: Shift + click takes the line
+         * and every line joined to it, Ctrl (Cmd) + click adds or takes off
+         * just this one, and both together add the joined lines to what is
+         * already picked. Nothing is dragged - the press was for choosing.
+         */
+        const mod = e.ctrlKey || e.metaKey;
+        if (e.shiftKey || mod) {
+          if (e.shiftKey) {
+            // The joined lines and everything standing on them: the built wall,
+            // panels and all, is what Shift + click picks up.
+            const lines = connectedLines(s.sketch, path.id);
+            s.selectSketchMany(lines, mod);
+            const onThem = piecesOnLines(
+              s.sketch.filter((k) => lines.includes(k.id)),
+              s.pieces,
+              s.materials,
+            );
+            s.setSelection(mod ? [...new Set([...s.selectedIds, ...onThem])] : onThem);
+          } else {
+            s.selectSketch(path.id, true);
+            s.setSelection([]);
+          }
+          s.selectSketchPart(null);
+          return;
+        }
+        /**
          * Whether this drag moves the whole layout or one part of it.
          *
          * Grabbing a run that is already part of a bigger selection moves all
@@ -1007,7 +1195,7 @@ export function StageCanvas() {
           (s.selectedSketchIds.length > 1 || alsoPieces) && s.selectedSketchIds.includes(path.id);
         const whole = many || e.altKey;
         if (!many) {
-          s.selectSketch(path.id, e.shiftKey);
+          s.selectSketch(path.id);
           s.selectSketchPart(
             whole
               ? null
@@ -1075,6 +1263,73 @@ export function StageCanvas() {
     const pw = box.w;
     const ph = box.h;
 
+    /**
+     * A კონექტორი goes ON a joint, between two pieces, not beside them: it
+     * snaps to the nearest one in reach, and only lands loose where there is
+     * none. Plan only - a joint is a place in plan.
+     */
+    /**
+     * A შტირი goes through a pair of joints facing each other across a wall,
+     * turned to run across it - see `findRods`. Where there is none in reach
+     * it lands loose, the way any other piece does.
+     */
+    // A დგარი goes on the outside of a panel face, square to it, head on the
+    // face - on whichever side of the panel it was let go.
+    if (view === 'plan' && isPost(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapPost(at, material, s.pieces, lookup, Math.max(40, 60 / s.zoom), s.snapStep);
+      if (spot) {
+        return { u: spot.x, v: spot.y, w: pw, h: ph, world: { x: spot.x, y: spot.y, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
+      }
+    }
+
+    if (view === 'plan' && isRod(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapRod(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      if (spot) {
+        const p = rodPieceAt(material, spot, '');
+        return { u: p.x, v: p.y, w: pw, h: ph, world: { x: p.x, y: p.y, z: p.z ?? 0 }, rot: p.rot, guideX: null, guideY: null };
+      }
+    }
+
+    // A ჩამკეტი fix finds the panel joint it belongs on, facing out of the face.
+    if (view === 'plan' && isLatch(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapLatch(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      if (spot) {
+        const u = spot.x - pw / 2;
+        const v = spot.y - ph / 2;
+        return { u, v, w: pw, h: ph, world: { x: u, y: v, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
+      }
+    }
+
+    // A nut finds the rod end it belongs on, facing out.
+    if (view === 'plan' && isFitting(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const end = snapNut(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      if (end) {
+        const c = fittingCentre(end, material);
+        const u = c.x - pw / 2;
+        const v = c.y - ph / 2;
+        return { u, v, w: pw, h: ph, world: { x: u, y: v, z: 0 }, rot: end.rot, guideX: null, guideY: null };
+      }
+    }
+
+    if (view === 'plan' && isConnector(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const hit = snapConnector(at, s.pieces, lookup, CONNECTOR_SNAP_PX / s.zoom);
+      const cx = hit ? hit.x : snapValue(at.x, s.snapStep, s.snap);
+      const cy = hit ? hit.y : snapValue(at.y, s.snapStep, s.snap);
+      const u = cx - pw / 2;
+      const v = cy - ph / 2;
+      return { u, v, w: pw, h: ph, world: { x: u, y: v, z: hit?.z ?? 0 }, guideX: null, guideY: null };
+    }
+
     let u = snapValue((clientX - r.left - s.panX) / s.zoom - pw / 2, s.snapStep, s.snap);
     let v = snapValue((clientY - r.top - s.panY) / s.zoom - ph / 2, s.snapStep, s.snap);
     let guideX: number | null = null;
@@ -1123,7 +1378,7 @@ export function StageCanvas() {
       const material = s.materials.find((m) => m.id === s.draggingMaterialId);
       if (!material) return;
       const at = dropPosition(material, e.clientX, e.clientY);
-      if (at) setGhost({ material, x: at.u, y: at.v, w: at.w, h: at.h });
+      if (at) setGhost({ material, x: at.u, y: at.v, w: at.w, h: at.h, rot: 'rot' in at ? at.rot : 0 });
     },
     [dropPosition],
   );
@@ -1137,8 +1392,59 @@ export function StageCanvas() {
       const materialId = e.dataTransfer.getData('text/plain') || s.draggingMaterialId;
       const material = s.materials.find((m) => m.id === materialId);
       if (!material) return;
+      // A ჩამკეტი fix let go near a panel joint goes on it, every one the joint takes.
+      if (s.surfaceView === 'plan' && isLatch(material)) {
+        const r = stageRef.current?.getBoundingClientRect();
+        const spot =
+          r &&
+          snapLatch(
+            { x: (e.clientX - r.left - s.panX) / s.zoom, y: (e.clientY - r.top - s.panY) / s.zoom },
+            s.pieces,
+            new Map(s.materials.map((mm) => [mm.id, mm])),
+            CONNECTOR_SNAP_PX / s.zoom,
+          );
+        if (spot) {
+          s.placeLatchStack(material.id, spot);
+          s.setDraggingMaterial(null);
+          return;
+        }
+      }
+      // A nut let go near a rod end goes on it, one for every rod up it.
+      if (s.surfaceView === 'plan' && isFitting(material)) {
+        const r = stageRef.current?.getBoundingClientRect();
+        const end =
+          r &&
+          snapNut(
+            { x: (e.clientX - r.left - s.panX) / s.zoom, y: (e.clientY - r.top - s.panY) / s.zoom },
+            s.pieces,
+            new Map(s.materials.map((mm) => [mm.id, mm])),
+            CONNECTOR_SNAP_PX / s.zoom,
+          );
+        if (end) {
+          s.placeNutStack(material.id, end);
+          s.setDraggingMaterial(null);
+          return;
+        }
+      }
+      // A rod let go on a rod spot is the whole stack that spot takes.
+      if (s.surfaceView === 'plan' && isRod(material)) {
+        const r = stageRef.current?.getBoundingClientRect();
+        const spot =
+          r &&
+          snapRod(
+            { x: (e.clientX - r.left - s.panX) / s.zoom, y: (e.clientY - r.top - s.panY) / s.zoom },
+            s.pieces,
+            new Map(s.materials.map((mm) => [mm.id, mm])),
+            CONNECTOR_SNAP_PX / s.zoom,
+          );
+        if (spot) {
+          s.placeRodStack(material.id, spot);
+          s.setDraggingMaterial(null);
+          return;
+        }
+      }
       const at = dropPosition(material, e.clientX, e.clientY);
-      if (at) s.addPiece(material.id, at.world.x, at.world.y, at.world.z);
+      if (at) s.addPiece(material.id, at.world.x, at.world.y, at.world.z, 'rot' in at ? at.rot : 0);
       s.setDraggingMaterial(null);
     },
     [dropPosition],
@@ -1209,6 +1515,28 @@ export function StageCanvas() {
         setHoverPieceId(null);
       }}
       onDoubleClick={(e) => {
+        // A double click on a leg of a drawn line: straight into its length,
+        // to be typed rather than dragged to (the user, 2026-10-30). The first
+        // click of the pair has already picked the leg.
+        if (tool === 'select') {
+          const s = useEditorStore.getState();
+          const part = s.selectedSketchPart;
+          if (part?.kind !== 'leg') return;
+          e.preventDefault();
+          s.setInspectorOpen(true);
+          s.setInspectorTab('recommend');
+          // After the panel has rendered the field.
+          requestAnimationFrame(() => {
+            const input = document.querySelector<HTMLInputElement>(
+              `[data-leg-field="${part.pathId}:${part.index}"]`,
+            );
+            if (!input) return;
+            input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            input.focus();
+            input.select();
+          });
+          return;
+        }
         // Finishing an open run, the way every polyline tool ends one.
         if (tool !== 'pen') return;
         e.preventDefault();
@@ -1248,7 +1576,7 @@ export function StageCanvas() {
               // WIDTH scales too: at 4x the old fixed 1px was a 4px band, which
               // is what made a zoomed-in drawing look furred. Divide it back.
               '--gw': `${1 / zoom}px`,
-              '--gf': `${gridStep(zoom)}px`,
+              '--gf': `${gridStep(zoom, snapStep)}px`,
               '--gm': `${GRID_MAJOR_CM}px`,
             } as CSSProperties
           }
@@ -1277,24 +1605,40 @@ export function StageCanvas() {
         )}
 
         {/* Live drop preview: exactly where the piece will land, snapping included. */}
-        {ghost && (
-          <div
-            className="drop-ghost"
-            style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
-          >
-            {!elevation && (
-              <ShapeSvg
-                material={ghost.material}
-                width={ghost.w}
-                height={ghost.h}
-                strokeWidth={1 / zoom}
-              />
-            )}
-          </div>
-        )}
+        {ghost &&
+          (elevation ? (
+            <div
+              className="drop-ghost"
+              style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
+            />
+          ) : (
+            (() => {
+              // Drawn the way the piece will be, so the preview is as exact as
+              // the drop.
+              const probe = { id: '', materialId: ghost.material.id, x: ghost.x, y: ghost.y, rot: ghost.rot ?? 0, z: 0 };
+              const box = placedBox(probe, ghost.material);
+              const connector = isConnector(ghost.material);
+              return (
+                <div
+                  className={`drop-ghost${connector ? ' connector' : ''}`}
+                  style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
+                >
+                  {connector ? (
+                    <ConnectorPieceSvg piece={probe} material={ghost.material} box={box} zoom={zoom} />
+                  ) : (
+                    <PlacedShapeSvg piece={probe} material={ghost.material} box={box} strokeWidth={1 / zoom} />
+                  )}
+                </div>
+              );
+            })()
+          ))}
         {pieces.map((piece) => {
           const material = byId.get(piece.materialId);
           if (!material) return null;
+          // A ჭანჭიკი kind switched off in its menu is hidden placed or not -
+          // the menu's switch is about seeing the kind, not where it came from.
+          const kind = boltKindOf(material);
+          if (kind ? !boltsShown[kind] : !isMaterialShown(objectVisibility, material)) return null;
           return elevation ? (
             <ElevationPieceView
               key={piece.id}
@@ -1313,6 +1657,7 @@ export function StageCanvas() {
               selected={selected.has(piece.id)}
               overlapping={overlapping.has(piece.id)}
               zoom={zoom}
+              atCorner={atCorners.has(piece.id)}
               onPointerDown={onPiecePointerDown}
             />
           );
@@ -1324,24 +1669,14 @@ export function StageCanvas() {
           recommendPreview?.map((piece) => {
             const material = byId.get(piece.materialId);
             if (!material) return null;
+            const box = placedBox(piece, material);
             return (
               <div
                 key={`preview-${piece.id}`}
                 className="piece preview-piece"
-                style={{
-                  left: piece.x,
-                  top: piece.y,
-                  width: planW(material),
-                  height: planH(material),
-                  transform: `rotate(${piece.rot}deg)`,
-                }}
+                style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
               >
-                <ShapeSvg
-                  material={material}
-                  width={planW(material)}
-                  height={planH(material)}
-                  strokeWidth={1 / zoom}
-                />
+                <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
               </div>
             );
           })}
@@ -1368,6 +1703,9 @@ export function StageCanvas() {
           hoverPieceId={hoverPieceId}
         />
       )}
+
+      {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
+      {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} onGrabRod={onRodPointerDown} onGrabLatch={onLatchPointerDown} onGrabNut={onNutPointerDown} />}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text
           stays readable at any zoom. Amber, because an unclosed gap is

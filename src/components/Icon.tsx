@@ -12,6 +12,7 @@
  */
 
 export type IconName =
+  | 'gear'
   | 'plus'
   | 'minus'
   | 'pencil'
@@ -55,7 +56,9 @@ export type IconName =
   | 'pen'
   | 'ruler'
   | 'eye'
-  | 'magnet';
+  | 'eye-off'
+  | 'magnet'
+  | 'swap';
 
 /** Path data only — stroke styling is applied once, on the <svg>. */
 const PATHS: Record<IconName, string> = {
@@ -102,6 +105,8 @@ const PATHS: Record<IconName, string> = {
   // Three rails with three handles: settings you slide, not a list you read.
   // A plain hamburger here would be indistinguishable from a menu.
   sliders: 'M4 7h16 M4 12h16 M4 17h16 M9 5v4 M16 10v4 M7 15v4',
+  // A toothed wheel: the app's own settings, apart from the view's sliders.
+  gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M4.9 19.1 7 17 M17 7l2.1-2.1',
   // Permission, not progress — carried by a padlock so read-only never rests
   // on colour alone.
   lock: 'M5 11h14v9H5z M8 11V7a4 4 0 0 1 8 0v4',
@@ -111,8 +116,12 @@ const PATHS: Record<IconName, string> = {
   // A rule laid on the diagonal with three ticks: a measurement, not a drawn line.
   ruler: 'M3 17 17 3l4 4L7 21z M7 13l2 2 M10 10l2 2 M13 7l2 2',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  // The same eye, struck through: hidden from view, not gone.
+  'eye-off': 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M4 4l16 16',
   // A horseshoe magnet, poles down: the helper that pulls points into place.
   magnet: 'M6 4v8a6 6 0 0 0 12 0V4 M6 4h4v8a2 2 0 0 0 4 0V4h4 M6 8h4 M14 8h4',
+  // Two arrows passing each other: one thing out, another in its place.
+  swap: 'M4 8h15 M15 4l4 4-4 4 M20 16H5 M9 12l-4 4 4 4',
   // Two arcs, a dot and the slash. A full wifi fan has five strokes that turn
   // into grey mush at the 13px this is actually drawn at.
   offline: 'M3 3l18 18 M12 19.5h.01 M8.4 15.9a5.5 5.5 0 0 1 6.2-1 M4.6 11.6a11 11 0 0 1 12.6-1.4',

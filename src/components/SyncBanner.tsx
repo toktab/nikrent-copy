@@ -26,6 +26,7 @@ export function SyncBanner() {
   );
   const openDialog = useEditorStore((s) => s.openDialog);
   const measuresUnsaved = useSyncStore((s) => s.measuresUnsaved);
+  const statusUnsaved = useSyncStore((s) => s.statusUnsaved);
 
   if (!isConfigured) return null;
 
@@ -126,6 +127,26 @@ export function SyncBanner() {
           </span>
           <span className="sync-banner-note">
             ადმინისტრატორმა გაუშვოს supabase/migrations/0011_measures.sql (DEPLOY.md).
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // A status that looks set and is gone after a reload would quietly put a
+  // finished job's parts back on hold.
+  if (statusUnsaved) {
+    return (
+      <div className="sync-banner bad" role="alert">
+        <Icon name="warning" size={16} />
+        <div className="sync-banner-text">
+          <b>ნახაზის სტატუსი სერვერზე არ ინახება</b>
+          <span>
+            სერვერზე მიგრაცია 0013 არ გაუშვია. ნახაზი ინახება, მაგრამ სტატუსი (აქტიური,
+            დასრულებული, უმნიშვნელო) მხოლოდ ამ ეკრანზე ჩანს.
+          </span>
+          <span className="sync-banner-note">
+            ადმინისტრატორმა გაუშვოს supabase/migrations/0013_drawing_status.sql (DEPLOY.md).
           </span>
         </div>
       </div>

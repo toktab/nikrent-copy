@@ -7,6 +7,8 @@ import {
   fetchAll,
   measuresSaveUnsupported,
   recheckMeasuresColumn,
+  recheckStatusColumn,
+  statusSaveUnsupported,
   reloadDocument,
 } from './repo';
 import { captureError } from './errorLog';
@@ -50,6 +52,8 @@ interface SyncState {
    * lines look saved on this screen and are gone after a reload.
    */
   measuresUnsaved: boolean;
+  /** Likewise drawing statuses, until migration 0013 adds their column. */
+  statusUnsaved: boolean;
 }
 
 export const useSyncStore = create<SyncState>(() => ({
@@ -60,6 +64,7 @@ export const useSyncStore = create<SyncState>(() => ({
   deniedWhat: null,
   pendingChanges: false,
   measuresUnsaved: false,
+  statusUnsaved: false,
 }));
 
 const DEBOUNCE_MS = 900;
@@ -72,6 +77,7 @@ let canWrite = true;
 /** when the server was last asked whether the measures column has arrived */
 let lastMeasuresProbe = 0;
 const MEASURES_PROBE_MS = 60_000;
+let lastStatusProbe = 0;
 
 function snapshotOf(): DataSnapshot {
   const s = useEditorStore.getState();
@@ -153,6 +159,21 @@ export async function flush(): Promise<void> {
         }
       }
     }
+    // The same for drawing statuses and migration 0013.
+    if (statusSaveUnsupported()) {
+      useSyncStore.setState({ statusUnsaved: true });
+      if (Date.now() - lastStatusProbe > MEASURES_PROBE_MS) {
+        lastStatusProbe = Date.now();
+        if (await recheckStatusColumn()) {
+          useSyncStore.setState({ statusUnsaved: false, pendingChanges: true });
+          pending = mergePlans(pending, {
+            ...emptyPlan(),
+            documentsUpsert: useEditorStore.getState().documents,
+          });
+          schedule();
+        }
+      }
+    }
   } catch (err) {
     // Put the unsent work back at the front of the queue so a transient
     // failure costs a retry rather than the change itself.
@@ -188,6 +209,38 @@ export async function flush(): Promise<void> {
     }
   } finally {
     flushing = false;
+  }
+}
+
+/** How long signing out waits for the last save before it gives up and asks. */
+const SAVE_BEFORE_LEAVING_MS = 15_000;
+
+/**
+ * Push everything still waiting, now, and say what - if anything - did not
+ * reach the server. Null means everything is saved.
+ *
+ * For signing out. Edits go up 900 ms after they stop, so a log-out right
+ * after the last line was drawn used to tear the sync down with that line
+ * still queued, and in server mode nothing else keeps a copy: it was gone.
+ * A save already in flight is waited for rather than skipped, because `flush`
+ * returns at once while one is running and that alone would look like
+ * success.
+ */
+export async function saveBeforeLeaving(): Promise<string | null> {
+  const deadline = Date.now() + SAVE_BEFORE_LEAVING_MS;
+  for (;;) {
+    while (flushing && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+    if (!flushing) await flush();
+    const s = useSyncStore.getState();
+    if (!s.pendingChanges) {
+      // Saved, but without measured lines - those exist only on this screen
+      // until migration 0011 is run, and signing out is when they would go.
+      return s.measuresUnsaved ? 'გაზომვის ხაზები სერვერზე ვერ ინახება (საჭიროა მიგრაცია 0011).' : null;
+    }
+    const stuck = s.status === 'error' || s.status === 'conflict' || s.status === 'denied';
+    if (stuck || Date.now() >= deadline) {
+      return s.error ?? 'ცვლილებები ჯერ არ შენახულა.';
+    }
   }
 }
 

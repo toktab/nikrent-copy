@@ -1,0 +1,771 @@
+{
+  "app": "du-formwork",
+  "kind": "layout",
+  "version": 3,
+  "exportedAt": "2026-10-14T06:49:38.531Z",
+  "name": "ნახაზი 1",
+  "projectName": "",
+  "revision": "A",
+  "scale": 50,
+  "pieces": [
+    {
+      "id": "pc_mv7pzw0r97a19e6b0f",
+      "materialId": "corner-inner-20x20x300-joni",
+      "x": 435,
+      "y": 100,
+      "rot": 180,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0raef7a57ddd",
+      "materialId": "corner-inner-20x20x300-joni",
+      "x": 435,
+      "y": 250,
+      "rot": 270,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0re1c84cebd9",
+      "materialId": "corner-inner-20x20x300-joni",
+      "x": 100,
+      "y": 250,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0r1d4f0917ea",
+      "materialId": "corner-inner-20x20x300-joni",
+      "x": 100,
+      "y": 100,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0r3ee010cf37",
+      "materialId": "panel-90x300",
+      "x": 120,
+      "y": 100,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0rd6176386f5",
+      "materialId": "panel-90x300",
+      "x": 210,
+      "y": 100,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0r6525a6aa1a",
+      "materialId": "panel-90x300",
+      "x": 300,
+      "y": 100,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7pzw0rac335434ba",
+      "materialId": "panel-45x300",
+      "x": 390,
+      "y": 100,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q59hbe8c96aa008",
+      "materialId": "panel-90x300",
+      "x": 120,
+      "y": 71,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q59hbe9567acb9e",
+      "materialId": "panel-90x300",
+      "x": 210,
+      "y": 71,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q59hbd4f98ef56f",
+      "materialId": "panel-90x300",
+      "x": 300,
+      "y": 71,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q59hbe54d31080f",
+      "materialId": "panel-45x300",
+      "x": 390,
+      "y": 71,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q7tsn59585b62a2",
+      "materialId": "panel-45x300",
+      "x": 75,
+      "y": 71,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q8kpid96c50a559",
+      "materialId": "panel-45x300",
+      "x": 58,
+      "y": 98,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7q9ly6a45e32b088",
+      "materialId": "filler-5x300",
+      "x": 102.5,
+      "y": 118,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qdv9c3fe04548f8",
+      "materialId": "panel-45x300",
+      "x": 58,
+      "y": 263,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qegp99a24b13606",
+      "materialId": "filler-5x300",
+      "x": 102.5,
+      "y": 243,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qjharf5c1ee1181",
+      "materialId": "panel-60x300",
+      "x": 50.5,
+      "y": 150.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qjhare723ab450f",
+      "materialId": "panel-60x300",
+      "x": 50.5,
+      "y": 210.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qjmimb591bb6d5c",
+      "materialId": "panel-60x300",
+      "x": 75,
+      "y": 150.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qjmim9489b0d99f",
+      "materialId": "panel-60x300",
+      "x": 75,
+      "y": 210.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qmgdo783b5b0b0e",
+      "materialId": "panel-45x300",
+      "x": 85,
+      "y": 281,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qmz4p9f842fbc20",
+      "materialId": "filler-10x300",
+      "x": 120,
+      "y": 260,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qo92s18182de47a",
+      "materialId": "panel-45x300",
+      "x": 457,
+      "y": 263,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qowc814f44cc4cf",
+      "materialId": "panel-45x300",
+      "x": 430,
+      "y": 281,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qp28m2c09670e84",
+      "materialId": "filler-5x300",
+      "x": 430,
+      "y": 260,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qr0l5b7268d415f",
+      "materialId": "panel-90x300",
+      "x": 130,
+      "y": 281,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qr0l5e53363608f",
+      "materialId": "panel-90x300",
+      "x": 220,
+      "y": 281,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qr0l546cbcdb0a1",
+      "materialId": "panel-90x300",
+      "x": 340,
+      "y": 281,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qr0l5283f50ae2e",
+      "materialId": "panel-30x300",
+      "x": 310,
+      "y": 281,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qrguv95bdc480e2",
+      "materialId": "panel-90x300",
+      "x": 130,
+      "y": 260,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qrguvcd6f8d8baf",
+      "materialId": "panel-90x300",
+      "x": 220,
+      "y": 260,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qrguv1edd8c4e0f",
+      "materialId": "panel-90x300",
+      "x": 340,
+      "y": 260,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qrguvbd86c36e39",
+      "materialId": "panel-30x300",
+      "x": 310,
+      "y": 260,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qut5c4faf244a2a",
+      "materialId": "panel-60x300",
+      "x": 435,
+      "y": 71,
+      "rot": 0,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qva34f19b6ee203",
+      "materialId": "panel-45x300",
+      "x": 457,
+      "y": 98,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qvm6c462a9c018e",
+      "materialId": "filler-5x300",
+      "x": 448,
+      "y": 118,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qxdww134911913b",
+      "materialId": "filler-5x300",
+      "x": 448,
+      "y": 243,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qy7jq333b5b5114",
+      "materialId": "panel-60x300",
+      "x": 449.5,
+      "y": 150.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qy7jqe6abf2fd42",
+      "materialId": "panel-60x300",
+      "x": 449.5,
+      "y": 210.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qyd2n35a8041584",
+      "materialId": "panel-60x300",
+      "x": 420.5,
+      "y": 150.5,
+      "rot": 90,
+      "z": 0
+    },
+    {
+      "id": "pc_mv7qyd2n3c14734601",
+      "materialId": "panel-60x300",
+      "x": 420.5,
+      "y": 210.5,
+      "rot": 90,
+      "z": 0
+    }
+  ],
+  "sketch": [
+    {
+      "id": "sk_mv7pxyri5a0a485571",
+      "points": [
+        {
+          "x": 100,
+          "y": 100
+        },
+        {
+          "x": 455,
+          "y": 100
+        },
+        {
+          "x": 455,
+          "y": 270
+        },
+        {
+          "x": 110,
+          "y": 270
+        },
+        {
+          "x": 100,
+          "y": 270
+        },
+        {
+          "x": 100,
+          "y": 240
+        }
+      ],
+      "closed": true,
+      "perimeter": "outer",
+      "legs": [
+        355,
+        170,
+        345,
+        10,
+        30,
+        140
+      ]
+    },
+    {
+      "id": "sk_mv7q2pry9c67099524",
+      "points": [
+        {
+          "x": 100,
+          "y": 80
+        },
+        {
+          "x": 455,
+          "y": 80
+        }
+      ],
+      "perimeter": "outer",
+      "legs": [
+        355
+      ]
+    },
+    {
+      "id": "sk_mv7q3bh2bd330c816d",
+      "points": [
+        {
+          "x": 455,
+          "y": 80
+        },
+        {
+          "x": 475,
+          "y": 80
+        },
+        {
+          "x": 475,
+          "y": 280
+        },
+        {
+          "x": 85,
+          "y": 280
+        },
+        {
+          "x": 85,
+          "y": 125
+        },
+        {
+          "x": 85,
+          "y": 80
+        },
+        {
+          "x": 100,
+          "y": 80
+        }
+      ],
+      "perimeter": "outer",
+      "legs": [
+        20,
+        200,
+        390,
+        155,
+        45,
+        15
+      ]
+    },
+    {
+      "id": "sk_mv7qpuvz8014c5b23e",
+      "points": [
+        {
+          "x": 130,
+          "y": 320
+        },
+        {
+          "x": 430,
+          "y": 320
+        }
+      ],
+      "perimeter": "outer",
+      "legs": [
+        300
+      ]
+    },
+    {
+      "id": "sk_mv7qxo67efbb8ed454",
+      "points": [
+        {
+          "x": 515,
+          "y": 125
+        },
+        {
+          "x": 515,
+          "y": 245
+        }
+      ],
+      "perimeter": "outer",
+      "legs": [
+        120
+      ]
+    }
+  ],
+  "measures": [
+    {
+      "id": "ms_mv7q6wjoa240a9774f",
+      "a": {
+        "x": 100,
+        "y": 65
+      },
+      "b": {
+        "x": 85,
+        "y": 65
+      },
+      "length": 15
+    },
+    {
+      "id": "ms_mv7q72ehf022041169",
+      "a": {
+        "x": 65,
+        "y": 80
+      },
+      "b": {
+        "x": 65,
+        "y": 100
+      },
+      "length": 20
+    },
+    {
+      "id": "ms_mv7q84ks48d441474c",
+      "a": {
+        "x": 45,
+        "y": 80
+      },
+      "b": {
+        "x": 45,
+        "y": 120
+      },
+      "length": 40
+    },
+    {
+      "id": "ms_mv7qagzi51a68ca6fa",
+      "a": {
+        "x": 26,
+        "y": 125
+      },
+      "b": {
+        "x": 26,
+        "y": 250
+      },
+      "length": 125
+    },
+    {
+      "id": "ms_mv7qbkbp18e123c134",
+      "a": {
+        "x": 65,
+        "y": 270
+      },
+      "b": {
+        "x": 65,
+        "y": 280
+      },
+      "length": 10
+    },
+    {
+      "id": "ms_mv7qkh59bb6ef1db70",
+      "a": {
+        "x": 85,
+        "y": 295
+      },
+      "b": {
+        "x": 120,
+        "y": 295
+      },
+      "length": 35
+    },
+    {
+      "id": "ms_mv7qmnth4b80f1ea7f",
+      "a": {
+        "x": 119.5,
+        "y": 245
+      },
+      "b": {
+        "x": 129.5,
+        "y": 245
+      },
+      "length": 10
+    },
+    {
+      "id": "ms_mv7qnejf1e6d94848e",
+      "a": {
+        "x": 519,
+        "y": 250
+      },
+      "b": {
+        "x": 519,
+        "y": 280
+      },
+      "length": 30
+    },
+    {
+      "id": "ms_mv7qnigtdfd94d22cc",
+      "a": {
+        "x": 435,
+        "y": 300
+      },
+      "b": {
+        "x": 475,
+        "y": 300
+      },
+      "length": 40
+    },
+    {
+      "id": "ms_mv7qnsqa1e826e6c8f",
+      "a": {
+        "x": 455,
+        "y": 325
+      },
+      "b": {
+        "x": 475,
+        "y": 325
+      },
+      "length": 20
+    },
+    {
+      "id": "ms_mv7qsip2fdc9ac8ede",
+      "a": {
+        "x": 540,
+        "y": 80
+      },
+      "b": {
+        "x": 540,
+        "y": 100
+      },
+      "length": 20
+    },
+    {
+      "id": "ms_mv7qsl7beca22eb922",
+      "a": {
+        "x": 455,
+        "y": 55
+      },
+      "b": {
+        "x": 475,
+        "y": 55
+      },
+      "length": 20
+    },
+    {
+      "id": "ms_mv7qsn6qf26a4ecdba",
+      "a": {
+        "x": 514,
+        "y": 120
+      },
+      "b": {
+        "x": 514,
+        "y": 80
+      },
+      "length": 40
+    },
+    {
+      "id": "ms_mv7qsswhae9379df16",
+      "a": {
+        "x": 435,
+        "y": 61
+      },
+      "b": {
+        "x": 475,
+        "y": 61
+      },
+      "length": 40
+    },
+    {
+      "id": "ms_mv7qx4j96c4aaedba8",
+      "a": {
+        "x": 509,
+        "y": 290
+      },
+      "b": {
+        "x": 509,
+        "y": 295
+      },
+      "length": 5
+    }
+  ],
+  "materials": [
+    {
+      "id": "panel-30x300",
+      "name": "პანელი 30*300",
+      "category": "panel",
+      "w": 30,
+      "h": 300,
+      "depth": 9,
+      "shape": "rect",
+      "color": "#c9a36a",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    },
+    {
+      "id": "panel-45x300",
+      "name": "პანელი 45*300",
+      "category": "panel",
+      "w": 45,
+      "h": 300,
+      "depth": 9,
+      "shape": "rect",
+      "color": "#c9a36a",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    },
+    {
+      "id": "panel-60x300",
+      "name": "პანელი 60*300",
+      "category": "panel",
+      "w": 60,
+      "h": 300,
+      "depth": 9,
+      "shape": "rect",
+      "color": "#c9a36a",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    },
+    {
+      "id": "panel-90x300",
+      "name": "პანელი 90*300",
+      "category": "panel",
+      "w": 90,
+      "h": 300,
+      "depth": 9,
+      "shape": "rect",
+      "color": "#c9a36a",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    },
+    {
+      "id": "corner-inner-20x20x300-joni",
+      "name": "შიდა კუთხე 20*20*300 ჯონი",
+      "category": "corner",
+      "w": 20,
+      "h": 300,
+      "depth": 20,
+      "shape": "L",
+      "color": "#93c47d",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    },
+    {
+      "id": "filler-5x300",
+      "name": "ჩაკერება 5*300",
+      "category": "filler",
+      "w": 5,
+      "h": 300,
+      "depth": 9,
+      "shape": "rect",
+      "color": "#e0b872",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    },
+    {
+      "id": "filler-10x300",
+      "name": "ჩაკერება 10*300",
+      "category": "filler",
+      "w": 10,
+      "h": 300,
+      "depth": 9,
+      "shape": "rect",
+      "color": "#e0b872",
+      "builtin": true,
+      "stock": {},
+      "weight": 0,
+      "article": "",
+      "supplier": ""
+    }
+  ]
+}

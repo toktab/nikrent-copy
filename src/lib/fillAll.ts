@@ -1,4 +1,5 @@
 import type { Material, Piece, SketchPath } from '../types';
+import type { StockView } from './inventory';
 import { planSketchFillAll, type RunInfo, type SketchFillSpec } from './sketchFill';
 import {
   DEFAULT_FILL_FILTERS,
@@ -42,8 +43,10 @@ export function planFillAll(input: {
   spec: SketchFillSpec;
   materials: Material[];
   pieces: Piece[];
+  /** the other drawings' hold on the yard - see `stockView` */
+  view?: StockView;
 }): FillAllPlan {
-  const { sketch, spec, materials, pieces } = input;
+  const { sketch, spec, materials, pieces, view } = input;
   const wanted = input.pathIds?.length ? new Set(input.pathIds) : null;
   const candidates = sketch.filter((p) => !wanted || wanted.has(p.id));
 
@@ -58,9 +61,9 @@ export function planFillAll(input: {
 
   const runs = planSketchFillAll(toFill, spec, materials).runs;
   // Stock counted the way the recommendation tab counts it - see `freeStock`.
-  const hasStock = stockEntered(materials);
-  const free = hasStock ? freeStock(materials, pieces) : undefined;
-  const pressure = hasStock ? stockPressure(materials, pieces) : undefined;
+  const hasStock = stockEntered(materials) && !view?.unlimited;
+  const free = hasStock ? freeStock(materials, pieces, view) : undefined;
+  const pressure = hasStock ? stockPressure(materials, pieces, view) : undefined;
 
   // The job's stack, once the first run has settled it. Held in an object so
   // the loop below reads it as it stands on each pass.

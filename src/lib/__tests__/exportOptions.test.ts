@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_JSON_EXPORT,
   normalizeJsonExport,
+  normalizePdfScale,
   normalizeSheetSize,
   sheetBounds,
 } from '../exportOptions';
@@ -60,5 +61,13 @@ describe('saved export choices', () => {
     expect(normalizeSheetSize('A3')).toBe('A3');
     expect(normalizeSheetSize('A5')).toBe('A4');
     expect(normalizeSheetSize(undefined)).toBe('A4');
+  });
+});
+
+describe('the PDF scale', () => {
+  it('starts on ავტომატური and keeps a scale it knows', () => {
+    expect(normalizePdfScale(undefined)).toBe(0);
+    expect(normalizePdfScale(37)).toBe(0);
+    expect(normalizePdfScale(25)).toBe(25);
   });
 });

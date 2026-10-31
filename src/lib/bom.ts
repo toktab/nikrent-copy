@@ -1,7 +1,15 @@
 import type { Category, DrawingDoc, Material, Piece } from '../types';
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { isLinear, lengthCm } from './geometry';
-import { commitmentsByMaterial, emptyCommitment, totalStock, type Commitment } from './inventory';
+import {
+  OPEN_YARD,
+  availableFor,
+  commitmentsByMaterial,
+  emptyCommitment,
+  stockView,
+  totalStock,
+  type Commitment,
+} from './inventory';
 
 export interface BomRow {
   material: Material;
@@ -9,7 +17,7 @@ export interface BomRow {
   used: number;
   /** owned across every warehouse */
   stock: number;
-  /** stock − used on this drawing (negative means shortage) */
+  /** what this drawing may draw on (owned less other active jobs) − used; negative means shortage */
   remaining: number;
   /** placed across every drawing in the project */
   committed: number;
@@ -81,7 +89,9 @@ export function unitAreaM2(m: Material): number {
  * for which materials get which.
  *
  * `documents` is optional: when supplied, each row also reports how much of the
- * stock is committed across every drawing, not just this one.
+ * stock is committed across every drawing, not just this one, and shortages
+ * are counted against what the other active drawings leave free - or not at
+ * all, when the open drawing is unimportant.
  */
 export function buildBom(
   materials: Material[],
@@ -93,6 +103,7 @@ export function buildBom(
   const commitments: Map<string, Commitment> = documents.length
     ? commitmentsByMaterial(documents, activeDocId)
     : new Map();
+  const view = documents.length ? stockView(documents, activeDocId) : OPEN_YARD;
 
   const used = new Map<string, number>();
   let orphanPieces = 0;
@@ -130,13 +141,14 @@ export function buildBom(
       const stock = totalStock(m);
       const commitment = commitments.get(m.id) ?? emptyCommitment();
       const rowWeight = count * m.weight;
-      const shortage = count > stock;
+      const free = availableFor(m, view);
+      const shortage = !view.unlimited && count > free;
 
       rows.push({
         material: m,
         used: count,
         stock,
-        remaining: stock - count,
+        remaining: free - count,
         committed: commitment.committed,
         available: stock - commitment.committed,
         shortage,

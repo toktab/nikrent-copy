@@ -81,6 +81,24 @@ export interface Piece {
    * than a multiplier, and so the 3D view can show them at the right height.
    */
   z?: number;
+  /**
+   * The pieces this one shares a worked-out კონექტორი joint with that has been
+   * taken off the drawing - moved somewhere else by hand, or removed. Kept on
+   * the piece so the choice follows the joint when the wall is moved, saves
+   * with the drawing, and undoes like any other edit. ჭანჭიკები ->
+   * ავტომატურად დასმა clears it.
+   */
+  boltsOff?: string[];
+  /**
+   * Put there by the fill or a recommendation, not by hand. Absent means hand
+   * placed - which is what everything placed before this existed was.
+   *
+   * The architect draws a wall, sets the corners by hand (კუთხე, ჩაკერება) and
+   * has the rest filled between them; with "ხელით დასმულის შენარჩუნება" on, a
+   * fill keeps what he placed and freely replaces what an earlier fill put
+   * there. The inspector switches a piece between the two.
+   */
+  auto?: true;
 }
 
 /** Everything a material needs except its identity flags. */
@@ -146,9 +164,22 @@ export interface MeasureLine {
   b: { x: number; y: number };
 }
 
+/**
+ * Where a drawing stands as a job, and so whether it holds stock.
+ *
+ * - `active` - a real job: what it places is spoken for, and every other
+ *   drawing sees that much less in the yard.
+ * - `unimportant` - a sketch, an offer, a what-if: it draws as if the yard were
+ *   bottomless and holds nothing back from anyone.
+ * - `finished` - the job is back: its parts count as returned, free again.
+ */
+export type DrawingStatus = 'unimportant' | 'active' | 'finished';
+
 export interface DrawingDoc {
   id: string;
   name: string;
+  /** absent on drawings saved before statuses existed, which read as active */
+  status?: DrawingStatus;
   /** epoch ms of the last edit */
   updatedAt: number;
   pieces: Piece[];
@@ -273,7 +304,9 @@ export type DialogState =
   | { kind: 'errors' }
   | { kind: 'password' }
   | { kind: 'display-settings' }
+  | { kind: 'settings' }
   | { kind: 'remaining' }
+  | { kind: 'project'; docId: string }
   | { kind: 'export'; tab: 'pdf' | 'json' }
   | { kind: 'drawing-size' }
   | { kind: 'shortcuts' }

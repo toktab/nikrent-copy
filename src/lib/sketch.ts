@@ -99,6 +99,32 @@ export function distanceToPath(path: SketchPath, at: Point): number {
   return best;
 }
 
+/**
+ * Every line joined to `id`, itself included, through any chain of lines that
+ * touch - an end, or any junction, lying on another line.
+ *
+ * A face drawn in several strokes, or a wall hung off the side of another, is
+ * one thing to the person who drew it, and Shift + click picks it up whole.
+ * Two lines merely running side by side, the two faces of a wall, do not
+ * touch, so the inner square and the outer one stay apart.
+ */
+export function connectedLines(paths: SketchPath[], id: string, tolerance = 0.5): string[] {
+  const touches = (a: SketchPath, b: SketchPath) =>
+    a.points.some((p) => distanceToPath(b, p) <= tolerance) ||
+    b.points.some((p) => distanceToPath(a, p) <= tolerance);
+  const found = new Set<string>([id]);
+  const queue = paths.filter((p) => p.id === id);
+  while (queue.length) {
+    const here = queue.shift()!;
+    for (const other of paths) {
+      if (found.has(other.id) || !touches(here, other)) continue;
+      found.add(other.id);
+      queue.push(other);
+    }
+  }
+  return paths.filter((p) => found.has(p.id)).map((p) => p.id);
+}
+
 /** The path nearest `at`, within `tolerance` cm, or none. */
 export function pathAt(paths: SketchPath[], at: Point, tolerance: number): SketchPath | null {
   let best: SketchPath | null = null;

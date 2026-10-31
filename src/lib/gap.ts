@@ -164,7 +164,7 @@ export function faceBands(
     });
   }
 
-  const isThickness = (v: number) => Math.abs(v - m.depth) <= 0.5;
+  const isThickness = (v: number) => Math.abs(v - planH(m)) <= 0.5;
   const flat = isThickness(rect.h);
   const upright = isThickness(rect.w);
   if (flat && !upright) return [{ axis: 'u', from: rect.y, to: y1 }];

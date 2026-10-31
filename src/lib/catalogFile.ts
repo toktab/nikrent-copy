@@ -318,6 +318,7 @@ export function parseLayoutFile(text: string): ParsedLayout {
       rot,
       // elevation is optional; files written before it existed sit on the ground
       z: Math.max(0, num(r.z, 0)),
+      ...(r.auto === true ? { auto: true as const } : {}),
     });
   }
 

@@ -27,7 +27,30 @@ export const MAX_ZOOM = 8;
  * Everything that positions or hit-tests a piece must go through these two.
  */
 export const planW = (m: Material): number => m.w;
-export const planH = (m: Material): number => m.depth;
+export const planH = (m: Material): number =>
+  panelDepthOverride !== null && (m.category === 'panel' || m.category === 'filler')
+    ? panelDepthOverride
+    : m.category === 'post'
+      ? // A დგარი is drawn as the strut it is, out from the face to its foot -
+        // see `postReach` in posts.ts, which this has to agree with.
+        Math.max(m.depth, Math.round(Math.max(m.w, m.h) / 2))
+      : m.depth;
+
+/**
+ * The thickness every panel and ჩაკერება is drawn at, whatever its catalog
+ * entry says - the პარამეტრები window's "ელემენტის სისქე" (10 cm unless
+ * changed). Null means each material's own `depth`, which is what the tests
+ * and the pure library code see unless they set it.
+ *
+ * A module setting rather than an edit to the catalog: the catalog is the
+ * company's and syncs to everyone, this is how one person wants the plan
+ * drawn, and every plan size already goes through `planH`.
+ */
+let panelDepthOverride: number | null = null;
+
+export function setPanelDepthOverride(cm: number | null): void {
+  panelDepthOverride = cm !== null && Number.isFinite(cm) && cm > 0 ? cm : null;
+}
 
 export function worldToScreen(wx: number, wy: number, v: ViewTransform) {
   return { x: wx * v.zoom + v.panX, y: wy * v.zoom + v.panY };
@@ -83,6 +106,29 @@ export function pieceBounds(piece: Piece, m: Material): Rect {
   return { x: cx - w / 2, y: cy - h / 2, w, h };
 }
 
+/**
+ * A piece turned to `rot`, about its centre, and then settled onto whole cm.
+ *
+ * Turning about the centre is right, but it moves the footprint by half the
+ * difference between width and thickness - 25.5 cm for a 60 × 9 panel. Every
+ * panel turned on its side came to rest half a centimetre off the grid and off
+ * every square piece beside it, and from there edge snapping pulled the next
+ * piece onto the stray half too. Only a square turn is settled: at any other
+ * angle the footprint is not a box that has edges to put on the grid.
+ */
+export function rotatedOnGrid(piece: Piece, m: Material, rot: number): Piece {
+  const turned = { ...piece, rot: normalizeRot(rot) };
+  if (turned.rot % 90 !== 0) return turned;
+  // Exact at a square turn - the trigonometric extent carries 1e-15 of noise
+  // that would leave the result a hair off the whole number it is meant to be.
+  const pw = planW(m);
+  const ph = planH(m);
+  const onSide = turned.rot % 180 === 90;
+  const bx = piece.x + pw / 2 - (onSide ? ph : pw) / 2;
+  const by = piece.y + ph / 2 - (onSide ? pw : ph) / 2;
+  return { ...turned, x: piece.x + Math.round(bx) - bx, y: piece.y + Math.round(by) - by };
+}
+
 /** Bounding box that contains every placed piece (null when nothing is placed). */
 export function contentBounds(
   pieces: Piece[],
@@ -128,7 +174,9 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
   const boxes = pieces
     .map((p) => {
       const m = byId.get(p.materialId);
-      if (!m || isLinear(m)) return null;
+      // A კონექტორი sits ON the joint, over both of the pieces it joins, and
+      // the nuts up a rod end stand one above the other.
+      if (!m || isLinear(m) || isConnector(m) || isNut(m) || isLatch(m)) return null;
       return { id: p.id, box: pieceBounds(p, m) };
     })
     .filter((v): v is { id: string; box: Rect } => v !== null);
@@ -183,31 +231,69 @@ export function computeEdgeSnap(
   targets: SnapRect[],
   tolerance: number,
 ): EdgeSnap {
-  const movingX = [moving.x, moving.x + moving.w / 2, moving.x + moving.w, ...(moving.xLines ?? [])];
-  const movingY = [moving.y, moving.y + moving.h / 2, moving.y + moving.h, ...(moving.yLines ?? [])];
+  /**
+   * Edges meet edges and centres meet centres - never one with the other.
+   *
+   * Pairing every line with every line made centres into traps. An inner panel
+   * dragged down to a 20 × 20 corner caught its top edge on the corner's
+   * centre, 1 cm short of the leg it has to sit flush with, and a panel run
+   * along a drawn line caught its centre on the line and sat half inside the
+   * pour. Each was "snapped", so nothing looked wrong until the joints were
+   * compared, and once one piece was off the next one snapped to it. A face
+   * never belongs on another piece's middle; only middle to middle means
+   * something - centring one thing on another, which needs the two to share a
+   * run. Centred on a panel at the far end of the drawing, it is just one more
+   * stray line to land on.
+   *
+   * On an equal pull an edge beats a centre.
+   */
+  const movingX = { edges: [moving.x, moving.x + moving.w, ...(moving.xLines ?? [])], centre: moving.x + moving.w / 2 };
+  const movingY = { edges: [moving.y, moving.y + moving.h, ...(moving.yLines ?? [])], centre: moving.y + moving.h / 2 };
 
-  let bestX: { delta: number; line: number } | null = null;
-  let bestY: { delta: number; line: number } | null = null;
+  let bestX: { delta: number; line: number; centre: boolean } | null = null;
+  let bestY: { delta: number; line: number; centre: boolean } | null = null;
+
+  const better = (
+    best: { delta: number; centre: boolean } | null,
+    delta: number,
+    centre: boolean,
+  ): boolean => {
+    if (Math.abs(delta) > tolerance) return false;
+    if (!best) return true;
+    const d = Math.abs(delta) - Math.abs(best.delta);
+    return d < -1e-9 || (Math.abs(d) <= 1e-9 && best.centre && !centre);
+  };
 
   for (const t of targets) {
-    const targetX = [t.x, t.x + t.w / 2, t.x + t.w, ...(t.xLines ?? [])];
-    const targetY = [t.y, t.y + t.h / 2, t.y + t.h, ...(t.yLines ?? [])];
+    // A drawn leg is a zero-thickness rectangle: its middle is a point half
+    // way along a wall, not a line anything is set out from.
+    const solid = t.w > 0 && t.h > 0;
+    const besideX = t.y < moving.y + moving.h + tolerance && moving.y < t.y + t.h + tolerance;
+    const besideY = t.x < moving.x + moving.w + tolerance && moving.x < t.x + t.w + tolerance;
+    const targetX = {
+      edges: [t.x, t.x + t.w, ...(t.xLines ?? [])],
+      centre: solid && besideX ? t.x + t.w / 2 : null,
+    };
+    const targetY = {
+      edges: [t.y, t.y + t.h, ...(t.yLines ?? [])],
+      centre: solid && besideY ? t.y + t.h / 2 : null,
+    };
 
-    for (const mx of movingX) {
-      for (const tx of targetX) {
-        const delta = tx - mx;
-        if (Math.abs(delta) <= tolerance && (!bestX || Math.abs(delta) < Math.abs(bestX.delta))) {
-          bestX = { delta, line: tx };
-        }
+    for (const mx of movingX.edges) {
+      for (const tx of targetX.edges) {
+        if (better(bestX, tx - mx, false)) bestX = { delta: tx - mx, line: tx, centre: false };
       }
     }
-    for (const my of movingY) {
-      for (const ty of targetY) {
-        const delta = ty - my;
-        if (Math.abs(delta) <= tolerance && (!bestY || Math.abs(delta) < Math.abs(bestY.delta))) {
-          bestY = { delta, line: ty };
-        }
+    if (targetX.centre !== null && better(bestX, targetX.centre - movingX.centre, true)) {
+      bestX = { delta: targetX.centre - movingX.centre, line: targetX.centre, centre: true };
+    }
+    for (const my of movingY.edges) {
+      for (const ty of targetY.edges) {
+        if (better(bestY, ty - my, false)) bestY = { delta: ty - my, line: ty, centre: false };
       }
+    }
+    if (targetY.centre !== null && better(bestY, targetY.centre - movingY.centre, true)) {
+      bestY = { delta: targetY.centre - movingY.centre, line: targetY.centre, centre: true };
     }
   }
 
@@ -233,6 +319,30 @@ export function unionRect(rects: Rect[]): Rect | null {
     maxY = Math.max(maxY, r.y + r.h);
   }
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+/**
+ * A კუთხის კონექტორი - the clamp that joins two pieces at a joint.
+ *
+ * Found by name, like the inner corner, because a company's own catalog has
+ * its own ids, and its own idea of which group it belongs in. A bar with the
+ * word in its name is not one - a connector is a fitting, not a length.
+ */
+export function isConnector(m: Material): boolean {
+  return m.name.includes('კონექტორ') && !isLinear(m);
+}
+
+/** A ქანჩი + დისკო - the nut and washer on a შტირი end; see `lib/bolts.ts`. */
+export function isNut(m: Material): boolean {
+  return m.name.includes('ქანჩი') && m.name.includes('დისკო');
+}
+
+/**
+ * A ჩამკეტი fix - the wing nut that locks a ქანჩი + დისკო on a შტირი. Not
+ * the adjustable one, which is a different fitting.
+ */
+export function isLatch(m: Material): boolean {
+  return m.name.includes('ჩამკეტი') && m.name.toLowerCase().includes('fix');
 }
 
 /** True for materials measured by length (walers, tie rods, posts). */
@@ -273,11 +383,16 @@ export function drawStep(snap: boolean, snapStep: number): number {
  *
  * It steps up as the drawing is zoomed out, at the point where the lines would
  * be closer together than they are wide and the surface would go grey.
+ *
+ * `base` is the move step from პარამეტრები: one square is one step (the
+ * user, 2026-10-30 - "one box on the scheme is 5 cm"), so the square is that
+ * size for as long as it can be seen at all.
  */
-export function gridStep(zoom: number): number {
-  const steps = [DRAW_STEP_CM, 10, 20, 50, GRID_MAJOR_CM, 200, 500];
-  const target = 4.5 / zoom;
-  return steps.find((s) => s >= target) ?? 500;
+export function gridStep(zoom: number, base: number = DRAW_STEP_CM): number {
+  const first = Math.max(DRAW_STEP_CM, base);
+  const steps = [1, 2, 4, 10, 20, 40, 100].map((k) => first * k);
+  const target = 3 / zoom;
+  return steps.find((s) => s >= target) ?? steps[steps.length - 1];
 }
 
 /** Ruler step that keeps ticks ≈70 px apart at the current zoom. */

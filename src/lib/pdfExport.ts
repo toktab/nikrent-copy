@@ -1,23 +1,19 @@
 import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import type { jsPDF } from 'jspdf';
 import type { Bom } from './bom';
 import { fmtNum, sizeLabel } from './bom';
-import { stampedName } from './files';
 
 /**
  * The BOM *text* is rendered as ordinary HTML and rasterised with html2canvas
  * before being placed into the PDF. That keeps Georgian typography correct —
  * jsPDF's built-in fonts have no Georgian glyphs — and lets us reuse normal CSS.
  *
- * The drawing snapshot deliberately does NOT go through html2canvas: it is
- * already a PNG, and making html2canvas re-load and re-rasterise a multi-megapixel
- * data URL made the export take many seconds. It is handed straight to
- * `pdf.addImage()` instead, which is both faster and sharper.
+ * The list goes after the drawing sheet (`drawingPdf`), which is a PNG of its
+ * own handed straight to `pdf.addImage()` - never through html2canvas, which
+ * took many seconds to re-rasterise a multi-megapixel image.
  */
 export interface PdfOptions {
   bom: Bom;
-  /** PNG data URL from renderLayoutSnapshot(), or null */
-  snapshot?: string | null;
   title?: string;
 }
 
@@ -114,9 +110,6 @@ const PRINT_CSS = `
     border-bottom:2px solid #1b1f24;padding-bottom:10px;margin-bottom:18px;}
   .doc h1{font-size:20px;margin:0;font-weight:700;}
   .doc .meta{font-size:12px;color:#5c6572;}
-  .doc figure{margin:0 0 20px;text-align:center;}
-  .doc figure img{max-width:100%;border:1px solid #d5dae1;border-radius:6px;}
-  .doc figcaption{font-size:11px;color:#7a8492;margin-top:5px;}
   .doc .cards{display:flex;gap:10px;margin-bottom:18px;}
   .doc .card{flex:1;border:1px solid #dfe4ea;border-radius:8px;padding:9px 12px;background:#f7f9fb;}
   .doc .card span{display:block;font-size:10px;color:#6b7480;text-transform:uppercase;letter-spacing:.5px;}
@@ -169,25 +162,10 @@ export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: b
     const pageH = pdf.internal.pageSize.getHeight();
     const contentW = pageW - margin * 2;
 
-    // The drawing goes on first, straight from its PNG, capped at half a page
-    // so the materials list still starts on page 1.
-    let topOffset = margin;
-    if (options.snapshot) {
-      const props = pdf.getImageProperties(options.snapshot);
-      const ratio = props.height / props.width;
-      const maxH = (pageH - margin * 2) * 0.5;
-      const drawH = Math.min(contentW * ratio, maxH);
-      const drawW = drawH / ratio;
-      // 'FAST' = Flate-compress the bitmap. Without it jsPDF embeds raw pixels
-      // and a single drawing pushes the file past 20 MB.
-      pdf.addImage(options.snapshot, 'PNG', margin, topOffset, drawW, drawH, undefined, 'FAST');
-      topOffset += drawH + 5;
-    }
-
-    // Slice the rasterised table across pages; page 1 starts below the drawing.
+    // Slice the rasterised table across pages.
     const pxPerMm = canvas.width / contentW;
     let y = 0;
-    let startY = topOffset;
+    let startY = margin;
     while (y < canvas.height) {
       const availableMm = pageH - margin - startY;
       const sliceHpx = Math.max(1, Math.floor(availableMm * pxPerMm));
@@ -220,11 +198,4 @@ export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: b
     host.remove();
     style.remove();
   }
-}
-
-/** Builds the printable table off-screen, rasterises it and paginates onto A4. */
-export async function exportBomToPdf(options: PdfOptions): Promise<void> {
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  await appendBomPages(pdf, options, false);
-  pdf.save(stampedName('du-bom', 'pdf'));
 }

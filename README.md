@@ -60,7 +60,7 @@ src/
     bom.ts               live bill-of-materials aggregation
     excelExport.ts       SheetJS: BOM → .xlsx / .csv, catalog → .xlsx
     pdfExport.ts         html2canvas + jsPDF: printable BOM, paginated onto A4
-    snapshot.ts          renders the drawing to a PNG for the PDF
+    drawingPdf.ts        the printed sheet: drawing, ჭანჭიკები, key, title block
     sheetImport.ts       SheetJS: bulk component import + validation
     catalogFile.ts       catalog/layout JSON export + import (incl. v1 layouts)
     files.ts             download / file-picker helpers
@@ -288,8 +288,8 @@ edges stay parallel and the view keeps a measurable, CAD-like feel. Faces are ba
 culled by testing their outward normal against the view direction.
 
 **Shapes are extruded, not boxed.** The footprint comes from `planOutline` in
-`lib/shapePath.ts` — the single source the on-screen SVG, the PDF snapshot, the printed
-drawing and the 3D view all share — so an L-corner is extruded as an actual L. Extruding its
+`lib/shapePath.ts` — the single source the on-screen SVG, the printed drawing and the 3D
+view all share — so an L-corner is extruded as an actual L. Extruding its
 bounding box instead drew corners as plain squares and filled in the notch the panels tuck
 into. Everything is derived from the outline's winding: read as the top ring it faces +Z, the
 base is that ring reversed, and each wall follows one outline edge, which puts the outward
@@ -412,7 +412,9 @@ the classic mistake: it put a 300 cm panel 150 cm away from the pointer.
   In stock, Remaining, Unit price, Line total, Weight` (bilingual headers), plus a second
   summary sheet. **⤓ CSV** writes the same list with a UTF-8 BOM so Excel renders Georgian
   correctly. This is the internal sheet, so it keeps the stock columns.
-* **⤓ PDF** — printable A4 table, optionally with a snapshot of the drawing above it.
+* **PDF…** — opens the one export window, with the parts list switched on: every PDF in
+  the app comes out of that window (`ExportDialog`, `lib/drawingPdf.ts`), so the list is
+  printed after the same to-scale sheet - ჭანჭიკები, key and title block - as any other print.
 
   The PDF is the **handout**, not the internal sheet: its columns are
   `კომპონენტი, ზომა, რაოდ., სიგრძე, წონა`. Stock and remaining are deliberately absent —
@@ -423,16 +425,13 @@ the classic mistake: it put a 300 cm panel 150 cm away from the pointer.
 
   The table is laid out as HTML and rasterised with html2canvas before being placed into
   jsPDF: jsPDF's built-in fonts have no Georgian glyphs, so drawing text directly would
-  produce garbage. The drawing snapshot is rendered by a dedicated 2D-canvas routine
-  (`lib/snapshot.ts`) rather than screenshotting the live stage, so the printout gets a
-  clean light background with no rulers or selection chrome, independent of how the user
-  happened to be zoomed.
-
-  The snapshot goes into the PDF through `pdf.addImage()` and deliberately **not** through
-  html2canvas — making html2canvas re-load and re-rasterise a multi-megapixel data URL took
-  the export from 2 seconds to effectively hanging. Both the snapshot and the table slices
-  are added with Flate compression (`'FAST'`); without it a single drawing produced a 20 MB
-  file instead of ~140 KB.
+  produce garbage. The drawing sheet is drawn with the screen's own SVG components
+  (`components/PdfSheetSvg.tsx`) and its text written over it on a canvas, so it cannot
+  drift from the plan; it goes into the PDF through `pdf.addImage()` and deliberately
+  **not** through html2canvas — making html2canvas re-load and re-rasterise a
+  multi-megapixel data URL took the export from 2 seconds to effectively hanging. The sheet
+  and the table slices are added with Flate compression (`'FAST'`); without it a single
+  drawing produced a 20 MB file.
 
 ### 4 — Inventory
 

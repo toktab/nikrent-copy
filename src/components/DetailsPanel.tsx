@@ -9,6 +9,7 @@ import { legAngle, legLength, pathLength, segments } from '../lib/sketch';
 import { keepWheelOffNumber } from '../lib/numberField';
 import type { SketchPath } from '../types';
 import { LengthCheckPanel } from './LengthCheckPanel';
+import { findWallMate } from '../lib/wallPen';
 
 /** Inspector for the current selection — one piece in detail, or a group summary. */
 export function DetailsPanel() {
@@ -48,8 +49,9 @@ export function DetailsPanel() {
         ჯობია მისი შევსება. ელემენტის მონიშნვით - მისი დეტალები.
         <br />
         <br />
-        ცარიელ ადგილას თრევით მონიშნავ რამდენიმეს ერთდროულად; <kbd>Shift</kbd> + დაწკაპუნება
-        ამატებს ან აკლებს.
+        ცარიელ ადგილას თრევით მონიშნავ რამდენიმეს ერთდროულად. ხაზზე <kbd>Shift</kbd> +
+        დაწკაპუნება მონიშნავს მასთან შეერთებულ ყველა ხაზს; <kbd>Ctrl</kbd> + დაწკაპუნება თითო
+        ხაზს ამატებს ან აკლებს.
       </div>
     );
   }
@@ -97,6 +99,10 @@ export function DetailsPanel() {
         <div className="kv">
           <span className="k">გადაწევა სიმაღლეზე</span>
           <NudgeElevation />
+        </div>
+        <div className="kv">
+          <span className="k">დასმულია</span>
+          <OriginField pieces={selectedPieces} />
         </div>
         {[...counts.entries()].map(([materialId, n]) => {
           const m = materials.find((x) => x.id === materialId);
@@ -149,6 +155,10 @@ export function DetailsPanel() {
       <div className="kv">
         <span className="k">სიმაღლე ძირიდან</span>
         <ElevationField z={piece.z ?? 0} />
+      </div>
+      <div className="kv">
+        <span className="k">დასმულია</span>
+        <OriginField pieces={[piece]} />
       </div>
       <div className="kv">
         <span className="k">მარაგი</span>
@@ -305,6 +315,37 @@ function RecommendButton() {
   );
 }
 
+/**
+ * By hand or by the fill - see `Piece.auto`. Two buttons rather than a
+ * checkbox: a mixed selection is neither, and either button makes it one.
+ */
+function OriginField({ pieces }: { pieces: Array<{ auto?: true }> }) {
+  const setSelectedAuto = useEditorStore((s) => s.setSelectedAuto);
+  const auto = pieces.filter((p) => p.auto).length;
+  const allAuto = auto === pieces.length;
+  const allHand = auto === 0;
+  return (
+    <span className="pen-face">
+      <button
+        className={`btn small${allHand ? ' engaged' : ''}`}
+        aria-pressed={allHand}
+        onClick={() => setSelectedAuto(false)}
+        title="ხელით დასმული - შევსება მას არ შეცვლის, როცა „ხელით დასმულის შენარჩუნება“ ჩართულია"
+      >
+        ხელით
+      </button>
+      <button
+        className={`btn small${allAuto ? ' engaged' : ''}`}
+        aria-pressed={allAuto}
+        onClick={() => setSelectedAuto(true)}
+        title="ავტომატური - შევსება მას თავისუფლად ჩაანაცვლებს"
+      >
+        ავტომატური
+      </button>
+    </span>
+  );
+}
+
 function SketchDetails({ path }: { path: SketchPath }) {
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
@@ -350,6 +391,7 @@ function SketchDetails({ path }: { path: SketchPath }) {
           ))}
         </span>
       </div>
+      <WallSideRow path={path} />
       {part?.pathId === path.id && part.kind === 'vertex' && (
         <div className="kv">
           <span className="k">კვანძი</span>
@@ -452,6 +494,8 @@ function LegField({
         step="any"
         value={value}
         disabled={locked}
+        data-leg-field={`${pathId}:${index}`}
+        title="მონაკვეთის ზუსტი სიგრძე - აკრიფე და Enter. ნახაზზე მონაკვეთზე ორჯერ დაწკაპუნება აქ მოგიყვანს"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
         onWheel={keepWheelOffNumber}
@@ -514,6 +558,30 @@ function AngleField({
  * meant retyping the same thickness and height for each and adding the
  * summaries up by hand, and until now the inspector showed nothing here at all.
  */
+/**
+ * A wall drawn with the კედელი pen is a line and its mate a thickness to one
+ * side. Which side was the pen's guess; this puts the wall - its body and its
+ * second face - on the other side of the line, and the panels with it.
+ */
+function WallSideRow({ path, only }: { path: SketchPath; only?: string }) {
+  const sketch = useEditorStore((s) => s.sketch);
+  const flipWallSide = useEditorStore((s) => s.flipWallSide);
+  const found = useMemo(() => findWallMate(path, sketch), [path, sketch]);
+  if (!found || (only && found.mate.id !== only)) return null;
+  return (
+    <div className="kv">
+      <span className="k">კედელი · {found.thickness} სმ</span>
+      <button
+        className="btn small"
+        onClick={() => flipWallSide(path.id)}
+        title="კედლის სისქე და მეორე მხარე ხაზის მეორე მხარეს გადავა - პანელებიც შესაბამისად"
+      >
+        <Icon name="rotate-cw" /> მეორე მხარეს
+      </button>
+    </div>
+  );
+}
+
 function SketchGroupDetails({ paths }: { paths: SketchPath[] }) {
   const openDialog = useEditorStore((s) => s.openDialog);
   const deleteSelected = useEditorStore((s) => s.deleteSelected);
@@ -540,6 +608,7 @@ function SketchGroupDetails({ paths }: { paths: SketchPath[] }) {
           {legs} · {turns} კუთხე
         </span>
       </div>
+      {paths.length === 2 && <WallSideRow path={paths[0]} only={paths[1].id} />}
 
       <div className="row-actions">
         <button

@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
+  Category,
   ArrayOptions,
   ColumnSpec,
   WallRunSpec,
   DialogState,
   DocSnapshot,
   DrawingDoc,
+  DrawingStatus,
   HiddenLineMode,
   InspectorTab,
   Material,
@@ -18,16 +20,21 @@ import type {
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
 import { withCompanyWeights } from '../data/companyWeights';
-import { normalizeWallThickness, wallPartner } from '../lib/wallPen';
+import { findWallMate, flipWall, normalizeWallThickness, wallPartner } from '../lib/wallPen';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
   computeEdgeSnap,
   DRAW_STEP_CM,
   drawStep,
+  isConnector,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
+  planH,
+  planW,
+  rotatedOnGrid,
+  setPanelDepthOverride,
   snapValue,
   unionRect,
 } from '../lib/geometry';
@@ -54,7 +61,46 @@ import {
   type SketchFillSpec,
 } from '../lib/sketchFill';
 import { faceBands } from '../lib/gap';
+import {
+  CONNECTOR_SNAP_PX,
+  fittingStack,
+  isFitting,
+  isLatch,
+  isRod,
+  latchMaterial,
+  latchStack,
+  nutMaterial,
+  pieceCentre,
+  resetBolts,
+  rodMaterialFor,
+  rodSpot,
+  rodStack,
+  rodStackOf,
+  snapConnector,
+  snapLatch,
+  snapNut,
+  snapRod,
+  withBoltOff,
+  withRodOff,
+  ALL_BOLT_KINDS,
+  type Bolt,
+  type BoltKinds,
+  type LatchSpot,
+  type Rod,
+  type RodEnd,
+  type RodSpot,
+} from '../lib/bolts';
+import { boltKindOf, normalizeBoltKinds } from '../lib/boltMarks';
+import {
+  DEFAULT_PANEL_DEPTH_CM,
+  isMaterialShown,
+  normalizeObjectVisibility,
+  normalizePanelDepth,
+  type ObjectVisibility,
+} from '../lib/objectVisibility';
+import { materializeBolts, replacePieces, type SelectTarget } from '../lib/replace';
 import { choiceFromVariant, type Variant } from '../lib/fillOptions';
+import { DEFAULT_LAYOUT_FILTERS, normalizeLayoutFilters, type LayoutFilters } from '../lib/layoutSolver';
 import {
   isElevation,
   projectPiece,
@@ -85,6 +131,7 @@ import { scaleMeasures, scaleSketch, sketchBounds } from '../lib/scaleSketch';
 import {
   DEFAULT_JSON_EXPORT,
   normalizeJsonExport,
+  normalizePdfScale,
   normalizeSheetSize,
   type JsonExportOptions,
   type SheetSize,
@@ -137,11 +184,16 @@ const PREF_KEYS = [
   'lengthVisibility',
   'pdfVisibility',
   'pdfSheet',
+  'pdfScale',
   'jsonExport',
   'showNames',
   'forceLabels',
   'showOverlaps',
   'showGaps',
+  'showBolts',
+  'boltsShown',
+  'objectVisibility',
+  'panelDepth',
   'showSketch',
   'measureStyle',
   'viewMode',
@@ -152,7 +204,7 @@ const PREF_KEYS = [
   'inspectorTab',
   'simpleMode',
   'fillDefaults',
-  'wallThickness',
+  'layoutFilters',
   'tourSeen',
 ] as const;
 
@@ -255,6 +307,8 @@ export interface EditorState {
   pdfVisibility: PdfVisibility;
   /** the paper the drawing is exported on */
   pdfSheet: SheetSize;
+  /** the scale it is printed at; 0 = ავტომატური, fitted to the sheet */
+  pdfScale: number;
   /** what the exported drawing file carries - see `JsonExportOptions` */
   jsonExport: JsonExportOptions;
   showNames: boolean;
@@ -275,6 +329,14 @@ export interface EditorState {
   inspectorTab: InspectorTab;
   /** mark every open gap, not only the one beside the selection */
   showGaps: boolean;
+  /** mark where a კონექტორი goes - T-joints, inner corners on a ჩაკერება 5 / 10 */
+  showBolts: boolean;
+  /** each ჭანჭიკი kind shown on the plan or not - marks and placed pieces alike */
+  boltsShown: BoltKinds;
+  /** which kinds of thing the plan draws - see `ObjectVisibility` */
+  objectVisibility: ObjectVisibility;
+  /** the thickness every panel and ჩაკერება is drawn at, cm - see `setPanelDepthOverride` */
+  panelDepth: number;
   /**
    * Simple mode: only what drawing and filling need stays on screen - drawing,
    * measuring, the parts, the recommendation tab. Everything else comes back
@@ -283,6 +345,12 @@ export interface EditorState {
   simpleMode: boolean;
   /** the pour height and corner setting fills open with - see `lib/fillDefaults` */
   fillDefaults: { height: number; includeCorners: boolean };
+  /**
+   * The layout solver's filters - crossing line ends, lapping outside
+   * corners, sizes to spare, keeping placed pieces. Shared by the
+   * recommendation tab and ყველას შევსება, remembered like `fillDefaults`.
+   */
+  layoutFilters: LayoutFilters;
   /** the pen draws both faces of a wall this thick apart; null draws single lines */
   wallThickness: number | null;
   /** the first-visit tour has been seen (or closed) */
@@ -377,7 +445,9 @@ export interface EditorState {
   selectAll: () => void;
 
   // ── actions: pieces ──
-  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number) => void;
+  addPiece: (materialId: string, worldX: number, worldY: number, worldZ?: number, rot?: number) => void;
+  /** mark the selected pieces as placed by hand (false) or by the fill (true) - see `Piece.auto` */
+  setSelectedAuto: (auto: boolean) => void;
   setDraggingMaterial: (materialId: string | null) => void;
   beginDrag: () => void;
   /**
@@ -491,6 +561,8 @@ export interface EditorState {
   newDocument: (name?: string) => void;
   switchDocument: (id: string) => void;
   renameDocument: (id: string, name: string) => void;
+  /** finished hands the drawing's parts back to every other drawing at once */
+  setDocumentStatus: (id: string, status: DrawingStatus) => void;
   duplicateDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
   setTitleBlock: (patch: Partial<Pick<DrawingDoc, 'projectName' | 'revision' | 'scale'>>) => void;
@@ -503,6 +575,10 @@ export interface EditorState {
   // ── actions: settings ──
   setSnap: (on: boolean) => void;
   setSnapStep: (step: number) => void;
+  /** show or hide a whole category, or one material, on the plan */
+  setObjectShown: (target: { category: Category } | { materialId: string }, shown: boolean) => void;
+  resetObjectVisibility: () => void;
+  setPanelDepth: (cm: number) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
   setShowLengths: (on: boolean) => void;
@@ -512,15 +588,47 @@ export interface EditorState {
   resetScreenDisplay: () => void;
   resetPdfVisibility: () => void;
   setPdfSheet: (sheet: SheetSize) => void;
+  setPdfScale: (scale: number) => void;
   setJsonExport: (patch: Partial<JsonExportOptions>) => void;
   resetJsonExport: () => void;
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
+  setShowBolts: (on: boolean) => void;
+  toggleBoltKind: (kind: keyof BoltKinds) => void;
+  /**
+   * Take hold of a worked-out კონექტორი mark: a real connector goes on that
+   * spot, selected, and the joint stops making a mark of its own - so moving
+   * the connector moves it, and deleting it removes it. One undo step.
+   * `add` keeps what was selected and adds the new piece - Ctrl + click.
+   */
+  takeBolt: (bolt: Bolt, materialId: string, add?: boolean) => void;
+  /** The same for a worked-out შტირი: a real rod of the length it needs goes there. */
+  takeRod: (rod: Rod, add?: boolean) => void;
+  /** The same for a worked-out ჩამკეტი fix: its column of real ones goes there. */
+  takeLatch: (spot: LatchSpot, add?: boolean) => void;
+  /** The same for a worked-out ქანჩი + დისკო: one for every rod up its end. */
+  takeNut: (end: RodEnd, add?: boolean) => void;
+  /**
+   * ჩანაცვლება -> select every piece of a catalog item, or every one of a
+   * ჭანჭიკი kind (its marks made real pieces first, so they can be). One undo step.
+   */
+  selectAllOf: (target: SelectTarget) => void;
+  /** ჩანაცვლება: the selected pieces become `materialId`, where they stand. */
+  replaceSelected: (materialId: string) => void;
+  /** A catalog rod let go on a rod spot: the whole stack that spot takes. */
+  placeRodStack: (materialId: string, spot: RodSpot) => void;
+  /** A catalog ქანჩი + დისკო let go on a rod end: one for every rod up it. */
+  placeNutStack: (materialId: string, end: RodEnd) => void;
+  /** A catalog ჩამკეტი fix let go on a panel joint: every one that joint takes. */
+  placeLatchStack: (materialId: string, spot: LatchSpot) => void;
+  /** ჭანჭიკები -> ავტომატურად თავიდან დასმა: the kinds asked, back where the rule puts them. */
+  resetBolts: (kinds?: BoltKinds) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
   setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
+  setLayoutFilters: (filters: LayoutFilters) => void;
   /** a wall thickness for the pen to draw both faces with, or null for single lines */
   setWallThickness: (thickness: number | null) => void;
   setTourSeen: (seen: boolean) => void;
@@ -580,6 +688,10 @@ export interface EditorState {
   setPenPerimeter: (perimeter: 'outer' | 'inner') => void;
   /** Change which face already-drawn runs are, and so which way they fill. */
   setSketchPerimeter: (pathIds: string[], perimeter: 'outer' | 'inner') => void;
+  /** a wall drawn as one line: its body, and so its other face, to the other side of this line */
+  flipWallSide: (pathId: string) => void;
+  /** Put finished lines on the drawing - the generated other face of a wall - and select them, as one undo step. */
+  addSketchPaths: (paths: SketchPath[]) => void;
   /** Add a vertex to the path in progress, already snapped by the caller. */
   penAddPoint: (x: number, y: number) => void;
   /** Drop the last vertex — the pen's own undo, mid-path. */
@@ -650,14 +762,25 @@ export interface EditorState {
     spec: SketchFillSpec,
     picks: Array<{ runKey: string; variant: Variant }>,
   ) => { added: number; warnings: string[] };
+  /**
+   * Build a layout solver variant: its pieces in, and - when it replaces what
+   * stood on the lines - the old ones out, as one undo step.
+   */
+  applyLayout: (add: Piece[], remove: string[]) => { added: number; removed: number };
 }
 
 const DEFAULT_VIEW = { zoom: 1, panX: 40, panY: 40 };
+
+function isDrawingStatus(value: unknown): value is DrawingStatus {
+  return value === 'unimportant' || value === 'active' || value === 'finished';
+}
 
 function newDoc(name: string, pieces: Piece[] = []): DrawingDoc {
   return {
     id: uid('doc'),
     name,
+    // A new drawing is a job until someone says otherwise.
+    status: 'active',
     updatedAt: Date.now(),
     pieces,
     sketch: [],
@@ -861,6 +984,7 @@ export const useEditorStore = create<EditorState>()(
         lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
         pdfVisibility: { ...DEFAULT_PDF_VISIBILITY },
         pdfSheet: 'A4',
+        pdfScale: 0,
         jsonExport: { ...DEFAULT_JSON_EXPORT },
         showNames: true,
         forceLabels: false,
@@ -873,8 +997,13 @@ export const useEditorStore = create<EditorState>()(
         inspectorOpen: typeof window === 'undefined' || window.innerWidth > 1100,
         inspectorTab: 'bom',
         showGaps: false,
+        showBolts: true,
+        boltsShown: { ...ALL_BOLT_KINDS },
+        objectVisibility: normalizeObjectVisibility(undefined),
+        panelDepth: DEFAULT_PANEL_DEPTH_CM,
         simpleMode: false,
         fillDefaults: { height: 300, includeCorners: true },
+        layoutFilters: { ...DEFAULT_LAYOUT_FILTERS },
         wallThickness: null,
         tourSeen: false,
         showSketch: true,
@@ -1004,11 +1133,23 @@ export const useEditorStore = create<EditorState>()(
         // Everything means everything: the layout is part of the drawing, and
         // "select all, move it over" is the commonest reason to want either.
         selectAll: () =>
-          set((s) => ({
-            selectedIds: s.pieces.map((p) => p.id),
-            selectedSketchIds: s.sketch.map((k) => k.id),
-            selectedSketchPart: null,
-          })),
+          set((s) => {
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
+            return {
+              // Not the ჭანჭიკები hidden from the plan - nothing unseen is selected.
+              selectedIds: s.pieces
+                .filter((p) => {
+                  const m = byId.get(p.materialId);
+                  if (!m) return true;
+                  const kind = boltKindOf(m);
+                  // Nor anything hidden from the plan in პარამეტრები.
+                  return kind ? s.boltsShown[kind] : isMaterialShown(s.objectVisibility, m);
+                })
+                .map((p) => p.id),
+              selectedSketchIds: s.sketch.map((k) => k.id),
+              selectedSketchPart: null,
+            };
+          }),
 
         // ── pieces ────────────────────────────────────────────────────────
         /**
@@ -1016,7 +1157,7 @@ export const useEditorStore = create<EditorState>()(
          * caller's job (see `dropPosition` in StageCanvas) so that the drop
          * preview and the placed piece can never disagree.
          */
-        addPiece: (materialId, worldX, worldY, worldZ = 0) =>
+        addPiece: (materialId, worldX, worldY, worldZ = 0, rot = 0) =>
           commit((s) => {
             if (!s.materials.some((m) => m.id === materialId)) return {};
             const piece: Piece = {
@@ -1024,10 +1165,39 @@ export const useEditorStore = create<EditorState>()(
               materialId,
               x: worldX,
               y: worldY,
-              rot: 0,
+              rot,
               z: Math.max(0, worldZ),
             };
-            return { pieces: [...s.pieces, piece], selectedIds: [piece.id] };
+            // A kind hidden from the plan comes back on for the one just put
+            // down: placing something you then cannot see looks like nothing
+            // happened, and invites placing it again.
+            const m = s.materials.find((mm) => mm.id === materialId)!;
+            const hidden = !boltKindOf(m) && !isMaterialShown(s.objectVisibility, m);
+            return {
+              pieces: [...s.pieces, piece],
+              selectedIds: [piece.id],
+              ...(hidden
+                ? {
+                    objectVisibility: {
+                      ...s.objectVisibility,
+                      materials: { ...s.objectVisibility.materials, [materialId]: true },
+                    },
+                  }
+                : {}),
+            };
+          }),
+
+        setSelectedAuto: (auto) =>
+          commit((s) => {
+            const picked = new Set(s.selectedIds);
+            return {
+              pieces: s.pieces.map((p) => {
+                if (!picked.has(p.id) || !!p.auto === auto) return p;
+                if (auto) return { ...p, auto: true as const };
+                const { auto: _auto, ...rest } = p;
+                return rest;
+              }),
+            };
           }),
 
         setDraggingMaterial: (materialId) => set({ draggingMaterialId: materialId }),
@@ -1064,6 +1234,125 @@ export const useEditorStore = create<EditorState>()(
             //    nothing better is in reach — see below.
             const gridDu = snapValue(duCm, s.snapStep, s.snap && !freehand);
             const gridDv = snapValue(dvCm, s.snapStep, s.snap && !freehand);
+
+            /**
+             * A კონექტორი on its own goes from joint to joint.
+             *
+             * It sits ON the seam between two pieces, so lining its box up with
+             * their edges - what the edge snap below does - would put it beside
+             * the joint rather than on it. Its middle snaps to the nearest joint
+             * in reach instead, and moves on the grid where there is none.
+             */
+            const alone = baseline.filter((p) => selected.has(p.id));
+            const cm = alone.length === 1 ? byId.get(alone[0].materialId) : undefined;
+            /**
+             * A შტირი stack - the rods one above the other at one spot, which
+             * is one thing on the plan - goes from rod spot to rod spot, turned
+             * to run across the wall it lands in and as many high as that wall
+             * takes (see `findRods`, `rodsUpHeight`). Loose, it moves on the
+             * grid as it was picked up.
+             */
+            const lifted = baseline.filter((p) => selected.has(p.id));
+            const rm = lifted.length ? byId.get(lifted[0].materialId) : undefined;
+            /** ქანჩი + დისკო the same way: from rod end to rod end, one for every rod up it, facing out. */
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isFitting(rm) &&
+              !sketchBaseline?.length &&
+              rodStackOf(lifted[0], lifted, byId).length === lifted.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const now = s.pieces.filter((p) => selected.has(p.id)).map((p) => p.id);
+              const end = snapNut(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                others,
+                byId,
+                CONNECTOR_SNAP_PX / s.zoom,
+              );
+              const stack = end
+                ? fittingStack(rm, end, now, uid)
+                : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: [...others, ...stack],
+                selectedIds: stack.map((p) => p.id),
+              };
+            }
+            /** ჩამკეტი fix too: from joint to joint, as many as the joint takes. */
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isLatch(rm) &&
+              !sketchBaseline?.length &&
+              rodStackOf(lifted[0], lifted, byId).length === lifted.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const now = s.pieces.filter((p) => selected.has(p.id)).map((p) => p.id);
+              const spot = snapLatch({ x: centre.x + duCm, y: centre.y + dvCm }, others, byId, CONNECTOR_SNAP_PX / s.zoom);
+              const stack = spot
+                ? latchStack(rm, spot, now, uid)
+                : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: [...others, ...stack],
+                selectedIds: stack.map((p) => p.id),
+              };
+            }
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isRod(rm) &&
+              !sketchBaseline?.length &&
+              rodStackOf(lifted[0], lifted, byId).length === lifted.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              // The stack may have grown or shrunk on a spot earlier in this
+              // drag, so what is selected now is what gets re-laid.
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const now = s.pieces.filter((p) => selected.has(p.id)).map((p) => p.id);
+              const spot = snapRod(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                others,
+                byId,
+                CONNECTOR_SNAP_PX / s.zoom,
+              );
+              const stack = spot
+                ? rodStack(rm, spot, now, uid)
+                : lifted.map((p) => ({ ...p, x: p.x + gridDu, y: p.y + gridDv }));
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: [...others, ...stack],
+                selectedIds: stack.map((p) => p.id),
+              };
+            }
+            if (view === 'plan' && !freehand && cm && isConnector(cm) && !sketchBaseline?.length) {
+              const base = alone[0];
+              const centre = pieceCentre(base, cm);
+              const others = s.pieces.filter((p) => p.id !== base.id);
+              const hit = snapConnector(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                others,
+                byId,
+                CONNECTOR_SNAP_PX / s.zoom,
+              );
+              const x = hit ? hit.x - planW(cm) / 2 : base.x + gridDu;
+              const y = hit ? hit.y - planH(cm) / 2 : base.y + gridDv;
+              const z = hit ? hit.z : (base.z ?? 0);
+              return {
+                guideX: null,
+                guideY: null,
+                pieces: s.pieces.map((p) => (p.id === base.id ? { ...p, x, y, z } : p)),
+              };
+            }
 
             /**
              * 2. edge snap: line the selection up with a piece already placed.
@@ -1297,11 +1586,14 @@ export const useEditorStore = create<EditorState>()(
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
             // Each piece turns about its own centre — what a drafter expects
-            // when nudging several panels at once.
+            // when nudging several panels at once — and lands on whole cm.
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
             return {
-              pieces: s.pieces.map((p) =>
-                selected.has(p.id) ? { ...p, rot: normalizeRot(p.rot + step) } : p,
-              ),
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const m = byId.get(p.materialId);
+                return m ? rotatedOnGrid(p, m, p.rot + step) : { ...p, rot: normalizeRot(p.rot + step) };
+              }),
             };
           }),
 
@@ -1311,8 +1603,13 @@ export const useEditorStore = create<EditorState>()(
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
             const rot = normalizeRot(deg);
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
             return {
-              pieces: s.pieces.map((p) => (selected.has(p.id) ? { ...p, rot } : p)),
+              pieces: s.pieces.map((p) => {
+                if (!selected.has(p.id)) return p;
+                const m = byId.get(p.materialId);
+                return m ? rotatedOnGrid(p, m, rot) : { ...p, rot };
+              }),
             };
           }),
 
@@ -1410,7 +1707,8 @@ export const useEditorStore = create<EditorState>()(
           const plan = planColumn(spec, get().materials);
           if (plan.pieces.length) {
             commit((s) => ({
-              pieces: [...s.pieces, ...plan.pieces],
+              // Marked as the fill's, so a later fill may replace them.
+              pieces: [...s.pieces, ...plan.pieces.map((p): Piece => ({ ...p, auto: true }))],
               selectedIds: plan.pieces.map((p) => p.id),
             }));
           }
@@ -1710,6 +2008,13 @@ export const useEditorStore = create<EditorState>()(
             ),
           })),
 
+        // Not an undo step: undo restores drawing content, and a status is a
+        // fact about the job. Same as a rename.
+        setDocumentStatus: (id, status) =>
+          set((s) => ({
+            documents: s.documents.map((d) => (d.id === id && d.status !== status ? { ...d, status } : d)),
+          })),
+
         duplicateDocument: (id) =>
           set((s) => {
             const source = s.documents.find((d) => d.id === id);
@@ -1824,10 +2129,13 @@ export const useEditorStore = create<EditorState>()(
           set({
             showLengths: true,
             lengthVisibility: { ...DEFAULT_LENGTH_VISIBILITY },
+            showBolts: true,
+            boltsShown: { ...ALL_BOLT_KINDS },
             measureStyle: { ...DEFAULT_MEASURE_STYLE },
           }),
-        resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY } }),
+        resetPdfVisibility: () => set({ pdfVisibility: { ...DEFAULT_PDF_VISIBILITY }, pdfScale: 0 }),
         setPdfSheet: (sheet) => set({ pdfSheet: normalizeSheetSize(sheet) }),
+        setPdfScale: (scale) => set({ pdfScale: normalizePdfScale(scale) }),
         setJsonExport: (patch) =>
           set((s) => ({ jsonExport: normalizeJsonExport({ ...s.jsonExport, ...patch }) })),
         resetJsonExport: () => set({ jsonExport: { ...DEFAULT_JSON_EXPORT } }),
@@ -1835,6 +2143,138 @@ export const useEditorStore = create<EditorState>()(
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
         setShowGaps: (on) => set({ showGaps: on }),
+        setShowBolts: (on) => set({ showBolts: on }),
+        setObjectShown: (target, shown) =>
+          set((s) => {
+            const vis = s.objectVisibility;
+            return {
+              objectVisibility:
+                'category' in target
+                  ? {
+                      categories: { ...vis.categories, [target.category]: shown },
+                      // The category's switch speaks for every one of its
+                      // materials: a row turned the other way before goes back
+                      // to following it.
+                      materials: Object.fromEntries(
+                        Object.entries(vis.materials).filter(
+                          ([id]) => s.materials.find((m) => m.id === id)?.category !== target.category,
+                        ),
+                      ),
+                    }
+                  : { ...vis, materials: { ...vis.materials, [target.materialId]: shown } },
+            };
+          }),
+        resetObjectVisibility: () => set({ objectVisibility: normalizeObjectVisibility(undefined) }),
+        setPanelDepth: (cm) => {
+          const depth = normalizePanelDepth(cm);
+          setPanelDepthOverride(depth);
+          // A new array of the same materials: nothing in the catalog changed
+          // (the sync engine compares them one by one and sends nothing), but
+          // everything drawn from it is worked out again at the new thickness.
+          set((s) => ({ panelDepth: depth, materials: [...s.materials] }));
+        },
+        toggleBoltKind: (kind) => set((s) => ({ boltsShown: { ...s.boltsShown, [kind]: !s.boltsShown[kind] } })),
+        takeBolt: (bolt, materialId, add) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const piece: Piece = {
+              id: uid(),
+              materialId,
+              x: bolt.x - planW(m) / 2,
+              y: bolt.y - planH(m) / 2,
+              rot: 0,
+              z: Math.max(0, bolt.z),
+            };
+            return {
+              pieces: [...withBoltOff(s.pieces, bolt.a, bolt.b), piece],
+              selectedIds: add ? [...s.selectedIds, piece.id] : [piece.id],
+            };
+          }),
+        takeRod: (rod, add) =>
+          commit((s) => {
+            const m = rodMaterialFor(s.materials, rod.to - rod.from);
+            if (!m) return {};
+            const stack = rodStack(m, rodSpot(rod), [], uid);
+            const ids = stack.map((p) => p.id);
+            return { pieces: [...withRodOff(s.pieces, rod), ...stack], selectedIds: add ? [...s.selectedIds, ...ids] : ids };
+          }),
+        placeNutStack: (materialId, end) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const stack = fittingStack(m, end, [], uid);
+            return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        takeLatch: (spot, add) =>
+          commit((s) => {
+            const m = latchMaterial(s.materials);
+            if (!m) return {};
+            const stack = latchStack(m, spot, [], uid);
+            const ids = stack.map((p) => p.id);
+            return { pieces: [...s.pieces, ...stack], selectedIds: add ? [...s.selectedIds, ...ids] : ids };
+          }),
+        takeNut: (end, add) =>
+          commit((s) => {
+            const m = nutMaterial(s.materials);
+            if (!m) return {};
+            const stack = fittingStack(m, end, [], uid);
+            const ids = stack.map((p) => p.id);
+            return { pieces: [...s.pieces, ...stack], selectedIds: add ? [...s.selectedIds, ...ids] : ids };
+          }),
+        selectAllOf: (target) =>
+          commit((s) => {
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
+            let pieces = s.pieces;
+            // Connectors are pieces already (or not there yet): only marks are made real.
+            if ('bolts' in target && target.bolts !== 'connectors') {
+              pieces = materializeBolts(s.pieces, byId, s.materials, target.bolts, uid).pieces;
+            }
+            const picked = pieces.filter((p) => {
+              const m = byId.get(p.materialId);
+              if (!m) return false;
+              return 'bolts' in target ? boltKindOf(m) === target.bolts : m.id === target.materialId;
+            });
+            // A kind switched off in the ჭანჭიკები menu comes back on: what is
+            // selected has to be seen.
+            const kind = 'bolts' in target ? target.bolts : null;
+            return {
+              pieces,
+              selectedIds: picked.map((p) => p.id),
+              ...(kind && !s.boltsShown[kind] ? { boltsShown: { ...s.boltsShown, [kind]: true }, showBolts: true } : {}),
+            };
+          }),
+        replaceSelected: (materialId) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m || !s.selectedIds.length) return {};
+            const byId = new Map(s.materials.map((mm) => [mm.id, mm]));
+            return { pieces: replacePieces(s.pieces, new Set(s.selectedIds), m, byId) };
+          }),
+        placeLatchStack: (materialId, spot) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const stack = latchStack(m, spot, [], uid);
+            return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        placeRodStack: (materialId, spot) =>
+          commit((s) => {
+            const m = s.materials.find((mm) => mm.id === materialId);
+            if (!m) return {};
+            const stack = rodStack(m, spot, [], uid);
+            return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
+          }),
+        resetBolts: (kinds) =>
+          commit((s) => {
+            const byId = new Map(s.materials.map((m) => [m.id, m]));
+            let pieces = resetBolts(s.pieces, byId, kinds);
+            // Connectors are never there by themselves: this is what puts them
+            // on the joints the rule names - see `connectorCount`.
+            if (!kinds || kinds.connectors) pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
+            const left = new Set(pieces.map((p) => p.id));
+            return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
+          }),
         // Simple mode has no view switcher, so it opens on the plan it works in -
         // through the view setters, so whatever a view change also resets, it does.
         setSimpleMode: (on) => {
@@ -1846,6 +2286,7 @@ export const useEditorStore = create<EditorState>()(
         },
         // Preferences, so plain sets: remembered, never undo steps.
         setFillDefaults: (defaults) => set({ fillDefaults: { ...defaults } }),
+        setLayoutFilters: (filters) => set({ layoutFilters: normalizeLayoutFilters(filters) }),
         setWallThickness: (thickness) => set({ wallThickness: thickness }),
         setTourSeen: (seen) => set({ tourSeen: seen }),
         setShowSketch: (on) =>
@@ -2016,6 +2457,33 @@ export const useEditorStore = create<EditorState>()(
 
         setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),
 
+        addSketchPaths: (paths) =>
+          commit((s) => ({
+            sketch: [...s.sketch, ...paths],
+            selectedSketchIds: paths.map((p) => p.id),
+            selectedSketchPart: null,
+            selectedIds: [],
+          })),
+
+        flipWallSide: (pathId) =>
+          commit((s) => {
+            const path = s.sketch.find((k) => k.id === pathId);
+            if (!path) return {};
+            const found = findWallMate(path, s.sketch);
+            if (!found) {
+              // One line on its own: its panels to the other side.
+              return {
+                sketch: s.sketch.map((k) =>
+                  k.id === pathId ? { ...k, perimeter: k.perimeter === 'inner' ? ('outer' as const) : ('inner' as const) } : k,
+                ),
+              };
+            }
+            const [turned, mate] = flipWall(path, found.mate, found.thickness);
+            return {
+              sketch: s.sketch.map((k) => (k.id === turned.id ? turned : k.id === mate.id ? mate : k)),
+            };
+          }),
+
         setSketchPerimeter: (pathIds, perimeter) =>
           commit((s) => ({
             sketch: s.sketch.map((k) =>
@@ -2120,6 +2588,19 @@ export const useEditorStore = create<EditorState>()(
             choices[runKey] = choice.sequences;
           }
           return get().fillSketch(pathIds, { ...spec, stack, choices });
+        },
+
+        applyLayout: (add, remove) => {
+          if (!add.length && !remove.length) return { added: 0, removed: 0 };
+          const gone = new Set(remove);
+          const removed = get().pieces.filter((p) => gone.has(p.id)).length;
+          commit((s) => ({
+            // The recommendation's pieces are marked as such - see `Piece.auto`.
+            pieces: [...s.pieces.filter((p) => !gone.has(p.id)), ...add.map((p): Piece => ({ ...p, auto: true }))],
+            selectedIds: add.map((p) => p.id),
+            selectedSketchIds: [],
+          }));
+          return { added: add.length, removed };
         },
 
         dragSketchAll: (dx, dy, baselines) =>
@@ -2270,8 +2751,13 @@ export const useEditorStore = create<EditorState>()(
             ...saved,
             measureStyle: normalizeMeasureStyle(saved.measureStyle),
             lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+            layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
+            boltsShown: normalizeBoltKinds(saved.boltsShown),
+            objectVisibility: normalizeObjectVisibility(saved.objectVisibility),
+            panelDepth: normalizePanelDepth(saved.panelDepth),
             pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
             pdfSheet: normalizeSheetSize(saved.pdfSheet),
+            pdfScale: normalizePdfScale(saved.pdfScale),
             jsonExport: normalizeJsonExport(saved.jsonExport),
             inspectorTab:
               saved.inspectorTab === undefined
@@ -2311,8 +2797,13 @@ export const useEditorStore = create<EditorState>()(
           selectedMeasureId: null,
           measureStyle: normalizeMeasureStyle(saved.measureStyle),
           lengthVisibility: normalizeLengthVisibility(saved.lengthVisibility),
+          layoutFilters: normalizeLayoutFilters(saved.layoutFilters),
+          boltsShown: normalizeBoltKinds(saved.boltsShown),
+          objectVisibility: normalizeObjectVisibility(saved.objectVisibility),
+          panelDepth: normalizePanelDepth(saved.panelDepth),
           pdfVisibility: normalizePdfVisibility(saved.pdfVisibility),
           pdfSheet: normalizeSheetSize(saved.pdfSheet),
+          pdfScale: normalizePdfScale(saved.pdfScale),
           jsonExport: normalizeJsonExport(saved.jsonExport),
           penPerimeter: 'outer',
           penPoints: [],
@@ -2330,6 +2821,13 @@ export const useEditorStore = create<EditorState>()(
     },
   ),
 );
+
+// The plan's panel thickness lives in geometry (`planH`), where every plan
+// size is read; keep it with the setting from the first state on.
+setPanelDepthOverride(useEditorStore.getState().panelDepth);
+useEditorStore.subscribe((s, prev) => {
+  if (s.panelDepth !== prev.panelDepth) setPanelDepthOverride(s.panelDepth);
+});
 
 // Route storage failures into the store so the header can show a warning.
 onStorageFailure = (message) => {
@@ -2354,6 +2852,8 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
     .map((d) => ({
       id: d.id,
       name: typeof d.name === 'string' && d.name ? d.name : 'ნახაზი',
+      // statuses arrived after the title block; none reads as a real job
+      status: isDrawingStatus(d.status) ? d.status : 'active',
       updatedAt: typeof d.updatedAt === 'number' ? d.updatedAt : Date.now(),
       pieces: Array.isArray(d.pieces) ? d.pieces : [],
       // and the sketch after those — a drawing made before the pen has none

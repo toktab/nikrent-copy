@@ -1,41 +1,59 @@
 import { useEditorStore } from '../store/useEditorStore';
-import { planFillAll } from '../lib/fillAll';
 import { normalizeFillDefaults } from '../lib/fillDefaults';
+import { freeStock, stockEntered } from '../lib/fillOptions';
+import { stockView } from '../lib/inventory';
+import { solveLayout } from '../lib/layoutSolver';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 
 /**
- * Fill every still-empty line - the selected ones, or all of them - with its
- * best recommendation, as one undo step, then a one-line account of what was
- * placed and what was left alone. At the job's remembered pour height and
- * corner setting (see `FillDefaults`).
+ * Fill the selected lines - or all of them - with the layout solver's best
+ * whole-layout variant, as one undo step, then a one-line account of what was
+ * placed. At the job's remembered pour height and corner setting (see
+ * `FillDefaults`) and with the recommendation tab's filters, so the button and
+ * the tab's #1 are the same answer.
+ *
+ * With "keep hand-placed pieces" on, what was placed by hand on a line stays
+ * and the rest is built around it - the corners set first, the runs filled
+ * between them - while what an earlier fill put there is worked out again;
+ * with it off, everything on the lines is replaced.
  *
  * A function as well as a button, so the search box can run it too.
  */
 export function runFillAll(): void {
   const s = useEditorStore.getState();
   const spec = normalizeFillDefaults(s.fillDefaults);
-  const plan = planFillAll({
-    sketch: s.sketch,
-    pathIds: s.selectedSketchIds,
-    spec,
+  const wanted = s.selectedSketchIds.length ? new Set(s.selectedSketchIds) : null;
+  const paths = s.sketch.filter((p) => !wanted || wanted.has(p.id));
+  if (!paths.length) {
+    s.setToast('შესავსები ხაზი არ არის.');
+    return;
+  }
+  const view = stockView(s.documents, s.activeDocId);
+  const hasStock = stockEntered(s.materials) && !view.unlimited;
+  const result = solveLayout({
+    paths,
+    height: spec.height,
+    includeCorners: spec.includeCorners,
     materials: s.materials,
     pieces: s.pieces,
+    free: hasStock ? freeStock(s.materials, s.pieces, view) : undefined,
+    filters: { ...s.layoutFilters, useStock: s.layoutFilters.useStock && hasStock },
+    limit: 1,
   });
-  if (!plan.pathIds.length) {
+  const best = result.variants[0];
+  if (!best || (!best.add.length && !best.remove.length)) {
     s.setToast(
-      plan.skippedPathIds.length
-        ? 'ყველა ხაზზე ელემენტები უკვე დგას - შესავსები არაფერი დარჩა.'
-        : 'შესავსები ხაზი არ არის.',
+      result.warnings[0] ??
+        (s.layoutFilters.keepPlaced ? 'ყველა ხაზზე ხელით დასმული ელემენტები დგას - შესავსები არაფერი დარჩა.' : 'ყალიბი ვერ აიწყო.'),
     );
     return;
   }
-  const result = s.applyFillVariants(plan.pathIds, spec, plan.picks);
-  const report = [`შეივსა ${plan.pathIds.length} ხაზი - ${result.added} ელემენტი, ${spec.height} სმ`];
-  if (plan.skippedPathIds.length) {
-    report.push(`${plan.skippedPathIds.length} ხაზზე ელემენტები უკვე დგას, გამოტოვდა`);
-  }
-  if (plan.unmatched.length) report.push(`${plan.unmatched.length} კედელი აიწყო ავტომატურად`);
+  const done = s.applyLayout(best.add, best.remove);
+  const report = [`შეივსა ${paths.length} ხაზი - ${done.added} ელემენტი, ${spec.height} სმ`];
+  if (done.removed) report.push(`შეიცვალა ${done.removed}`);
+  if (best.overhang) report.push(`გადაცილება ${best.overhang} სმ`);
+  if (best.nianguri) report.push(`ნიანგი: ${best.nianguri}`);
   if (result.warnings.length) report.push(`${result.warnings.length} გაფრთხილება`);
   s.setToast(report.join(' · '));
 }
@@ -48,7 +66,7 @@ export function FillAllButton() {
   return (
     <Tooltip
       label="ყველას შევსება"
-      reason={`${selected ? 'მონიშნული ცარიელი ხაზები' : 'ყველა ცარიელი ხაზი'} - თითო კედელი საუკეთესო რეკომენდაციით, ${height} სმ`}
+      reason={`${selected ? 'მონიშნული ხაზები' : 'ყველა ხაზი'} - ერთად, საუკეთესო ვარიანტით, ${height} სმ`}
     >
       <button className="btn" onClick={runFillAll} disabled={!hasLines}>
         <Icon name="wall" /> <span className="btn-label">ყველას შევსება</span>

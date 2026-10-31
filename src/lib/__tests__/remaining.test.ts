@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { remainingRows } from '../remaining';
+import { stockView } from '../inventory';
 import { createSeedMaterials } from '../../data/seedCatalog';
-import type { Material, Piece } from '../../types';
+import type { DrawingDoc, Material, Piece } from '../../types';
 
 const withStock = (materials: Material[], stock: Record<string, number>): Material[] =>
   materials.map((m) => (m.id in stock ? { ...m, stock: { main: stock[m.id] } } : m));
@@ -75,5 +76,52 @@ describe('remainingRows - the ნაშთი sheet', () => {
 
   it('ignores pieces with no material', () => {
     expect(remainingRows(materials, [...pieces, ...place('gone', 3)]).used).toBe(94);
+  });
+});
+
+describe('remainingRows - drawing statuses', () => {
+  const materials = withStock(createSeedMaterials(), { 'panel-90x300': 10 });
+  const doc = (id: string, count: number, status?: DrawingDoc['status']): DrawingDoc => ({
+    id,
+    name: id,
+    status,
+    updatedAt: 0,
+    pieces: place('panel-90x300', count),
+    sketch: [],
+    measures: [],
+    projectName: '',
+    revision: 'A',
+    scale: 50,
+  });
+
+  it('counts another active drawing out of the yard - the 10, 5, then 6 example', () => {
+    const first = doc('a', 5);
+    const second = doc('b', 6);
+    const view = stockView([first, second], 'b');
+    const r = remainingRows(materials, second.pieces, { view });
+    expect(rowOf(r, 'panel-90x300')).toMatchObject({ stock: 10, reserved: 5, used: 6, left: -1, short: true });
+    expect(r.shortages).toBe(1);
+  });
+
+  it('a finished drawing gives everything back', () => {
+    const view = stockView([doc('a', 5, 'finished'), doc('b', 6)], 'b');
+    const r = remainingRows(materials, place('panel-90x300', 6), { view });
+    expect(rowOf(r, 'panel-90x300')).toMatchObject({ reserved: 0, left: 4, short: false });
+  });
+
+  it('an unimportant drawing holds nothing, and is never short itself', () => {
+    const elsewhere = stockView([doc('a', 50, 'unimportant'), doc('b', 6)], 'b');
+    expect(elsewhere.reserved.size).toBe(0);
+
+    const mine = stockView([doc('a', 5), doc('b', 60, 'unimportant')], 'b');
+    expect(mine.unlimited).toBe(true);
+    const r = remainingRows(materials, place('panel-90x300', 60), { view: mine });
+    expect(r.shortages).toBe(0);
+    expect(r.unlimited).toBe(true);
+  });
+
+  it('a drawing saved before statuses existed holds stock as active', () => {
+    const view = stockView([doc('a', 3), doc('b', 0)], 'b');
+    expect(view.reserved.get('panel-90x300')).toBe(3);
   });
 });

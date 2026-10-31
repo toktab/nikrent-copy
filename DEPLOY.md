@@ -22,6 +22,7 @@ Supabase → SQL Editor → paste each file whole, in order, and run it:
 | `0010_custom_algorithms.sql` | the `custom_algorithms` table | saved detection algorithms stay on one device |
 | `0011_measures.sql` | `documents.measures` - measured check lines | measured lines stay on this screen; the app warns once and still saves the rest |
 | `0012_corner_leg.sql` | `materials.leg` - an L corner's leg thickness; the built-in outer corner becomes 10 × 10 with a 0.1 cm leg | a leg typed into the component form is not saved; the outer corner still draws thin, the app puts its 0.1 back on every load |
+| `0013_drawing_status.sql` | `documents.status` - active / unimportant / finished; every existing drawing starts active | a status set in the app is not saved; every drawing counts as active, as before; the app warns and still saves the rest |
 
 All of them are safe to re-run. `0005` is the only destructive one, and only
 of prices, which nothing reads any more.

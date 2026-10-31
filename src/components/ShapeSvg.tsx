@@ -1,6 +1,8 @@
-import type { Material } from '../types';
+import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
-import { planH, planW } from '../lib/geometry';
+import { isConnector, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
+import { ClampShape, ConnectorGlyph, NutGlyph } from './BoltLayer';
+import { isLatch, isNut, LATCH_DEPTH_CM, LATCH_LEN_CM, NUT_CM, WASHER_CM, WASHER_T_CM, WING_HUB_CM, WING_SPAN_CM } from '../lib/bolts';
 
 interface Props {
   material: Material;
@@ -17,30 +19,180 @@ interface Props {
  * full-size piece on the surface, so a component always looks the same in both.
  */
 export function ShapeSvg({ material: m, width, height, strokeWidth = 1, opacity }: Props) {
+  return (
+    <svg
+      className="shape"
+      width={width}
+      height={height}
+      viewBox={`0 0 ${planW(m)} ${planH(m)}`}
+      preserveAspectRatio="none"
+      style={{ opacity, display: 'block' }}
+      aria-hidden="true"
+    >
+      <ShapeBody material={m} strokeWidth={strokeWidth} />
+    </svg>
+  );
+}
+
+/** The shape itself, in the material's own cm space with its origin top-left. */
+function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWidth: number }) {
   const stroke = 'rgba(0,0,0,.55)';
   // Plan view: a piece occupies w × depth on screen (h is its vertical height).
   const pw = planW(m);
   const ph = planH(m);
   const sw = Math.min(strokeWidth, Math.min(pw, ph) / 4);
 
+  // The connector looks like the mark the drawing puts on a joint, in the
+  // catalog as on the plan, so it is recognisably the same thing.
+  if (isConnector(m)) {
+    return <ConnectorGlyph cx={pw / 2} cy={ph / 2} r={(Math.min(pw, ph) / 2) * 0.92} px={strokeWidth} />;
+  }
+  // ...the ჩამკეტი fix like the clamp it is...
+  if (isLatch(m)) {
+    const s = Math.min(pw, ph) / (LATCH_LEN_CM + 2);
+    return (
+      <g transform={`translate(${pw / 2} ${ph / 2})`}>
+        <ClampShape len={LATCH_LEN_CM * s} thick={LATCH_DEPTH_CM * s * 1.3} px={strokeWidth / 2} />
+      </g>
+    );
+  }
+  // ...and the ქანჩი + დისკო like the washer, nut and wing piece it puts on a rod end.
+  if (isNut(m)) {
+    const s = Math.min(pw, ph) / (Math.max(WASHER_CM, WING_SPAN_CM) + 1);
+    const long = WASHER_T_CM + NUT_CM + WING_HUB_CM;
+    return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
+  }
+
+  // A დგარი as the prop it is - see `PostShape`.
+  if (m.category === 'post') return <PostShape m={m} stroke={stroke} strokeWidth={strokeWidth} />;
+
+  return m.shape === 'L' ? (
+    <polygon points={pointsAttr(drawnOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />
+  ) : m.shape === 'line' ? (
+    <LineBar m={m} stroke={stroke} strokeWidth={sw} />
+  ) : (
+    <rect x={0} y={0} width={pw} height={ph} fill={m.color} stroke={stroke} strokeWidth={sw} />
+  );
+}
+
+/**
+ * The whole-cm box a placed piece is drawn in: its rotated footprint, widened
+ * out to the nearest whole cm on every side.
+ */
+export function placedBox(piece: Piece, m: Material): Rect {
+  const b = pieceBounds(piece, m);
+  // The trigonometric extent carries 1e-15 of noise; it must not cost a cm.
+  const x0 = Math.floor(b.x + 1e-6);
+  const y0 = Math.floor(b.y + 1e-6);
+  const x1 = Math.ceil(b.x + b.w - 1e-6);
+  const y1 = Math.ceil(b.y + b.h - 1e-6);
+  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+}
+
+/**
+ * A placed piece's shape, drawn exactly where it lies.
+ *
+ * The browser rounds the box of an <svg> - and the background of any box - to
+ * whole CSS pixels before the surface's zoom is applied. On a surface drawn at
+ * 1 cm = 1 px that rounding is up to half a centimetre, and at 800 % it is four
+ * screen pixels: a panel turned on its side at x 449.5 was painted at 450, a
+ * visible step against the panel above it that was actually flush. Positioning
+ * each piece with `left`/`top` and a CSS rotate could only ever be as accurate
+ * as that rounding.
+ *
+ * So the box is always whole cm - the piece's footprint widened outwards, which
+ * the rounding leaves alone - and the piece is placed and turned INSIDE the
+ * SVG, where coordinates are vector and nothing is rounded. Pass `box` from
+ * `placedBox` so the caller's element and this drawing agree on it.
+ */
+export function PlacedShapeSvg({
+  piece,
+  material: m,
+  box,
+  strokeWidth = 1,
+}: {
+  piece: Piece;
+  material: Material;
+  box: Rect;
+  strokeWidth?: number;
+}) {
   return (
     <svg
       className="shape"
-      width={width}
-      height={height}
-      viewBox={`0 0 ${pw} ${ph}`}
-      preserveAspectRatio="none"
-      style={{ opacity, display: 'block' }}
+      width={box.w}
+      height={box.h}
+      viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
+      style={{ display: 'block' }}
       aria-hidden="true"
     >
-      {m.shape === 'L' ? (
-        <polygon points={pointsAttr(drawnOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />
-      ) : m.shape === 'line' ? (
-        <LineBar m={m} stroke={stroke} strokeWidth={sw} />
-      ) : (
-        <rect x={0} y={0} width={pw} height={ph} fill={m.color} stroke={stroke} strokeWidth={sw} />
-      )}
+      <PlacedShapeBody piece={piece} material={m} strokeWidth={strokeWidth} />
     </svg>
+  );
+}
+
+/**
+ * The shape where it lies, in world cm - for any SVG whose units are world cm,
+ * the surface's own and the printed sheet's.
+ */
+export function PlacedShapeBody({
+  piece,
+  material: m,
+  strokeWidth = 1,
+}: {
+  piece: Piece;
+  material: Material;
+  strokeWidth?: number;
+}) {
+  const pw = planW(m);
+  const ph = planH(m);
+  return (
+    <g
+      transform={`translate(${piece.x + pw / 2} ${piece.y + ph / 2}) rotate(${piece.rot}) translate(${-pw / 2} ${-ph / 2})`}
+    >
+      <ShapeBody material={m} strokeWidth={strokeWidth} />
+    </g>
+  );
+}
+
+/**
+ * A დგარი from above: the head plate on the panel face (the box's top edge,
+ * `y = 0`), the tube with its adjusting collar, and the foot plate on the
+ * ground with its anchor holes (the far edge). A plain bar the colour of the
+ * category was all it used to be, and read as one more waler.
+ */
+function PostShape({ m, stroke, strokeWidth }: { m: Material; stroke: string; strokeWidth: number }) {
+  const pw = planW(m);
+  const ph = planH(m);
+  const sw = Math.min(strokeWidth, pw / 8);
+  const head = Math.min(2, ph / 10);
+  const foot = Math.min(4, ph / 6);
+  const tube = pw * 0.36;
+  const collar = pw * 0.6;
+  const mid = ph * 0.55;
+  return (
+    <>
+      {/* faint footprint, so the drag / hit area stays obvious */}
+      <rect x={0} y={0} width={pw} height={ph} fill={m.color} opacity={0.1} />
+      {/* the tube, inner and outer, the inner one narrower past the collar */}
+      <rect x={(pw - tube) / 2} y={head} width={tube} height={mid - head} fill={m.color} stroke={stroke} strokeWidth={sw} />
+      <rect
+        x={(pw - tube * 0.7) / 2}
+        y={mid}
+        width={tube * 0.7}
+        height={ph - foot - mid}
+        fill={m.color}
+        stroke={stroke}
+        strokeWidth={sw}
+      />
+      {/* the adjusting collar */}
+      <rect x={(pw - collar) / 2} y={mid - 1.5} width={collar} height={3} rx={0.6} fill={m.color} stroke={stroke} strokeWidth={sw} />
+      {/* head plate, on the panel */}
+      <rect x={0} y={0} width={pw} height={head} fill="#5b6470" stroke={stroke} strokeWidth={sw} />
+      {/* foot plate, on the ground, with its two anchor holes */}
+      <rect x={0} y={ph - foot} width={pw} height={foot} fill="#5b6470" stroke={stroke} strokeWidth={sw} />
+      <circle cx={pw * 0.25} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="rgba(0,0,0,.6)" />
+      <circle cx={pw * 0.75} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="rgba(0,0,0,.6)" />
+    </>
   );
 }
 

@@ -15,6 +15,8 @@ import { combo, overrideLabel } from '../lib/platform';
 import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
 import { VIEW_HINT, VIEW_LABEL, VIEW_ORDER } from '../lib/projection';
 import { BrandMark } from './BrandMark';
+import { ProjectsMenuList } from './ProjectsMenu';
+import { STATUS_LABEL, statusOf } from '../lib/inventory';
 import { PresenceBar } from './PresenceBar';
 import { SyncBadge } from './SyncBadge';
 import { ProfileMenu } from './ProfileMenu';
@@ -22,6 +24,8 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Tooltip } from './Tooltip';
 import { Icon } from './Icon';
 import { RemainingButton } from './RemainingButton';
+import { BoltsButton } from './BoltsButton';
+import { ReplaceButton } from './ReplaceButton';
 import { ProblemsButton } from './ProblemsButton';
 import { FillAllButton } from './FillAllButton';
 import { SimpleSteps } from './SimpleSteps';
@@ -99,6 +103,8 @@ export function Header() {
   const setTool = useEditorStore((s) => s.setTool);
   const penPerimeter = useEditorStore((s) => s.penPerimeter);
   const setPenPerimeter = useEditorStore((s) => s.setPenPerimeter);
+  const setWallThickness = useEditorStore((s) => s.setWallThickness);
+  const wallOn = useEditorStore((s) => s.wallThickness !== null);
   const setShowSketch = useEditorStore((s) => s.setShowSketch);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const setSurfaceView = useEditorStore((s) => s.setSurfaceView);
@@ -110,14 +116,13 @@ export function Header() {
   const redo = useEditorStore((s) => s.redo);
   const zoomBy = useEditorStore((s) => s.zoomBy);
   const fitToContent = useEditorStore((s) => s.fitToContent);
-  const switchDocument = useEditorStore((s) => s.switchDocument);
   const openDialog = useEditorStore((s) => s.openDialog);
   const setToast = useEditorStore((s) => s.setToast);
   const canManage = useCanManageCatalog();
 
   const shortages = useMemo(
-    () => buildBom(materials, pieces).shortageCount,
-    [materials, pieces],
+    () => buildBom(materials, pieces, documents, activeDocId).shortageCount,
+    [materials, pieces, documents, activeDocId],
   );
   const hasSelection = selectedIds.length > 0;
   const activeDoc = documents.find((d) => d.id === activeDocId);
@@ -291,7 +296,11 @@ export function Header() {
 
           <Menu
             trigger={(open) => (
-              <button className={`doc-pick${open ? ' open' : ''}`} title="მიმდინარე ნახაზი">
+              <button
+                className={`doc-pick${open ? ' open' : ''}`}
+                title={`მიმდინარე ნახაზი - ${STATUS_LABEL[statusOf(activeDoc)]}`}
+              >
+                <span className={`status-dot ${statusOf(activeDoc)}`} />
                 <span className="doc-pick-name">{activeDoc?.name ?? 'ნახაზი'}</span>
                 <span className="doc-pick-count">{activeDoc?.pieces.length ?? 0}</span>
                 <Icon name="chevron-down" size={14} />
@@ -300,20 +309,7 @@ export function Header() {
           >
             {(close) => (
               <>
-                <MenuLabel>ნახაზები</MenuLabel>
-                {documents.map((d) => (
-                  <MenuItem
-                    key={d.id}
-                    on={d.id === activeDocId}
-                    trail={d.pieces.length || undefined}
-                    onClick={() => {
-                      switchDocument(d.id);
-                      close();
-                    }}
-                  >
-                    {d.name}
-                  </MenuItem>
-                ))}
+                <ProjectsMenuList close={close} />
                 <MenuSep />
                 <MenuItem
                   icon="folder"
@@ -331,6 +327,8 @@ export function Header() {
 
         <ProblemsButton />
         <RemainingButton />
+        <BoltsButton />
+        <ReplaceButton />
 
         {/* The architect's own sheet, faint under the drawing. Up here with
             the views rather than among the tools: it sets what you are
@@ -688,6 +686,18 @@ export function Header() {
           </>
         )}
 
+        {/* The editor's own defaults - move step, panel thickness, what the
+            plan shows. In simple mode too: hiding things is for everyone. */}
+        <Tooltip label="პარამეტრები" reason="გადაადგილების ბიჯი, ელემენტის სისქე, ხილვადობა">
+          <button
+            className="btn icon"
+            onClick={() => openDialog({ kind: 'settings' })}
+            aria-label="პარამეტრები"
+          >
+            <Icon name="gear" size={16} />
+          </button>
+        </Tooltip>
+
         <span className="sep" />
 
         {/* Draw the layout first, fill it with formwork after. Grouped with the
@@ -725,9 +735,16 @@ export function Header() {
             ).map(([face, label, why]) => (
               <button
                 key={face}
-                className={`btn small${penPerimeter === face ? ' engaged' : ''}`}
-                onClick={() => setPenPerimeter(face)}
-                aria-pressed={penPerimeter === face}
+                className={`btn small${penPerimeter === face && !wallOn ? ' engaged' : ''}`}
+                onClick={() => {
+                  // One face at a time: picking გარე or შიდა puts the
+                  // two-face კედელი pen down, so a finished line never brings
+                  // a second one with it unasked. The other face is made from
+                  // the recommendation tab once this one is built.
+                  setPenPerimeter(face);
+                  setWallThickness(null);
+                }}
+                aria-pressed={penPerimeter === face && !wallOn}
                 title={why}
               >
                 {label}

@@ -1,23 +1,25 @@
 import type { Category, Material, Piece } from '../types';
 import { CATEGORY_ORDER, categoryLabel } from '../data/categories';
-import { totalStock } from './inventory';
+import { OPEN_YARD, availableFor, totalStock, type StockView } from './inventory';
 
 /**
  * What stays in the yard once the open drawing is delivered - the architect's
  * ნაშთი sheet: stock, minus what this drawing uses, per component.
  *
- * Deliberately the open drawing only, not every drawing the company has: the
- * question at the desk is "can THIS job be served from what we hold", and
- * who else is waiting for the same 90s is decided by a person, not here.
+ * The open drawing's pieces against what the yard holds for it: owned, minus
+ * what the other ACTIVE jobs have placed (see `stockView`). An unimportant
+ * drawing is never short - it is a what-if, drawn against a bottomless yard.
  */
 
 export interface RemainingRow {
   material: Material;
   /** owned, across every warehouse */
   stock: number;
+  /** held by other active drawings */
+  reserved: number;
   /** placed in the open drawing */
   used: number;
-  /** stock − used; below zero is a shortage */
+  /** stock − reserved − used; below zero is a shortage (never, when unlimited) */
   left: number;
   short: boolean;
   /** used × unit weight, kg; 0 where the weight is not entered */
@@ -44,6 +46,8 @@ export interface Remaining {
   weightKg: number;
   /** used parts with no weight entered, so the weight is known to be short */
   unweighed: number;
+  /** the open drawing is unimportant: nothing is ever short */
+  unlimited: boolean;
 }
 
 /** Every component, only what this drawing uses, or only what it is short of. */
@@ -61,10 +65,13 @@ export function remainingRows(
      * under the cursor halfway through the number.
      */
     keep?: ReadonlySet<string>;
+    /** the other drawings' hold on the yard; none given is the whole yard */
+    view?: StockView;
   } = {},
 ): Remaining {
   const show = opts.show ?? 'all';
   const query = opts.query?.trim().toLowerCase() ?? '';
+  const view = opts.view ?? OPEN_YARD;
 
   const counts = new Map<string, number>();
   // A piece whose material has left the catalog has no stock row to count
@@ -83,13 +90,14 @@ export function remainingRows(
       if (material.category !== category) continue;
       const count = counts.get(material.id) ?? 0;
       const stock = totalStock(material);
-      const left = stock - count;
+      const left = availableFor(material, view) - count;
       const row: RemainingRow = {
         material,
         stock,
+        reserved: view.reserved.get(material.id) ?? 0,
         used: count,
         left,
-        short: left < 0,
+        short: !view.unlimited && left < 0,
         weightKg: count * material.weight,
       };
 
@@ -114,5 +122,5 @@ export function remainingRows(
     if (rows.length) groups.push({ category, label: categoryLabel(category), rows });
   }
 
-  return { groups, shortages, used, weightKg, unweighed };
+  return { groups, shortages, used, weightKg, unweighed, unlimited: view.unlimited };
 }

@@ -41,3 +41,42 @@ export function wallPartner(path: SketchPath, thickness: number): SketchPath {
     perimeter: path.perimeter === 'inner' ? 'outer' : 'inner',
   };
 }
+
+/**
+ * The other face of the wall `path` is one face of, if the drawing has it: a
+ * line with the same shape a wall's thickness to one side, as `wallPartner`
+ * draws it. Found from the geometry rather than a stored link, because a line
+ * is redrawn, imported (fresh ids) and edited, and none of that should lose
+ * the wall it belongs to.
+ */
+export function findWallMate(
+  path: SketchPath,
+  sketch: SketchPath[],
+): { mate: SketchPath; thickness: number } | null {
+  const near = (a: number, b: number) => Math.abs(a - b) <= 0.6;
+  for (const q of sketch) {
+    if (q.id === path.id || q.points.length !== path.points.length || !!q.closed !== !!path.closed) continue;
+    const a = path.points[0];
+    const b = q.points[0];
+    const thickness = Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+    if (thickness < MIN_WALL_CM || thickness > MAX_WALL_CM) continue;
+    for (const sign of [1, -1]) {
+      const pts = offsetPath(path, sign * thickness);
+      if (pts.every((p, i) => near(p.x, q.points[i].x) && near(p.y, q.points[i].y))) {
+        return { mate: q, thickness: Math.round(thickness * 10) / 10 };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The same wall with its body on the other side of `path`: `path` stays where
+ * it was drawn, its panels turn to the other side, and its mate is put back a
+ * thickness away on that side - the "which side" choice for a wall drawn with
+ * the კედელი pen, made after it is finished (the user, 2026-10-30).
+ */
+export function flipWall(path: SketchPath, mate: SketchPath, thickness: number): [SketchPath, SketchPath] {
+  const turned: SketchPath = { ...path, perimeter: path.perimeter === 'inner' ? 'outer' : 'inner' };
+  return [turned, { ...wallPartner(turned, thickness), id: mate.id }];
+}

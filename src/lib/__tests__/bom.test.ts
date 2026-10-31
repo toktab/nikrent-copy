@@ -152,8 +152,25 @@ describe('buildBom', () => {
       const row = bom.groups[0].rows[0];
       expect(row.used).toBe(1); // on this drawing
       expect(row.committed).toBe(3); // across both drawings
-      expect(row.remaining).toBe(9); // stock 10 − this drawing
+      expect(row.remaining).toBe(7); // stock 10 − the other active drawing − this one
       expect(row.available).toBe(7); // stock 10 − all drawings
+    });
+
+    it('a finished drawing elsewhere holds nothing', () => {
+      const withFinished = [docs[0], { ...docs[1], status: 'finished' as const }];
+      const row = buildBom([panel], docs[0].pieces, withFinished, 'd1').groups[0].rows[0];
+      expect(row.committed).toBe(1);
+      expect(row.remaining).toBe(9);
+    });
+
+    it('an unimportant drawing is never short', () => {
+      const tight = { ...panel, stock: { main: 2 } };
+      const mine = { ...docs[0], status: 'unimportant' as const };
+      const bom = buildBom([tight], mine.pieces, [mine, docs[1]], 'd1');
+      expect(bom.shortageCount).toBe(0);
+      // and, as active, the same drawing is: 2 owned − 2 held elsewhere − 1 here
+      const active = buildBom([tight], docs[0].pieces, docs, 'd1');
+      expect(active.shortageCount).toBe(1);
     });
   });
 });

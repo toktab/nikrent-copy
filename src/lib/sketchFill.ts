@@ -332,7 +332,7 @@ export const OUTER_CORNER_GAP = 20;
  * the panel as well as the face, so for the same cover it is the wider part and
  * the inner one is the narrower.
  */
-function innerCorner(
+export function innerCorner(
   materials: Material[],
   height: number,
 ): { material: Material; reach: number } | null {
@@ -362,7 +362,7 @@ function innerCorner(
  * An inner profile stands in the notch instead and wants the opposite, which
  * is why its one call site adds half a turn rather than this returning it.
  */
-function cornerRot(diag: Point): number {
+export function cornerRot(diag: Point): number {
   if (diag.x < 0) return diag.y > 0 ? 0 : 90;
   return diag.y < 0 ? 180 : 270;
 }

@@ -1,5 +1,6 @@
 import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
+import { useStockView } from '../store/useStockView';
 import { findProblems, type Problem } from '../lib/problems';
 import { Menu } from './Menu';
 import { Icon } from './Icon';
@@ -19,7 +20,11 @@ export function ProblemsButton() {
   const pieces = useDeferredValue(useEditorStore((s) => s.pieces));
   const sketch = useDeferredValue(useEditorStore((s) => s.sketch));
 
-  const report = useMemo(() => findProblems({ materials, pieces, sketch }), [materials, pieces, sketch]);
+  const view = useStockView();
+  const report = useMemo(
+    () => findProblems({ materials, pieces, sketch, view }),
+    [materials, pieces, sketch, view],
+  );
   const count = report.problems.length;
   const tone = report.errors ? 'bad' : count ? 'warn' : 'ok';
 

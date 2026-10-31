@@ -104,16 +104,25 @@ export function PenTyping() {
   }, [tool]);
 
   const last = penPoints[penPoints.length - 1];
-  if (tool !== 'pen' || !typed || !last) return null;
+  if (tool !== 'pen' || !last) return null;
   const stage = document.querySelector('.stage')?.getBoundingClientRect();
   if (!stage) return null;
 
   return (
     <div
-      className="pen-typed"
+      className={`pen-typed${typed ? '' : ' idle'}`}
       style={{ left: stage.left + last.x * zoom + panX + 14, top: stage.top + last.y * zoom + panY - 34 }}
     >
-      {typed} სმ <small>Enter · ←↑→↓</small>
+      {/* Nothing typed yet: say that a length can be. Getting it right with the
+          mouse alone is the slow way, and nothing on screen used to say there
+          was another (the user, 2026-10-30). */}
+      {typed ? (
+        <>
+          {typed} სმ <small>Enter · ←↑→↓</small>
+        </>
+      ) : (
+        <small>აკრიფე სიგრძე, მერე Enter</small>
+      )}
     </div>
   );
 }

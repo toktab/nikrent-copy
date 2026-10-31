@@ -85,6 +85,8 @@ function ScreenSettings() {
   const setShowLengths = useEditorStore((s) => s.setShowLengths);
   const setLengthVisibility = useEditorStore((s) => s.setLengthVisibility);
   const setMeasureStyle = useEditorStore((s) => s.setMeasureStyle);
+  const showBolts = useEditorStore((s) => s.showBolts);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
 
   return (
     <>
@@ -135,6 +137,17 @@ function ScreenSettings() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <h4 className="vis-section">კონექტორები</h4>
+      <div className="vis-extra">
+        <label className="vis-check">
+          <input type="checkbox" checked={showBolts} onChange={(e) => setShowBolts(e.target.checked)} />
+          <span>
+            კონექტორების ჩვენება ნახაზზე - T-შეერთება და შიდა კუთხე ჩაკერება 5 / 10-თან. რაოდენობა ზედა
+            ზოლშია.
+          </span>
+        </label>
       </div>
 
       <h4 className="vis-section">გაზომვა</h4>

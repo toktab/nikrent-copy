@@ -1145,6 +1145,14 @@ input.stock-input.bad {
 .piece .shape > * {
   pointer-events: visiblePainted;
 }
+/* Placed fittings over the panels and over a placed კონექტორი's disc: they are
+   small and share its joint, and under the disc they simply vanished. A
+   selected one still comes up to 50 with the rest. */
+.piece.rod:not(.selected),
+.piece.nut:not(.selected),
+.piece.latch:not(.selected) {
+  z-index: 12;
+}
 /* An elevation piece is a solid rectangle: box and shape are the same thing. */
 .piece.elevation {
   pointer-events: auto;
@@ -1168,11 +1176,9 @@ input.stock-input.bad {
 
 /* A piece seen from the front or the side: a flat silhouette, filled in the
    material's own colour so a course still reads as panels-and-walers. The
-   border keeps neighbouring pieces of the same colour apart. */
-.piece.elevation {
-  border: calc(1px / var(--z, 1)) solid rgba(10, 13, 17, 0.55);
-  box-sizing: border-box;
-}
+   outline that keeps neighbouring pieces of the same colour apart is the SVG
+   rect's stroke, drawn on the exact edge - a CSS border was rounded to the
+   pixel with the box. */
 
 /* Ground level, and the reason a height is readable at a glance. Sits under
    the pieces but over the grid. */
@@ -1985,6 +1991,51 @@ input.stock-input.bad {
   line-height: 1.4;
   color: var(--text-tertiary);
 }
+/* The other face of a built wall, made as a line from the one picked. */
+.rec-outer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+}
+.rec-outer .field {
+  width: 100%;
+}
+.rec-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+/* One wall of a whole-layout variant: a strip per face, to scale. */
+.rec-wall {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rec-wall-head {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rec-face {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rec-strip.thin {
+  height: 16px;
+}
+.rec-over {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.rec-chips-label {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 44px;
+}
 .rec-apply {
   position: sticky;
   bottom: -12px;
@@ -2127,6 +2178,27 @@ input.stock-input.bad {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* გაფართოებული პარამეტრები: one wide button under the basic choices, the
+   chevron turning over when it is open. */
+.export-advanced {
+  width: 100%;
+  margin-top: 16px;
+  gap: 8px;
+}
+.export-advanced > span {
+  flex: 1;
+  text-align: left;
+}
+.export-advanced > svg:last-child {
+  transition: transform 0.15s;
+}
+.export-advanced.on > svg:last-child {
+  transform: rotate(180deg);
+}
+.export-advanced-body {
+  margin-top: 4px;
+  padding-left: 2px;
 }
 .export-preview {
   position: sticky;
@@ -4986,29 +5058,312 @@ kbd {
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
-/* Admin mode is a different kind of window - say so with more than a toggle. */
-.rem-admin {
+/* Which yard the sheet is counted against: one line, coloured by status. */
+.rem-status {
   display: flex;
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--r);
-  background: rgba(112, 166, 245, 0.1);
-  border: 1px solid rgba(112, 166, 245, 0.35);
+  background: var(--well);
+  border: 1px solid var(--line);
   font-size: 12.5px;
 }
-.rem-admin .grow {
-  flex: 1 1 200px;
+.rem-status .grow {
+  flex: 1 1 220px;
   color: var(--muted);
 }
-.rem-bulk {
-  display: flex;
-  gap: 6px;
-  align-items: center;
+.rem-status.active {
+  border-color: rgba(112, 166, 245, 0.35);
 }
-.rem-bulk input {
-  width: 80px;
+.rem-status.finished {
+  border-color: rgba(113, 197, 117, 0.35);
+}
+
+/* ── drawing status ────────────────────────────────────────────────────────
+   One colour per status, used by the dot wherever a drawing is named:
+   blue holds stock, grey holds nothing, green has given it back. */
+.status-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.status-dot.unimportant {
+  background: var(--text-tertiary);
+}
+.status-dot.finished {
+  background: var(--ok);
+}
+
+/* The drawings list in the top-left menu. */
+.proj-menu {
+  min-width: 260px;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+}
+.proj-menu .menu-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.proj-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--r-sm);
+}
+.proj-row:hover {
+  background: var(--panel2);
+}
+.proj-row.on .proj-row-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.proj-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.proj-row-main:hover:not(:disabled) {
+  background: none;
+}
+.proj-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proj-row-open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 3px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.proj-row-open:hover {
+  background: var(--line);
+  color: var(--text);
+}
+.proj-row-open.here {
+  color: var(--accent);
+  cursor: default;
+}
+.proj-row-open.here:hover {
+  background: none;
+}
+
+/* What a drawing uses, beside the menu while its row is hovered. */
+.proj-hover {
+  position: fixed;
+  z-index: 61;
+  width: 280px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.66);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+.proj-hover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.proj-hover-head b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-hover-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.proj-hover .drawing-preview {
+  display: block;
+  border-radius: var(--r);
+  background: var(--well);
+}
+.proj-hover-total {
+  margin: 8px 0 4px;
+  color: var(--muted);
+}
+.proj-hover-parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.proj-hover-parts li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+}
+.proj-hover-parts .name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-hover-parts small {
+  color: var(--text-tertiary);
+}
+.proj-hover-parts b {
+  font-variant-numeric: tabular-nums;
+}
+.proj-hover-more,
+.proj-hover-empty {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+}
+.proj-hover-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+.drawing-preview.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r);
+  background: var(--well);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* The details window for one drawing. */
+.proj {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13.5px;
+}
+.proj-top {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.proj-preview {
+  flex: 0 0 auto;
+}
+.proj-preview .drawing-preview {
+  display: block;
+  border-radius: var(--r);
+  background: var(--well);
+  border: 1px solid var(--line);
+}
+.proj-side {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.proj-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.proj-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.proj-status-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--well);
+  color: var(--muted);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.proj-status-opt:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.proj-status-opt:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.proj-status-opt.on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(112, 166, 245, 0.1);
+}
+.proj-status-opt.unimportant.on {
+  border-color: var(--muted);
+  background: rgba(154, 164, 177, 0.1);
+}
+.proj-status-opt.finished.on {
+  border-color: var(--ok);
+  background: rgba(113, 197, 117, 0.1);
+}
+.proj-status-text b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.proj-status-text small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.proj-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.proj-facts div {
+  padding: 8px 10px;
+  border-radius: var(--r);
+  background: var(--well);
+}
+.proj-facts span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.proj-facts b {
+  font-size: 18px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.proj-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.proj-open-tag {
+  color: var(--accent);
+}
+@media (max-width: 760px) {
+  .proj-preview,
+  .proj-preview .drawing-preview {
+    width: 100%;
+  }
 }
 .rem-table-wrap {
   overflow-x: auto;
@@ -5882,4 +6237,306 @@ kbd {
 }
 .size-now b {
   font-variant-numeric: tabular-nums;
+}
+
+/* ── კონექტორები: marks on the plan, and the ჭანჭიკები menu in the top bar ─────────────── */
+/* The printed sheet draws these glyphs with no stylesheet, from the colours in
+   src/lib/boltStyle.ts - keep the two in step. */
+.bolt-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 41;
+  overflow: hidden;
+}
+/* A mark is taken hold of to place a real connector there. */
+.bolt-layer .bolt.grabbable {
+  pointer-events: auto;
+  cursor: grab;
+}
+/* A placed კუთხის კონექტორი is drawn as the mark, standing on its joint. */
+.piece.connector {
+  overflow: visible;
+}
+.piece.connector > svg {
+  overflow: visible;
+}
+.piece.connector.selected {
+  outline: none;
+}
+.piece.connector.selected .bolt-glyph circle {
+  stroke: var(--sel);
+}
+.bolt-glyph circle,
+.bolts-btn-mark circle {
+  fill: #f5d90a;
+  stroke: #b59c00;
+  stroke-width: 1.5;
+}
+/* At a კუთხე the mark goes a light orange: the inner-corner bolt sits on a
+   filler, which is yellow already, and a placed connector clamping a corner
+   reads as that at a glance. */
+.bolt-glyph.corner circle {
+  fill: #f5a623;
+  stroke: #b8740e;
+}
+.bolt-glyph .bolt-bar,
+.bolts-btn-mark .bolt-bar {
+  stroke: #111;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.bolt-glyph .bolt-slash,
+.bolts-btn-mark .bolt-slash {
+  stroke: #b3261e;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.bolts-btn {
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.bolts-count {
+  background: rgba(245, 217, 10, 0.16);
+  color: #f5d90a;
+  border-radius: 10px;
+  font-size: 10px;
+  padding: 1px 6px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* The drawing name's menu has to give too, or the name never reaches its
+   ellipsis and runs under the buttons beside it once the top bar is full. */
+.row-left > .menu-anchor {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.row-left > .menu-anchor > .doc-pick {
+  min-width: 0;
+  max-width: 100%;
+}
+/* A full top bar keeps the ჭანჭიკები mark; the word is in the
+   tooltip. */
+@media (max-width: 1280px) {
+  .bolts-label {
+    display: none;
+  }
+}
+/* The ჭანჭიკები button: crossed bars in the text colour, outline only. */
+.bolts-btn-icon rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+/* Each kind in the ჭანჭიკები menu leads with its own mark. */
+.bolts-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+/* A kind hidden from the plan: faded in the menu, its count struck through. */
+.bolts-kind.off {
+  opacity: 0.45;
+}
+.bolts-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* ჩანაცვლება with something selected: a blue border and a slow glow round
+   it, so the button that can act on the selection is the one that stands out. */
+.replace-btn.ready {
+  border-color: var(--sel);
+  color: var(--sel);
+  animation: replace-ready 1.6s ease-in-out infinite;
+}
+@keyframes replace-ready {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(112, 166, 245, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(112, 166, 245, 0.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .replace-btn.ready {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(112, 166, 245, 0.35);
+  }
+}
+/* ჩანაცვლება: two lists that can run long on a big job, so each scrolls. */
+.replace-menu {
+  min-width: 260px;
+  max-width: 340px;
+}
+.replace-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.replace-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.replace-hint {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 10px 6px;
+  line-height: 1.4;
+}
+/* "14 × 5 =" before the total: places on the plan × how many at each. */
+.bolts-calc {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bolts-count.off {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+/* A worked-out შტირი across a wall: the rod colour, outlined so it reads over
+   the panels it goes through. */
+/* შტირები and their ქანჩი + დისკო: a thin dark-red rod through the wall,
+   a grey washer flat on each face and the nut on it - see BoltLayer. */
+.rod-bar {
+  fill: #c0473f;
+  stroke: #6e211b;
+  stroke-width: 0.6px;
+  vector-effect: non-scaling-stroke;
+}
+.rod-hit {
+  fill: transparent;
+}
+.bolt-layer .rod-mark .rod-hit {
+  pointer-events: none;
+}
+.bolt-layer .rod-mark.grabbable,
+.bolt-layer .rod-mark.grabbable .rod-hit,
+.bolt-layer .latch-mark.grabbable,
+.bolt-layer .nut-mark.grabbable {
+  pointer-events: auto;
+  cursor: grab;
+}
+.nut-washer {
+  fill: #b7bfc8;
+  stroke: #4b525b;
+}
+.nut-nut {
+  fill: #5c636d;
+  stroke: #2c3137;
+}
+/* The light wing nut past the dark nut on a ქანჩი + დისკო, so the two read apart. */
+.wing-lobe,
+.wing-hub {
+  fill: #e4e7eb;
+  stroke: #59606a;
+}
+.wing-hole {
+  fill: #8a919a;
+}
+.piece.nut.selected .wing-lobe,
+.piece.nut.selected .wing-hub,
+.piece.latch.selected .clamp-body {
+  stroke: var(--sel);
+}
+.piece.rod > svg,
+.piece.nut > svg,
+.piece.latch > svg {
+  overflow: visible;
+}
+.piece.rod.selected,
+.piece.nut.selected,
+.piece.latch.selected {
+  outline: none;
+}
+.piece.rod.selected .rod-bar,
+.piece.nut.selected .nut-washer,
+.piece.nut.selected .nut-nut {
+  stroke: var(--sel);
+}
+.rods-mark rect {
+  fill: #c0473f;
+  stroke: #6e211b;
+  stroke-width: 0.6;
+}
+.nuts-mark rect {
+  stroke-width: 0.6;
+}
+/* ავტომატურად თავიდან დასმა with its settings beside it: the kinds it resets. */
+.bolts-reset-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.bolts-reset-row > .menu-item {
+  flex: 1 1 auto;
+}
+.bolts-reset-settings {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: #c3cad4;
+  cursor: pointer;
+}
+.bolts-reset-settings:hover,
+.bolts-reset-settings.on {
+  background: var(--panel2);
+}
+.bolts-reset-kind {
+  padding-left: 22px;
+}
+
+/* პარამეტრები - a category per row, opened out into its materials. */
+.settings-vis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 16px;
+}
+.settings-vis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-vis-items {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 8px 22px;
+}
+
+/* Placed by hand (no Piece.auto): an amber dot in the corner, the same size on
+   screen at any zoom, so the hand-set corners read apart from the filled runs. */
+.piece.hand::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(7px / var(--z, 1));
+  height: calc(7px / var(--z, 1));
+  border-radius: 50%;
+  background: #f0a530;
+  box-shadow: 0 0 0 calc(1px / var(--z, 1)) rgba(0, 0, 0, 0.55);
+  transform: translate(-35%, -35%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* The pen's "a length can be typed" hint: quiet until a digit is pressed. */
+.pen-typed.idle {
+  padding: 3px 8px;
+  background: rgba(20, 24, 30, 0.82);
+  color: var(--muted, #9aa4b2);
+  font-weight: 500;
+  font-size: 12px;
+}
+.pen-typed.idle small {
+  margin-left: 0;
+  opacity: 1;
 }
