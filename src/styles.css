@@ -6540,3 +6540,12 @@ kbd {
   margin-left: 0;
   opacity: 1;
 }
+
+/* The stretch of a line picked corner to corner, under the recommendation. */
+.sketch-span {
+  stroke: var(--accent, #70a6f5);
+  stroke-opacity: 0.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}

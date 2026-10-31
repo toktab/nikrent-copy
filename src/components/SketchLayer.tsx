@@ -33,6 +33,7 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
   const sketch = useEditorStore((s) => s.sketch);
   const selected = useEditorStore((s) => s.selectedSketchIds);
   const part = useEditorStore((s) => s.selectedSketchPart);
+  const span = useEditorStore((s) => s.selectedSpan);
   const penPoints = useEditorStore((s) => s.penPoints);
   const tool = useEditorStore((s) => s.tool);
   const zoom = useEditorStore((s) => s.zoom);
@@ -92,6 +93,17 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
           />
         </g>
       ))}
+
+      {/* The stretch picked out of the line, corner to corner - what the
+          recommendation tab is filling. */}
+      {span && selected.length === 1 && selected[0] === span.pathId && (
+        <polyline
+          className="sketch-span"
+          points={span.points.map((p) => `${p.x},${p.y}`).join(' ')}
+          strokeWidth={hair * 6}
+          fill="none"
+        />
+      )}
 
       {/* Where the pen is, which is never quite where the pointer is.
           The vertex lands on a corner of the grid, so the corner it has picked

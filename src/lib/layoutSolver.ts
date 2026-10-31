@@ -133,6 +133,12 @@ export interface LayoutRequest {
   free?: Map<string, number>;
   /** how many variants to return */
   limit?: number;
+  /**
+   * Which side the panels stand, by line id, where the caller knows better
+   * than the line's own shape - a stretch cut out of a longer line (`spanAt`)
+   * is an open fragment whose winding means nothing.
+   */
+  sides?: Record<string, 1 | -1>;
 }
 
 /** One face of one wall in a variant, for showing it. */
@@ -1568,6 +1574,10 @@ export function solveLayout(req: LayoutRequest): LayoutResult {
     chains.map((c) => c.path),
     { height: req.height, includeCorners: req.includeCorners },
   );
+  chains.forEach((c, i) => {
+    const given = req.sides?.[c.path.id];
+    if (given) sides[i] = given;
+  });
 
   const solutions = new Map<number, HeightSolution>();
   for (const h of [...new Set(stack)]) {
