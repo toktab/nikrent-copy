@@ -365,9 +365,29 @@ export function RecommendPanel({
         <div className="alert rec-switch" style={{ margin: 0 }}>
           არჩეულია მონაკვეთი კუთხიდან კუთხემდე - {span.length} სმ. შეივსება მხოლოდ ის, დანარჩენი ხაზი
           ხელუხლებელი რჩება.
-          <button className="btn small" onClick={() => setSelectedSpan(null)}>
-            მთელი ხაზი
-          </button>
+          {/* Which side the panels go: worked out from the whole drawing, and
+              turned by hand where that is wrong (the user, 2026-11-01). */}
+          <span className="pen-face" role="group" aria-label="მონაკვეთის მხარე">
+            {(
+              [
+                ['გარე', span.outer, 'პანელები ხაზის გარე მხარეს'],
+                ['შიდა', -span.outer as 1 | -1, 'პანელები ხაზის შიდა მხარეს'],
+              ] as const
+            ).map(([label, side, why]) => (
+              <button
+                key={label}
+                className={`btn small${span.side === side ? ' engaged' : ''}`}
+                aria-pressed={span.side === side}
+                title={why}
+                onClick={() => setSelectedSpan({ ...span, side })}
+              >
+                {label}
+              </button>
+            ))}
+            <button className="btn small" onClick={() => setSelectedSpan(null)}>
+              მთელი ხაზი
+            </button>
+          </span>
         </div>
       )}
       {!span && inside.lines.length > 0 && (

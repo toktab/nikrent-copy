@@ -1,7 +1,7 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { pieceBounds } from './geometry';
 import { joinLines } from './layoutSolver';
-import { sidesFromNeighbours } from './sketchFill';
+import { outwardSide, sidesFromNeighbours } from './sketchFill';
 
 type Point = { x: number; y: number };
 
@@ -22,12 +22,24 @@ export interface LineSpan {
   points: Point[];
   /** which side of it the panels stand - the whole line's side, see below */
   side: 1 | -1;
+  /**
+   * The side that is გარე for this line - away from what it goes round. The
+   * stretch can be turned to the other side by hand; this names the two.
+   */
+  outer: 1 | -1;
   /** its length along the line, cm */
   length: number;
 }
 
 /** Shorter than this between two pieces is a placing error, not a stretch to fill. */
 const MIN_SPAN_CM = 2.5;
+/** A stretch end this close to the 5 cm module is read as on it, cm - as the solver reads hand-placed pieces. */
+const HAND_SNAP_CM = 1.5;
+const onModule = (v: number) => {
+  const m = Math.round(v / 5) * 5;
+  return Math.abs(v - m) <= HAND_SNAP_CM ? m : v;
+};
+
 /** How close a piece has to come to a line to count as standing on it, cm. */
 const TOUCH_CM = 0.6;
 
@@ -133,7 +145,19 @@ export function spanAt(
   }
   if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi - lo < MIN_SPAN_CM) return null;
 
-  return { pathId, points: slice(legs, total, closed, lo, hi), side, length: Math.round((hi - lo) * 10) / 10 };
+  // The ends where the pieces either side stand, read onto the 5 cm module
+  // when they are within a hand's error of it: his corner panel 1 cm off made
+  // a 549 cm stretch that no set of parts closes, and the recommendation came
+  // back empty (ნახაზი 4, 2026-11-01).
+  const points = slice(legs, total, closed, lo, hi);
+  const ends = [0, points.length - 1];
+  for (const k of ends) points[k] = { x: onModule(points[k].x), y: onModule(points[k].y) };
+  let length = 0;
+  for (let i = 1; i < points.length; i++) {
+    length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  }
+  const outer = outwardSide({ ...chain, perimeter: 'outer' });
+  return { pathId, points, side, outer, length: Math.round(length * 10) / 10 };
 }
 
 /** The line between two lengths along it, its corners included. */
