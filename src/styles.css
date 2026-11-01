@@ -6549,3 +6549,19 @@ kbd {
   stroke-linejoin: round;
   pointer-events: none;
 }
+/* ...its two ends and its own length, amber against the blue leg lengths. */
+.sketch-span-mark .sketch-span {
+  stroke: #f0a530;
+  stroke-opacity: 0.55;
+}
+.sketch-span-tick {
+  stroke: #f0a530;
+  stroke-linecap: round;
+}
+.sketch-span-pill {
+  fill: #f0a530;
+}
+.sketch-span-label {
+  fill: #1b1f24;
+  font-weight: 700;
+}

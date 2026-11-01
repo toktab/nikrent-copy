@@ -114,6 +114,14 @@ describe('a stretch of a line, corner to corner', async () => {
     expect(span.length).toBe(480);
   });
 
+  it('reads a stretch end a hand-placed centimetre off as on the module', () => {
+    // ნახაზი 4: a corner panel 1 cm off made a 549 cm stretch nothing fills.
+    const off: Piece = { ...left, x: 1 };
+    const span = spanAt('l', { x: 300, y: 0 }, [line], [off, right], SEED_MATERIALS)!;
+    expect(span.points[0]).toEqual({ x: 60, y: 0 });
+    expect(span.length).toBe(480);
+  });
+
   it('picks nothing on a piece, or on a line with nothing on it', () => {
     expect(spanAt('l', { x: 30, y: 0 }, [line], [left, right], SEED_MATERIALS)).toBeNull();
     expect(spanAt('l', { x: 300, y: 0 }, [line], [], SEED_MATERIALS)).toBeNull();

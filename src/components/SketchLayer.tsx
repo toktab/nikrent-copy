@@ -5,6 +5,7 @@ import { isHorizontal, legLength, pathLength, segments, type SegmentHit } from '
 import type { Point } from '../lib/sketch';
 import { legDir, leftNormal, outwardSide, sidesFromNeighbours } from '../lib/sketchFill';
 import type { SketchPath } from '../types';
+import type { LineSpan } from '../lib/span';
 
 /**
  * The drawn layout, under the formwork.
@@ -96,14 +97,7 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
 
       {/* The stretch picked out of the line, corner to corner - what the
           recommendation tab is filling. */}
-      {span && selected.length === 1 && selected[0] === span.pathId && (
-        <polyline
-          className="sketch-span"
-          points={span.points.map((p) => `${p.x},${p.y}`).join(' ')}
-          strokeWidth={hair * 6}
-          fill="none"
-        />
-      )}
+      {span && selected.length === 1 && selected[0] === span.pathId && <SpanMark span={span} hair={hair} />}
 
       {/* Where the pen is, which is never quite where the pointer is.
           The vertex lands on a corner of the grid, so the corner it has picked
@@ -171,6 +165,68 @@ export function SketchLayer({ worldW, worldH, top, preview, hover, addAt }: Prop
  * One leg's length, set just off the line and along it — the same place a
  * dimension goes on a drawing, and clear of the line it describes.
  */
+/**
+ * The stretch picked out of a line, drawn over it in its own colour with its
+ * own length - the empty part between the pieces either side, beside the
+ * whole leg's length the dimension layer shows (the user, 2026-11-01: both at
+ * once, told apart at a glance). The label sits on the line itself: the leg's
+ * own length is set off to one side of it, and a wall's other face, with its
+ * lengths, is a few centimetres away on the other.
+ */
+function SpanMark({ span, hair }: { span: LineSpan; hair: number }) {
+  const pts = span.points;
+  // The longest leg of the stretch carries the label.
+  let best = 0;
+  let bestLen = -1;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const len = legLength(pts[i], pts[i + 1]);
+    if (len > bestLen) {
+      best = i;
+      bestLen = len;
+    }
+  }
+  const a = pts[best];
+  const b = pts[best + 1] ?? a;
+  // A third of the way along rather than halfway: the leg's own length is at
+  // its middle, and a stretch's middle is usually close to that.
+  const mx = a.x + (b.x - a.x) * 0.3;
+  const my = a.y + (b.y - a.y) * 0.3;
+  const text = `${Math.round(span.length * 10) / 10} სმ`;
+  const font = hair * 8;
+  const w = text.length * font * 0.62 + hair * 8;
+  const h = font * 1.6;
+  const tick = (p: { x: number; y: number }, q: { x: number; y: number }, key: string) => {
+    const m = leftNormal(legDir(p, q));
+    return (
+      <line
+        key={key}
+        className="sketch-span-tick"
+        x1={p.x + m.x * hair * 7}
+        y1={p.y + m.y * hair * 7}
+        x2={p.x - m.x * hair * 7}
+        y2={p.y - m.y * hair * 7}
+        strokeWidth={hair * 2}
+      />
+    );
+  };
+  return (
+    <g className="sketch-span-mark" pointerEvents="none">
+      <polyline
+        className="sketch-span"
+        points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+        strokeWidth={hair * 6}
+        fill="none"
+      />
+      {pts.length > 1 && tick(pts[0], pts[1], 'start')}
+      {pts.length > 1 && tick(pts[pts.length - 1], pts[pts.length - 2], 'end')}
+      <rect className="sketch-span-pill" x={mx - w / 2} y={my - h / 2} width={w} height={h} rx={h / 2} />
+      <text className="sketch-span-label" x={mx} y={my} fontSize={font} textAnchor="middle" dominantBaseline="central">
+        {text}
+      </text>
+    </g>
+  );
+}
+
 function LegLabel({
   a,
   b,
