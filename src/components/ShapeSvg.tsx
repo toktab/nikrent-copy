@@ -71,6 +71,26 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
   // A დგარი as the prop it is - see `PostShape`.
   if (m.category === 'post') return <PostShape m={m} stroke={stroke} strokeWidth={strokeWidth} />;
 
+  // The thin outer-corner angle (leg 0.1 cm) is a sliver to click on: its whole
+  // square is drawn faint behind it and takes the click (the user, 2026-11-04).
+  if (m.shape === 'L' && m.leg !== undefined && m.leg < 1) {
+    return (
+      <>
+        <rect
+          className="thin-corner-box"
+          x={0}
+          y={0}
+          width={pw}
+          height={ph}
+          fill="rgba(70, 100, 140, 0.35)"
+          stroke="rgba(200, 220, 240, 0.6)"
+          strokeWidth={sw}
+        />
+        <polygon points={pointsAttr(drawnOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />
+      </>
+    );
+  }
+
   return m.shape === 'L' ? (
     <polygon points={pointsAttr(drawnOutline(m))} fill={m.color} stroke={stroke} strokeWidth={sw} />
   ) : m.shape === 'line' ? (

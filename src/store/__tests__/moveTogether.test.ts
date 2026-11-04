@@ -51,7 +51,9 @@ describe('moving pieces and layout together', () => {
     const movedPiece = state().pieces[0].x - 100;
     const movedLine = state().sketch[0].points[0].x - 100;
     expect(movedLine).toBe(movedPiece);
-    expect(movedPiece).toBe(45); // 52 rounded to the nearest step
+    // 152 puts its edge nearest the 150 grid line: moved 50, not the 45 that
+    // 52 rounded to a step would be - the edge goes on the grid (2026-11-04).
+    expect(movedPiece).toBe(50);
   });
 
   it('leaves the layout alone when none of it is selected', () => {
