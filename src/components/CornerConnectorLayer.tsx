@@ -6,8 +6,8 @@ import { cornerConnectorSpots } from '../lib/cornerConnectors';
 /**
  * The worked-out კუთხის კონექტორი 25 სმ at outside corners, drawn the way the
  * user drew it: a dark red bar from outside the through panel, through the ჩ5,
- * into the run's first panel, with the ქანჩი + დისკო as a ring on its outer
- * end and how many go up it. A ჩ10 closure takes the half-head შტირი 40 სმ
+ * into the run's first panel, with the ქანჩი + დისკო on its outer
+ * end - how many go up it is in the menu, not on the plan. A ჩ10 closure takes the half-head შტირი 40 სმ
  * instead, drawn longer and bright red. Screen pixels, over the surface, look
  * only - each kind shown or hidden by itself.
  */
@@ -37,8 +37,6 @@ export function CornerConnectorLayer() {
   );
   if (!shown || !spots.length) return null;
   const thick = Math.max(2.5, 2 * zoom);
-  const ring = Math.max(4, 4 * zoom);
-  const font = Math.max(9, Math.min(13, 10 * zoom));
 
   return (
     <svg className="bolt-layer corner-connector-layer" width={stageW} height={stageH} aria-hidden="true">
@@ -54,12 +52,9 @@ export function CornerConnectorLayer() {
         const oy = s.outer.y * zoom + panY;
         if (ox < -40 || oy < -40 || ox > stageW + 40 || oy > stageH + 40) return null;
         const fits = s.inner || s.filler === 5;
-        // The count beside the ring, out past the through panel.
+        // Which way is out of the corner - the way the nut faces. No count on
+        // the plan (the user, 2026-11-04): the ჭანჭიკები menu has it.
         const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
-        const label =
-          s.dir === 'h'
-            ? { x: ox + out * (ring + 4), y: oy, anchor: out < 0 ? 'end' : 'start' }
-            : { x: ox, y: oy + out * (ring + font), anchor: 'middle' };
         return (
           <g key={`${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`} className={`cc-mark${fits ? '' : ' wide'}${s.inner ? ' inner' : ''}`}>
             <title>
@@ -78,18 +73,6 @@ export function CornerConnectorLayer() {
               rot={s.dir === 'h' ? (out < 0 ? 180 : 0) : out < 0 ? 270 : 90}
               scale={zoom * (s.inner ? 0.6 : 1)}
             />
-            {zoom >= 0.35 && (
-              <text
-                className="cc-count"
-                x={label.x}
-                y={label.y}
-                fontSize={font}
-                textAnchor={label.anchor as 'start' | 'end' | 'middle'}
-                dominantBaseline="middle"
-              >
-                ×{s.count}
-              </text>
-            )}
           </g>
         );
       })}
