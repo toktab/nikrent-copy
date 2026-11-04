@@ -152,10 +152,9 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
       `w:${Math.round(s.box.x)}:${Math.round(s.box.y)}:${Math.round(s.piece.z ?? 0)}`,
       s.walers * WALER_RODS_EACH,
     ]),
-    // ...and one on the outer end of each კუთხის კონექტორი 25 სმ.
-    ...cornerConnectorSpots(pieces, byId)
-      .filter((s) => s.filler === 5)
-      .map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),
+    // ...and one on the outer end of each კუთხის კონექტორი 25 სმ and each
+    // half-head შტირი 40 სმ.
+    ...cornerConnectorSpots(pieces, byId).map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),
   ];
 
   const latches: Array<[string, number]> = [

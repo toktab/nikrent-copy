@@ -87,6 +87,7 @@ export function SettingsDialog() {
       <VisibilityList />
       <WalersSwitch />
       <CornerConnectorsSwitch />
+      <HalfHeadSwitch />
     </Modal>
   );
 }
@@ -182,6 +183,28 @@ function CornerConnectorsSwitch() {
       />
       <span>
         კუთხის კონექტორი 25 სმ ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ5-ით</span>
+      </span>
+    </label>
+  );
+}
+
+/** The worked-out half-head შტირი 40 სმ at ჩ10 corners - like the others. */
+function HalfHeadSwitch() {
+  const on = useEditorStore((s) => s.halfHeadShown);
+  const setOn = useEditorStore((s) => s.setHalfHeadShown);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          setOn(e.target.checked);
+        }}
+      />
+      <span>
+        შტირი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
       </span>
     </label>
   );

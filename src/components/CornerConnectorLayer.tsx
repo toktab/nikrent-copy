@@ -6,11 +6,14 @@ import { cornerConnectorSpots } from '../lib/cornerConnectors';
  * The worked-out კუთხის კონექტორი 25 სმ at outside corners, drawn the way the
  * user drew it: a dark red bar from outside the through panel, through the ჩ5,
  * into the run's first panel, with the ქანჩი + დისკო as a ring on its outer
- * end and how many go up it. A ჩ10 closure gets the bar dashed and a "?" -
- * a different part goes there. Screen pixels, over the surface, look only.
+ * end and how many go up it. A ჩ10 closure takes the half-head შტირი 40 სმ
+ * instead, drawn longer and bright red. Screen pixels, over the surface, look
+ * only - each kind shown or hidden by itself.
  */
 export function CornerConnectorLayer() {
-  const shown = useEditorStore((s) => s.cornerConnectorsShown);
+  const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
+  const halfShown = useEditorStore((s) => s.halfHeadShown);
+  const shown = ccShown || halfShown;
   const pieces = useDeferredValue(useEditorStore((s) => s.pieces));
   const materials = useEditorStore((s) => s.materials);
   const zoom = useEditorStore((s) => s.zoom);
@@ -20,8 +23,13 @@ export function CornerConnectorLayer() {
   const stageH = useEditorStore((s) => s.stageH);
 
   const spots = useMemo(
-    () => (shown ? cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))) : []),
-    [shown, pieces, materials],
+    () =>
+      shown
+        ? cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))).filter((s) =>
+            s.filler === 10 ? halfShown : ccShown,
+          )
+        : [],
+    [shown, ccShown, halfShown, pieces, materials],
   );
   if (!shown || !spots.length) return null;
   const thick = Math.max(2.5, 2 * zoom);
@@ -53,9 +61,9 @@ export function CornerConnectorLayer() {
             <title>
               {fits
                 ? `კუთხის კონექტორი 25 სმ × ${s.count} - ქანჩი + დისკო თითოზე`
-                : 'გარე კუთხეში ჩ10 - კონექტორი 25 სმ არ ეტევა, სხვა დეტალია საჭირო'}
+                : `შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა) × ${s.count} - გარე კუთხე ჩ10-ით, ქანჩი + დისკო თითოზე`}
             </title>
-            <line className="cc-bar" {...line} strokeWidth={thick} strokeDasharray={fits ? undefined : `${thick * 2} ${thick * 1.5}`} />
+            <line className="cc-bar" {...line} strokeWidth={thick} />
             <ellipse
               className="cc-nut"
               cx={ox}
@@ -73,7 +81,7 @@ export function CornerConnectorLayer() {
                 textAnchor={label.anchor as 'start' | 'end' | 'middle'}
                 dominantBaseline="middle"
               >
-                {fits ? `×${s.count}` : '?'}
+                ×{s.count}
               </text>
             )}
           </g>

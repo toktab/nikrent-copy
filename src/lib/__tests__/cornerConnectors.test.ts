@@ -33,13 +33,16 @@ describe('კუთხის კონექტორი 25 სმ', () => {
     const t = cornerConnectorTotals(spots);
     expect(t.connectors).toBe(5);
     expect(t.nuts).toBe(5);
-    expect(t.wide).toBe(0);
+    expect(t.halfHead).toBe(0);
   });
 
-  it('is not the part for a ჩ10 - reported, not counted', () => {
-    const t = cornerConnectorTotals(cornerConnectorSpots(corner('filler-10x300'), byId));
+  it('is a half-head შტირი 40 სმ instead where the corner is closed with a ჩ10', () => {
+    const spots = cornerConnectorSpots(corner('filler-10x300'), byId);
+    expect(spots[0].to - spots[0].from).toBe(40);
+    const t = cornerConnectorTotals(spots);
     expect(t.connectors).toBe(0);
-    expect(t.wide).toBe(1);
+    expect(t.halfHead).toBe(5);
+    expect(t.nuts).toBe(5);
   });
 
   it('puts a ქანჩი + დისკო on each into the total', () => {
