@@ -72,6 +72,14 @@ const SEEDS: Seed[] = [
   ['acc-scaffold-foot', 'ხარაჩოს ფეხი', 'acc', 20, 30, 'rect'],
   ['acc-fixator-sleeve', 'გილზა ფიქსატორის', 'acc', 5, 15, 'rect'],
   ['acc-fixator-nut', 'ქანჩი (გაიკა) ფიქსატორის', 'acc', 6, 6, 'rect'],
+
+  // ---- The parts the ჭანჭიკები count names (the user, 2026-11-04) -------------
+  // Kept out of the rod and nut rules on purpose: drawn as small pieces, not
+  // lines, so a 40 cm rod here is never taken for a tie rod across a wall.
+  ['waler-rod-40', 'ვოლერის შტირი 40 სმ (მთლიანი თავით)', 'acc', 5, 40, 'rect'],
+  ['waler-rod-lock', 'ვოლერის შტირის თავის ჩასაკეტი', 'acc', 6, 6, 'rect'],
+  ['rod-40-half-head', 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 5, 40, 'rect'],
+  ['acc-small-barashka', 'ბარაშკა პატარა (გილზა + გაიკა)', 'acc', 6, 6, 'rect'],
 ];
 
 /** Du panels are always 9 cm thick. */

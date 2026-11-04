@@ -458,7 +458,12 @@ export interface EditorState {
 
   // ── actions: data ──
   /** Replace all company data with what the server holds. */
-  hydrateFromServer: (snapshot: DataSnapshot) => void;
+  /**
+   * Fill the store from the server. `restoreBuiltins`: put back every built-in
+   * the company's catalog is missing - only for someone who may save the
+   * catalog, since putting them back is a change that is then uploaded.
+   */
+  hydrateFromServer: (snapshot: DataSnapshot, options?: { restoreBuiltins?: boolean }) => void;
   /** Mark the local-only path as ready, when there is no server to wait for. */
   markLoadedOffline: () => void;
 
@@ -1081,12 +1086,19 @@ export const useEditorStore = create<EditorState>()(
          * Whatever is filled in here is pushed up by the next sync, so the
          * server ends up holding it too.
          */
-        hydrateFromServer: (snapshot) =>
+        hydrateFromServer: (snapshot, options) =>
           set((s) => {
             const materials = snapshot.materials.length
-              ? snapshot.materials
+              ? [...snapshot.materials]
               : createSeedMaterials();
             applySizeFixes(materials);
+            // The built-in catalog always exists (the user, 2026-11-04): one
+            // deleted, or lost when a spreadsheet replaced the catalog, comes
+            // back - the გარე კუთხე 300 had - and is uploaded with the next save.
+            if (options?.restoreBuiltins) {
+              const have = new Set(materials.map((m) => m.id));
+              for (const seed of createSeedMaterials()) if (!have.has(seed.id)) materials.push(seed);
+            }
 
             const warehouses = snapshot.warehouses.length
               ? snapshot.warehouses
@@ -2463,7 +2475,8 @@ export const useEditorStore = create<EditorState>()(
         deleteMaterial: (id, cascade) =>
           commit((s) => {
             const target = s.materials.find((m) => m.id === id);
-            if (!target) return {};
+            // Built-ins always exist - they are edited, never deleted.
+            if (!target || target.builtin) return {};
             const used = s.pieces.some((p) => p.materialId === id);
             if (used && !cascade) return {};
             return {
@@ -2514,7 +2527,11 @@ export const useEditorStore = create<EditorState>()(
         },
 
         /** Swaps in a catalog from file; returns how many orphaned pieces were dropped. */
-        replaceCatalog: (materials, warehouses) => {
+        replaceCatalog: (incoming, warehouses) => {
+          // A catalog read in from a file or a sheet replaces the company's
+          // own items, never the built-ins: any it leaves out stay.
+          const have = new Set(incoming.map((m) => m.id));
+          const materials = [...incoming, ...createSeedMaterials().filter((m) => !have.has(m.id))];
           const ids = new Set(materials.map((m) => m.id));
           const before = get().pieces;
           const kept = before.filter((p) => ids.has(p.materialId));
@@ -3064,9 +3081,11 @@ export function mergeCatalog(
   }
   applySizeFixes(materials);
 
-  const removed = new Set(removedBuiltins ?? []);
+  // Every built-in, always - one removed before built-ins became permanent
+  // (`removedBuiltins`) comes back too (the user, 2026-11-04).
+  void removedBuiltins;
   for (const seed of createSeedMaterials()) {
-    if (!taken.has(seed.id) && !removed.has(seed.id)) materials.push(seed);
+    if (!taken.has(seed.id)) materials.push(seed);
   }
 
   return materials.length ? materials : createSeedMaterials();

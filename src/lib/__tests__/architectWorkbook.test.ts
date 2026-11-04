@@ -11,7 +11,10 @@ import { createSeedMaterials } from '../../data/seedCatalog';
 import { withCompanyWeights } from '../../data/companyWeights';
 import type { Material, SketchPath } from '../../types';
 
-const materials: Material[] = withCompanyWeights(createSeedMaterials()).materials.map((m) =>
+// His workbook's 41 - the ჭანჭიკი parts added to the catalog since (2026-11-04)
+// are not rows of his sheet.
+const LATER = new Set(['waler-rod-40', 'waler-rod-lock', 'rod-40-half-head', 'acc-small-barashka']);
+const materials: Material[] = withCompanyWeights(createSeedMaterials().filter((m) => !LATER.has(m.id))).materials.map((m) =>
   m.id === 'panel-90x300' ? { ...m, stock: { main: 500 } } : m,
 );
 const byId = new Map(materials.map((m) => [m.id, m]));
