@@ -45,6 +45,29 @@ describe('კუთხის კონექტორი 25 სმ', () => {
     expect(t.nuts).toBe(5);
   });
 
+  it('goes from inside the profile at an inside corner, ჩ5 or ჩ10, with the small ბარაშკა', () => {
+    for (const [filler, w] of [
+      ['filler-5x300', 5],
+      ['filler-10x300', 10],
+    ] as const) {
+      const pieces: Piece[] = [
+        { id: 'k', materialId: 'corner-inner-20x20x300', x: 0, y: 0, rot: 0, z: 0 },
+        { id: 'f', materialId: filler, x: 20, y: 11, rot: 0, z: 0 },
+        { id: 'r', materialId: 'panel-90x300', x: 20 + w, y: 11, rot: 0, z: 0 },
+      ];
+      const spots = cornerConnectorSpots(pieces, byId);
+      expect(spots).toHaveLength(1);
+      expect(spots[0].inner).toBe(true);
+      expect(spots[0].to - spots[0].from).toBe(25);
+      const t = cornerConnectorTotals(spots);
+      expect(t.innerConnectors).toBe(5);
+      expect(t.smallNuts).toBe(5);
+      // The small ones are not ქანჩი + დისკო.
+      expect(t.nuts).toBe(0);
+      expect(t.connectors).toBe(0);
+    }
+  });
+
   it('puts a ქანჩი + დისკო on each into the total', () => {
     const pieces = corner();
     const without = nutCount(pieces.filter((p) => p.id !== 'f'), byId);

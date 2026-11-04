@@ -197,6 +197,7 @@ const PREF_KEYS = [
   'walersShown',
   'cornerConnectorsShown',
   'halfHeadShown',
+  'innerConnectorsShown',
   'objectVisibility',
   'panelDepth',
   'showSketch',
@@ -344,6 +345,8 @@ export interface EditorState {
   cornerConnectorsShown: boolean;
   /** the worked-out half-head შტირი 40 სმ at ჩ10 outside corners */
   halfHeadShown: boolean;
+  /** the worked-out 25 cm connectors at inside corners */
+  innerConnectorsShown: boolean;
   /** which kinds of thing the plan draws - see `ObjectVisibility` */
   objectVisibility: ObjectVisibility;
   /** the thickness every panel and ჩაკერება is drawn at, cm - see `setPanelDepthOverride` */
@@ -611,6 +614,7 @@ export interface EditorState {
   setWalersShown: (on: boolean) => void;
   setCornerConnectorsShown: (on: boolean) => void;
   setHalfHeadShown: (on: boolean) => void;
+  setInnerConnectorsShown: (on: boolean) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
   setShowLengths: (on: boolean) => void;
@@ -1037,6 +1041,7 @@ export const useEditorStore = create<EditorState>()(
         walersShown: true,
         cornerConnectorsShown: true,
         halfHeadShown: true,
+        innerConnectorsShown: true,
         objectVisibility: normalizeObjectVisibility(undefined),
         panelDepth: DEFAULT_PANEL_DEPTH_CM,
         simpleMode: false,
@@ -2228,6 +2233,7 @@ export const useEditorStore = create<EditorState>()(
         setWalersShown: (on) => set({ walersShown: on }),
         setCornerConnectorsShown: (on) => set({ cornerConnectorsShown: on }),
         setHalfHeadShown: (on) => set({ halfHeadShown: on }),
+        setInnerConnectorsShown: (on) => set({ innerConnectorsShown: on }),
         setPanelDepth: (cm) => {
           const depth = normalizePanelDepth(cm);
           setPanelDepthOverride(depth);

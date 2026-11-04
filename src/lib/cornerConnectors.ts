@@ -18,6 +18,12 @@ import { pieceBounds, type Rect } from './geometry';
  * 40 cm შტირი with a HALF head - წაჭრილი გაიკა - never the full-head one,
  * again with a ქანჩი + დისკო on its outer end (the user, 2026-11-04).
  *
+ * At an INSIDE corner the run's filler - ჩ5 or ჩ10, either works - closes
+ * against the corner profile, and the same 25 cm connector goes from inside
+ * the profile's leg, through the filler, into the run's first panel. Its end
+ * takes the SMALL ბარაშკა (გილზა + გაიკა), not the big ქანჩი + დისკო, so it
+ * is counted apart and not in the ქანჩი + დისკო total.
+ *
  * How many go up one corner is not given; taken as the შტირი spacing - 5 up a
  * 300, 2 up a 150 or 90 - until said otherwise.
  */
@@ -25,6 +31,10 @@ import { pieceBounds, type Rect } from './geometry';
 export const CORNER_CONNECTOR_NAME = 'კუთხის კონექტორი 25 სმ';
 export const CORNER_CONNECTOR_CM = 25;
 export const HALF_HEAD_NAME = 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)';
+export const INNER_CONNECTOR_NAME = 'კუთხის კონექტორი 25 სმ - შიდა კუთხე';
+export const SMALL_NUT_NAME = 'ბარაშკა პატარა (გილზა + გაიკა)';
+/** How far into the corner profile's leg the inside-corner connector starts, cm. */
+const INTO_PROFILE_CM = 3;
 export const HALF_HEAD_CM = 40;
 
 /** How long the part through a corner closed with this filler is, cm. */
@@ -41,8 +51,10 @@ export interface CornerConnectorSpot {
   to: number;
   /** the end with the ქანჩი + დისკო, outside the through panel */
   outer: { x: number; y: number };
-  /** the filler there: 5 takes the connector, 10 needs another part */
+  /** the filler there: 5 takes the connector, 10 the half-head შტირი (outside corners) */
   filler: number;
+  /** an inside corner: the connector starts in the corner profile, small ბარაშკა on it */
+  inner: boolean;
   /** connectors up this spot, every course counted */
   count: number;
 }
@@ -70,6 +82,13 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
     boxes.push({ p, m, r: pieceBounds(p, m), z: Math.round(p.z ?? 0) });
   }
   const panels = boxes.filter((b) => b.m.category === 'panel');
+  // The inside-corner profiles - an L standing in the notch.
+  const profiles: Box[] = [];
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || m.category !== 'corner' || m.shape !== 'L' || !m.name.includes('შიდა') || !isUpright(p)) continue;
+    profiles.push({ p, m, r: pieceBounds(p, m), z: Math.round(p.z ?? 0) });
+  }
   const near = (a: number, b: number) => Math.abs(a - b) <= TOUCH;
   const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0);
 
@@ -97,7 +116,16 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
         const span = dir === 'h' ? [a.r.y, a.r.y + a.r.h] : [a.r.x, a.r.x + a.r.w];
         return near(face, end) && overlap(span[0], span[1], c0, c1) > (c1 - c0) / 2;
       });
-      if (!through) continue;
+      // Or an inside corner's profile, its leg on this end.
+      const profile = through
+        ? undefined
+        : profiles.find((a) => {
+            if (Math.abs(a.z - f.z) > 1) return false;
+            const face = sign < 0 ? (dir === 'h' ? a.r.x + a.r.w : a.r.y + a.r.h) : dir === 'h' ? a.r.x : a.r.y;
+            const span = dir === 'h' ? [a.r.y, a.r.y + a.r.h] : [a.r.x, a.r.x + a.r.w];
+            return near(face, end) && overlap(span[0], span[1], c0, c1) > (c1 - c0) / 2;
+          });
+      if (!through && !profile) continue;
       // ...and the run's first panel on the filler's other end, along the run.
       const run = panels.find((b) => {
         if (Math.abs(b.z - f.z) > 1) return false;
@@ -109,10 +137,18 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
       });
       if (!run) continue;
 
-      // From the outside of the through panel, the part's length into the run.
-      const outside =
-        sign < 0 ? (dir === 'h' ? through.r.x : through.r.y) : dir === 'h' ? through.r.x + through.r.w : through.r.y + through.r.h;
-      const inner = outside - sign * partLength(f.m.w);
+      // From the outside of the through panel - or from a little way into the
+      // profile's leg - the part's length into the run.
+      const outside = through
+        ? sign < 0
+          ? dir === 'h'
+            ? through.r.x
+            : through.r.y
+          : dir === 'h'
+            ? through.r.x + through.r.w
+            : through.r.y + through.r.h
+        : end + sign * INTO_PROFILE_CM;
+      const inner = outside - sign * (profile ? CORNER_CONNECTOR_CM : partLength(f.m.w));
       const at = (c0 + c1) / 2;
       const key = `${dir}:${Math.round(at)}:${Math.round(outside)}`;
       const had = out.get(key);
@@ -128,6 +164,7 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
         to: Math.max(outside, inner),
         outer: dir === 'h' ? { x: outside, y: at } : { x: at, y: outside },
         filler: f.m.w,
+        inner: !!profile,
         count,
       });
     }
@@ -146,6 +183,11 @@ export interface CornerConnectorTotals {
   halfHead: number;
   /** ჩ10 closures by half-head rods each */
   halfGroups: Array<{ places: number; each: number }>;
+  /** 25 cm connectors at inside corners, every course */
+  innerConnectors: number;
+  /** a small ბარაშკა on each - not a ქანჩი + დისკო */
+  smallNuts: number;
+  innerGroups: Array<{ places: number; each: number }>;
 }
 
 export function cornerConnectorTotals(spots: CornerConnectorSpot[]): CornerConnectorTotals {
@@ -154,8 +196,10 @@ export function cornerConnectorTotals(spots: CornerConnectorSpot[]): CornerConne
     for (const s of list) by.set(s.count, (by.get(s.count) ?? 0) + 1);
     return [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each);
   };
-  const fit = spots.filter((s) => s.filler === 5);
-  const half = spots.filter((s) => s.filler === 10);
+  const fit = spots.filter((s) => !s.inner && s.filler === 5);
+  const half = spots.filter((s) => !s.inner && s.filler === 10);
+  const inside = spots.filter((s) => s.inner);
+  const innerConnectors = inside.reduce((n, s) => n + s.count, 0);
   const connectors = fit.reduce((n, s) => n + s.count, 0);
   const halfHead = half.reduce((n, s) => n + s.count, 0);
   return {
@@ -165,5 +209,8 @@ export function cornerConnectorTotals(spots: CornerConnectorSpot[]): CornerConne
     groups: grouped(fit),
     halfHead,
     halfGroups: grouped(half),
+    innerConnectors,
+    smallNuts: innerConnectors,
+    innerGroups: grouped(inside),
   };
 }

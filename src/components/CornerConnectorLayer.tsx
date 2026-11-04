@@ -13,7 +13,8 @@ import { cornerConnectorSpots } from '../lib/cornerConnectors';
 export function CornerConnectorLayer() {
   const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
   const halfShown = useEditorStore((s) => s.halfHeadShown);
-  const shown = ccShown || halfShown;
+  const innerShown = useEditorStore((s) => s.innerConnectorsShown);
+  const shown = ccShown || halfShown || innerShown;
   const pieces = useDeferredValue(useEditorStore((s) => s.pieces));
   const materials = useEditorStore((s) => s.materials);
   const zoom = useEditorStore((s) => s.zoom);
@@ -26,10 +27,10 @@ export function CornerConnectorLayer() {
     () =>
       shown
         ? cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))).filter((s) =>
-            s.filler === 10 ? halfShown : ccShown,
+            s.inner ? innerShown : s.filler === 10 ? halfShown : ccShown,
           )
         : [],
-    [shown, ccShown, halfShown, pieces, materials],
+    [shown, ccShown, halfShown, innerShown, pieces, materials],
   );
   if (!shown || !spots.length) return null;
   const thick = Math.max(2.5, 2 * zoom);
@@ -49,7 +50,7 @@ export function CornerConnectorLayer() {
         const ox = s.outer.x * zoom + panX;
         const oy = s.outer.y * zoom + panY;
         if (ox < -40 || oy < -40 || ox > stageW + 40 || oy > stageH + 40) return null;
-        const fits = s.filler === 5;
+        const fits = s.inner || s.filler === 5;
         // The count beside the ring, out past the through panel.
         const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
         const label =
@@ -57,9 +58,11 @@ export function CornerConnectorLayer() {
             ? { x: ox + out * (ring + 4), y: oy, anchor: out < 0 ? 'end' : 'start' }
             : { x: ox, y: oy + out * (ring + font), anchor: 'middle' };
         return (
-          <g key={`${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`} className={`cc-mark${fits ? '' : ' wide'}`}>
+          <g key={`${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`} className={`cc-mark${fits ? '' : ' wide'}${s.inner ? ' inner' : ''}`}>
             <title>
-              {fits
+              {s.inner
+                ? `კუთხის კონექტორი 25 სმ × ${s.count} - შიდა კუთხე, პატარა ბარაშკა თითოზე`
+                : fits
                 ? `კუთხის კონექტორი 25 სმ × ${s.count} - ქანჩი + დისკო თითოზე`
                 : `შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა) × ${s.count} - გარე კუთხე ჩ10-ით, ქანჩი + დისკო თითოზე`}
             </title>
@@ -68,8 +71,8 @@ export function CornerConnectorLayer() {
               className="cc-nut"
               cx={ox}
               cy={oy}
-              rx={s.dir === 'h' ? ring * 0.55 : ring}
-              ry={s.dir === 'h' ? ring : ring * 0.55}
+              rx={(s.dir === 'h' ? ring * 0.55 : ring) * (s.inner ? 0.6 : 1)}
+              ry={(s.dir === 'h' ? ring : ring * 0.55) * (s.inner ? 0.6 : 1)}
               strokeWidth={Math.max(1.5, zoom)}
             />
             {zoom >= 0.35 && (

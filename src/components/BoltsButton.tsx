@@ -6,7 +6,7 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, WingShape } from './BoltLayer';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
-import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME } from '../lib/cornerConnectors';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 
 /**
  * ჭანჭიკები in the top bar: the fixings the drawing needs, in a menu.
@@ -67,6 +67,8 @@ export function BoltsButton() {
   const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
   const setCcShown = useEditorStore((s) => s.setCornerConnectorsShown);
   const halfShown = useEditorStore((s) => s.halfHeadShown);
+  const innerShown = useEditorStore((s) => s.innerConnectorsShown);
+  const setInnerShown = useEditorStore((s) => s.setInnerConnectorsShown);
   const setHalfShown = useEditorStore((s) => s.setHalfHeadShown);
   const setWalersShown = useEditorStore((s) => s.setWalersShown);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
@@ -215,6 +217,31 @@ export function BoltsButton() {
           {HALF_HEAD_NAME}
         </span>
       </MenuItem>
+      {/* ...and at inside corners: the same 25 cm connector from inside the
+          profile, ჩ5 or ჩ10 alike, with the small ბარაშკა on it. */}
+      <MenuItem
+        title="შიდა კუთხეში, კუთხის პროფილსა და პანელს შორის ჩ5 ან ჩ10: 25 სმ კონექტორი პროფილიდან ჩაკერებაში და პანელში, ბოლოზე პატარა ბარაშკა (გილზა + გაიკა). 300-ზე 5, 150 / 90-ზე 2"
+        trail={<KindTrail groups={cc.innerGroups} shown={innerShown} />}
+        onClick={() => {
+          if (!innerShown) setShowBolts(true);
+          setInnerShown(!innerShown);
+        }}
+      >
+        <span className={`bolts-kind${innerShown ? '' : ' off'}`}>
+          <svg className="cc-menu-mark inner" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <line x1="3" y1="7" x2="13" y2="7" />
+            <ellipse cx="3" cy="7" rx="1.1" ry="2.2" />
+          </svg>
+          {INNER_CONNECTOR_NAME}
+        </span>
+      </MenuItem>
+      {cc.innerConnectors > 0 && (
+        <div className="bolts-sub">
+          <span>{SMALL_NUT_NAME}</span>
+          <span className="bolts-calc">{cc.innerConnectors} × 1 =</span>
+          <b>{cc.smallNuts} ც.</b>
+        </div>
+      )}
       <MenuSep />
       <div className="bolts-reset-row">
         <MenuItem
