@@ -85,6 +85,7 @@ export function SettingsDialog() {
         იმალება.
       </p>
       <VisibilityList />
+      <WalersSwitch />
     </Modal>
   );
 }
@@ -133,6 +134,32 @@ function NumberSetting({
         <span className="deg">სმ</span>
       </span>
       <small className="menu-note">{hint}</small>
+    </label>
+  );
+}
+
+/**
+ * The worked-out ვოლერები: counted whether shown or not, only drawn when on.
+ * Here as well as in the ჭანჭიკები menu, because this is where the user looks
+ * for what the plan shows (2026-11-04).
+ */
+function WalersSwitch() {
+  const on = useEditorStore((s) => s.walersShown);
+  const setWalersShown = useEditorStore((s) => s.setWalersShown);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check" style={{ marginTop: 8 }}>
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          setWalersShown(e.target.checked);
+        }}
+      />
+      <span>
+        ვოლერები ნახაზზე <span className="menu-note">- გამოთვლილი: პანელი, რომელსაც პირისპირ პანელი არ აქვს</span>
+      </span>
     </label>
   );
 }

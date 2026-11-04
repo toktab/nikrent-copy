@@ -321,6 +321,20 @@ export function Header() {
               </>
             )}
           </Menu>
+          {/* The drawing's own details - client, the products it uses - right
+              beside its name (the user, 2026-11-01). */}
+          <Tooltip
+            label="ნახაზის ინფორმაცია"
+            reason={activeDoc?.info?.clientName ? `კლიენტი: ${activeDoc.info.clientName}` : 'კლიენტი, პროდუქცია'}
+          >
+            <button
+              className="btn icon"
+              onClick={() => openDialog({ kind: 'drawing-info' })}
+              aria-label="ნახაზის ინფორმაცია"
+            >
+              <Icon name="sheet" size={16} />
+            </button>
+          </Tooltip>
         </div>
 
         <ProblemsButton />

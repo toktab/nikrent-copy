@@ -1,4 +1,5 @@
 import type { Material, Piece } from '../types';
+import { soloPanels, walerTotals } from './walers';
 import { isConnector, isLatch, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
 import { cornerLeg } from './shapePath';
 
@@ -944,13 +945,13 @@ export function fittingCount(pieces: Piece[], byId: Map<string, Material>, fit: 
 
 /**
  * How many ქანჩი + დისკო the drawing needs: two for every შტირი - one on each
- * end - and one for every კონექტორი (the user, 2026-10-30). Read off those two
- * counts rather than off the nuts standing on the plan, so a nut placed beside
- * its rod end, or one not placed yet, cannot make the delivery note disagree
- * with the rule.
+ * end - one for every კონექტორი (the user, 2026-10-30), and one on every
+ * ვოლერის შტირი (2026-11-04, see walers.ts). Read off those counts rather
+ * than off the nuts standing on the plan, so a nut placed beside its rod end,
+ * or one not placed yet, cannot make the delivery note disagree with the rule.
  */
 export const nutCount = (pieces: Piece[], byId: Map<string, Material>) =>
-  rodCount(pieces, byId) * 2 + connectorCount(pieces, byId);
+  rodCount(pieces, byId) * 2 + connectorCount(pieces, byId) + walerTotals(soloPanels(pieces, byId)).nuts;
 
 /** The fittings for one rod end, one per rod up it, facing out. `ids` as in `rodStack`. */
 export function fittingStack(m: Material, end: RodEnd, ids: string[], newId: () => string): Piece[] {
