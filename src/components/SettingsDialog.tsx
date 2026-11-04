@@ -86,6 +86,7 @@ export function SettingsDialog() {
       </p>
       <VisibilityList />
       <WalersSwitch />
+      <CornerConnectorsSwitch />
     </Modal>
   );
 }
@@ -159,6 +160,28 @@ function WalersSwitch() {
       />
       <span>
         ვოლერები ნახაზზე <span className="menu-note">- გამოთვლილი: პანელი, რომელსაც პირისპირ პანელი არ აქვს</span>
+      </span>
+    </label>
+  );
+}
+
+/** The worked-out კუთხის კონექტორი 25 სმ - like the walers: counted always, drawn when on. */
+function CornerConnectorsSwitch() {
+  const on = useEditorStore((s) => s.cornerConnectorsShown);
+  const setOn = useEditorStore((s) => s.setCornerConnectorsShown);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          setOn(e.target.checked);
+        }}
+      />
+      <span>
+        კუთხის კონექტორი 25 სმ ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ5-ით</span>
       </span>
     </label>
   );

@@ -80,6 +80,7 @@ import { isMaterialShown } from '../lib/objectVisibility';
 import { isPost, snapPost } from '../lib/posts';
 import { spanAt } from '../lib/span';
 import { WalerLayer } from './WalerLayer';
+import { CornerConnectorLayer } from './CornerConnectorLayer';
 import { ElevationPieceView } from './ElevationPieceView';
 import { PlacedShapeSvg, ShapeSvg, placedBox } from './ShapeSvg';
 import { DimensionLayer } from './DimensionLayer';
@@ -1714,6 +1715,7 @@ export function StageCanvas() {
       {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
       {/* The worked-out ვოლერები, behind panels nothing faces - see walers.ts. */}
       {!elevation && showBolts && <WalerLayer />}
+      {!elevation && showBolts && <CornerConnectorLayer />}
       {!elevation && showBolts && <BoltLayer onGrab={onBoltPointerDown} onGrabRod={onRodPointerDown} onGrabLatch={onLatchPointerDown} onGrabNut={onNutPointerDown} />}
 
       {/* Open gaps, in screen space so the strokes stay one pixel and the text

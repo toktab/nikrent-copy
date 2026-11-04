@@ -1,5 +1,6 @@
 import type { Material, Piece } from '../types';
 import { soloPanels, WALER_RODS_EACH } from './walers';
+import { cornerConnectorSpots } from './cornerConnectors';
 import { isConnector, normalizeRot, planW } from './geometry';
 import {
   CONNECTORS_PER_JOINT,
@@ -151,6 +152,10 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
       `w:${Math.round(s.box.x)}:${Math.round(s.box.y)}:${Math.round(s.piece.z ?? 0)}`,
       s.walers * WALER_RODS_EACH,
     ]),
+    // ...and one on the outer end of each კუთხის კონექტორი 25 სმ.
+    ...cornerConnectorSpots(pieces, byId)
+      .filter((s) => s.filler === 5)
+      .map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),
   ];
 
   const latches: Array<[string, number]> = [

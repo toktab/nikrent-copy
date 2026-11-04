@@ -6645,3 +6645,39 @@ kbd {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* კუთხის კონექტორი 25 სმ: a dark red bar with the nut as a ring outside. */
+.corner-connector-layer {
+  z-index: 42;
+}
+.cc-bar {
+  stroke: #9b1c1c;
+  stroke-linecap: round;
+}
+.cc-nut {
+  fill: none;
+  stroke: #4fb3f0;
+}
+.cc-count {
+  fill: #e36a6a;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(20, 24, 30, 0.85);
+  stroke-width: 3px;
+}
+.cc-mark.wide .cc-bar {
+  stroke: #c0841f;
+}
+.cc-mark.wide .cc-count {
+  fill: #f0a530;
+}
+.cc-menu-mark line {
+  stroke: #9b1c1c;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.cc-menu-mark ellipse {
+  fill: none;
+  stroke: #4fb3f0;
+  stroke-width: 1.3;
+}

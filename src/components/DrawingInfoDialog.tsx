@@ -4,6 +4,7 @@ import { buildBom } from '../lib/bom';
 import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals } from '../lib/cornerConnectors';
 import { isConfigured } from '../lib/supabase';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -49,13 +50,18 @@ export function DrawingInfoDialog() {
     () => walerTotals(soloPanels(pieces, new Map(materials.map((m) => [m.id, m])))),
     [pieces, materials],
   );
-  const walerRows: Array<[string, number]> = walers.walers
+  const cc = useMemo(
+    () => cornerConnectorTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m])))),
+    [pieces, materials],
+  );
+  const walerRows: Array<[string, number]> = cc.connectors ? [[CORNER_CONNECTOR_NAME, cc.connectors]] : [];
+  walerRows.push(...(walers.walers
     ? [
         ['ვოლერი', walers.walers],
         [WALER_ROD_NAME, walers.rods],
         [WALER_LOCK_NAME, walers.locks],
       ]
-    : [];
+    : []) as Array<[string, number]>);
   const kinds = rows.length + boltRows.length + walerRows.length;
   const notSaved = isConfigured && infoSaveUnsupported();
 
@@ -129,7 +135,7 @@ export function DrawingInfoDialog() {
               <tr key={name}>
                 <td>
                   {name}
-                  <span className="menu-note"> · ვოლერები</span>
+                  <span className="menu-note"> · ჭანჭიკები</span>
                 </td>
                 <td>{n}</td>
               </tr>
