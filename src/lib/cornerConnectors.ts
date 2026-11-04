@@ -14,8 +14,9 @@ import { pieceBounds, type Rect } from './geometry';
  *        ○|█|░|▓▓▓▓▓▓▓▓▓       ○ ქანჩი + დისკო   █ through panel
  *         ═══════════            ░ ჩ5   ▓ the run's first panel   ═ connector
  *
- * It only fits a ჩ5. With a ჩ10 there a different part is needed (not known
- * yet), so those spots are reported and not counted.
+ * It only fits a ჩ5. Where the corner is closed with a ჩ10 the part is a
+ * 40 cm შტირი with a HALF head - წაჭრილი გაიკა - never the full-head one,
+ * again with a ქანჩი + დისკო on its outer end (the user, 2026-11-04).
  *
  * How many go up one corner is not given; taken as the შტირი spacing - 5 up a
  * 300, 2 up a 150 or 90 - until said otherwise.
@@ -23,6 +24,11 @@ import { pieceBounds, type Rect } from './geometry';
 
 export const CORNER_CONNECTOR_NAME = 'კუთხის კონექტორი 25 სმ';
 export const CORNER_CONNECTOR_CM = 25;
+export const HALF_HEAD_NAME = 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)';
+export const HALF_HEAD_CM = 40;
+
+/** How long the part through a corner closed with this filler is, cm. */
+const partLength = (filler: number) => (filler === 10 ? HALF_HEAD_CM : CORNER_CONNECTOR_CM);
 
 /** Touching, for pieces placed by hand on a 5 cm grid, cm. */
 const TOUCH = 1.5;
@@ -103,10 +109,10 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
       });
       if (!run) continue;
 
-      // From the outside of the through panel, CORNER_CONNECTOR_CM into the run.
+      // From the outside of the through panel, the part's length into the run.
       const outside =
         sign < 0 ? (dir === 'h' ? through.r.x : through.r.y) : dir === 'h' ? through.r.x + through.r.w : through.r.y + through.r.h;
-      const inner = outside - sign * CORNER_CONNECTOR_CM;
+      const inner = outside - sign * partLength(f.m.w);
       const at = (c0 + c1) / 2;
       const key = `${dir}:${Math.round(at)}:${Math.round(outside)}`;
       const had = out.get(key);
@@ -136,19 +142,28 @@ export interface CornerConnectorTotals {
   nuts: number;
   /** ჩ5 closures by connectors each, for "4 × 5 = 20" */
   groups: Array<{ places: number; each: number }>;
-  /** ჩ10 closures - a different part goes there, not counted */
-  wide: number;
+  /** შტირი 40 სმ with a half head, every course, at ჩ10 closures */
+  halfHead: number;
+  /** ჩ10 closures by half-head rods each */
+  halfGroups: Array<{ places: number; each: number }>;
 }
 
 export function cornerConnectorTotals(spots: CornerConnectorSpot[]): CornerConnectorTotals {
+  const grouped = (list: CornerConnectorSpot[]) => {
+    const by = new Map<number, number>();
+    for (const s of list) by.set(s.count, (by.get(s.count) ?? 0) + 1);
+    return [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each);
+  };
   const fit = spots.filter((s) => s.filler === 5);
-  const by = new Map<number, number>();
-  for (const s of fit) by.set(s.count, (by.get(s.count) ?? 0) + 1);
+  const half = spots.filter((s) => s.filler === 10);
   const connectors = fit.reduce((n, s) => n + s.count, 0);
+  const halfHead = half.reduce((n, s) => n + s.count, 0);
   return {
     connectors,
-    nuts: connectors,
-    groups: [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each),
-    wide: spots.length - fit.length,
+    // A ქანჩი + დისკო on the outer end of every one of either.
+    nuts: connectors + halfHead,
+    groups: grouped(fit),
+    halfHead,
+    halfGroups: grouped(half),
   };
 }

@@ -4,7 +4,7 @@ import { buildBom } from '../lib/bom';
 import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
-import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals } from '../lib/cornerConnectors';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME } from '../lib/cornerConnectors';
 import { isConfigured } from '../lib/supabase';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -55,6 +55,7 @@ export function DrawingInfoDialog() {
     [pieces, materials],
   );
   const walerRows: Array<[string, number]> = cc.connectors ? [[CORNER_CONNECTOR_NAME, cc.connectors]] : [];
+  if (cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
   walerRows.push(...(walers.walers
     ? [
         ['ვოლერი', walers.walers],
