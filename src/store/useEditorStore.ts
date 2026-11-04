@@ -1294,8 +1294,30 @@ export const useEditorStore = create<EditorState>()(
             // 1. grid snap, applied to the drag delta so repeated snapping
             //    cannot creep away from the original positions. Only used where
             //    nothing better is in reach — see below.
-            const gridDu = snapValue(duCm, s.snapStep, s.snap && !freehand);
-            const gridDv = snapValue(dvCm, s.snapStep, s.snap && !freehand);
+            //    Snapped so the selection's EDGE lands on a grid line, not by the
+            //    step from wherever it was: a piece that started off the grid -
+            //    placed by eye, or drawn a centimetre thicker since (პარამეტრები)
+            //    - used to stay off it however it was dragged, its sides between
+            //    the squares (the user, 2026-11-04).
+            const onGrid = s.snap && !freehand;
+            const picked = baseline.filter((p) => selected.has(p.id));
+            let gridDu = snapValue(duCm, s.snapStep, onGrid);
+            let gridDv = snapValue(dvCm, s.snapStep, onGrid);
+            if (onGrid && picked.length) {
+              let u0 = Infinity;
+              let v0 = Infinity;
+              for (const p of picked) {
+                const m = byId.get(p.materialId);
+                if (!m) continue;
+                const b = projectPiece(p, m, view);
+                u0 = Math.min(u0, b.x);
+                v0 = Math.min(v0, b.y);
+              }
+              if (Number.isFinite(u0) && Number.isFinite(v0)) {
+                gridDu = snapValue(u0 + duCm, s.snapStep, true) - u0;
+                gridDv = snapValue(v0 + dvCm, s.snapStep, true) - v0;
+              }
+            }
 
             /**
              * A კონექტორი on its own goes from joint to joint.

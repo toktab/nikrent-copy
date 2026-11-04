@@ -88,7 +88,9 @@ describe('edge snap beats the grid', () => {
     const baseline = layout();
     // Dragging away from the panel, into open space.
     useEditorStore.getState().moveSelectionBy(107, 0, baseline);
-    expect(cornerX()).toBe(305); // 200 + 105, a whole number of steps
+    // 307 lands its edge on the nearest grid line, 300 - the edge goes on
+    // the grid, not the step from where it was (2026-11-04).
+    expect(cornerX()).toBe(300);
   });
 
   it('leaves the grid alone on the axis that caught nothing', () => {
@@ -102,7 +104,9 @@ describe('edge snap beats the grid', () => {
   it('does nothing at all when edge snapping is off', () => {
     useEditorStore.setState({ edgeSnap: false });
     useEditorStore.getState().moveSelectionBy(-107, 0, layout());
-    expect(cornerX()).toBe(95);
+    // 93, onto the nearest grid line - not flush against the panel at 90 by
+    // edge snap, which is off; 90 is also where the 15 cm grid has a line.
+    expect(cornerX()).toBe(90);
   });
 });
 
