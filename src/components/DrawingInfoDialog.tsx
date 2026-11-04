@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
@@ -36,9 +36,11 @@ export function DrawingInfoDialog() {
     () => buildBom(materials, pieces, documents, activeDocId),
     [pieces, materials, documents, activeDocId],
   );
+  // Only the ჭანჭიკი kinds the drawing has on.
+  const on = useKindsOn();
   const bolts = useMemo(
-    () => boltTotals(pieces, new Map(materials.map((m) => [m.id, m]))),
-    [pieces, materials],
+    () => boltTotals(pieces, new Map(materials.map((m) => [m.id, m])), on),
+    [pieces, materials, on],
   );
   // ჭანჭიკები come from their own count - placed and worked out alike - so
   // the placed ones are not listed twice.
@@ -54,12 +56,13 @@ export function DrawingInfoDialog() {
     () => cornerConnectorTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m])))),
     [pieces, materials],
   );
-  const walerRows: Array<[string, number]> = cc.connectors ? [[CORNER_CONNECTOR_NAME, cc.connectors]] : [];
-  if (cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
-  if (cc.innerConnectors) {
+  const walerRows: Array<[string, number]> =
+    on.cornerConnectors && cc.connectors ? [[CORNER_CONNECTOR_NAME, cc.connectors]] : [];
+  if (on.halfHead && cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
+  if (on.innerConnectors && cc.innerConnectors) {
     walerRows.push([INNER_CONNECTOR_NAME, cc.innerConnectors], [SMALL_NUT_NAME, cc.smallNuts]);
   }
-  walerRows.push(...(walers.walers
+  walerRows.push(...(on.walers && walers.walers
     ? [
         ['ვოლერი', walers.walers],
         [WALER_ROD_NAME, walers.rods],

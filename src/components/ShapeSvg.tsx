@@ -63,6 +63,11 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
+  // A waler as the worked-out one is drawn - the orange beam with its two
+  // rods - so the one placed by hand and the one worked out look the same
+  // (the user, 2026-11-04).
+  if (m.category === 'waler') return <WalerShape m={m} strokeWidth={strokeWidth} />;
+
   // A დგარი as the prop it is - see `PostShape`.
   if (m.category === 'post') return <PostShape m={m} stroke={stroke} strokeWidth={strokeWidth} />;
 
@@ -151,6 +156,35 @@ export function PlacedShapeBody({
     >
       <ShapeBody material={m} strokeWidth={strokeWidth} />
     </g>
+  );
+}
+
+/** A ვოლერი from above: an orange beam, its two ვოლერის შტირი through it. */
+function WalerShape({ m, strokeWidth }: { m: Material; strokeWidth: number }) {
+  const pw = planW(m);
+  const ph = planH(m);
+  const long = pw >= ph;
+  const len = long ? pw : ph;
+  const thick = long ? ph : pw;
+  const r = Math.min(thick * 0.28, len * 0.08);
+  const dots = [0.25, 0.75].map((t) => (long ? { cx: pw * t, cy: ph / 2 } : { cx: pw / 2, cy: ph * t }));
+  return (
+    <>
+      <rect
+        x={0}
+        y={0}
+        width={pw}
+        height={ph}
+        rx={thick / 3}
+        fill="#e2733a"
+        fillOpacity={0.85}
+        stroke="rgba(0,0,0,.55)"
+        strokeWidth={Math.min(strokeWidth, thick / 6)}
+      />
+      {dots.map((d, i) => (
+        <circle key={i} {...d} r={r} fill="#f3e3c3" stroke="rgba(0,0,0,.6)" strokeWidth={Math.min(strokeWidth, r / 3)} />
+      ))}
+    </>
   );
 }
 

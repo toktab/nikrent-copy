@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
@@ -23,6 +24,7 @@ import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedC
 import { withCompanyWeights } from '../data/companyWeights';
 import { findWallMate, flipWall } from '../lib/wallPen';
 import type { LineSpan } from '../lib/span';
+import { EVERY_KIND, KIND_KEYS, normalizeKindsOn, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
   clampZoom,
@@ -660,7 +662,12 @@ export interface EditorState {
   /** A catalog ჩამკეტი fix let go on a panel joint: every one that joint takes. */
   placeLatchStack: (materialId: string, spot: LatchSpot) => void;
   /** ჭანჭიკები -> ავტომატურად თავიდან დასმა: the kinds asked, back where the rule puts them. */
-  resetBolts: (kinds?: BoltKinds) => void;
+  resetBolts: (kinds?: Partial<KindsOn>) => void;
+  /**
+   * Switch one ჭანჭიკი kind wholly on or off on the open drawing - counted and
+   * drawn, or neither (lib/boltKinds.ts). Off takes away what of it was placed.
+   */
+  setKindOn: (kind: KindKey, on: boolean) => void;
   /** switch simple mode; switching it on also brings the view back to the plan */
   setSimpleMode: (on: boolean) => void;
   setFillDefaults: (defaults: { height: number; includeCorners: boolean }) => void;
@@ -2334,16 +2341,58 @@ export const useEditorStore = create<EditorState>()(
             const stack = rodStack(m, spot, [], uid);
             return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
           }),
-        resetBolts: (kinds) =>
+        resetBolts: (kinds) => {
+          const chosen: KindsOn = { ...EVERY_KIND, ...kinds };
           commit((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
-            let pieces = resetBolts(s.pieces, byId, kinds);
+            let pieces = resetBolts(s.pieces, byId, chosen);
             // Connectors are never there by themselves: this is what puts them
             // on the joints the rule names - see `connectorCount`.
-            if (!kinds || kinds.connectors) pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
+            if (chosen.connectors) pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
             const left = new Set(pieces.map((p) => p.id));
             return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
-          }),
+          });
+          // ...and every kind it put back is on the drawing from now on - this
+          // is the one thing that brings ჭანჭიკები onto a drawing at all.
+          set((s) => ({
+            documents: s.documents.map((d) => {
+              if (d.id !== s.activeDocId) return d;
+              const had = normalizeKindsOn(d.info?.bolts);
+              const next = Object.fromEntries(KIND_KEYS.map((k) => [k, had[k] || chosen[k]]));
+              return { ...d, info: { ...d.info, bolts: next }, updatedAt: Date.now() };
+            }),
+            // A kind brought in is a kind to see.
+            boltsShown: { ...s.boltsShown, ...Object.fromEntries((['connectors', 'rods', 'nuts', 'latches'] as const).filter((k) => chosen[k]).map((k) => [k, true])) },
+            walersShown: s.walersShown || chosen.walers,
+            cornerConnectorsShown: s.cornerConnectorsShown || chosen.cornerConnectors,
+            halfHeadShown: s.halfHeadShown || chosen.halfHead,
+            innerConnectorsShown: s.innerConnectorsShown || chosen.innerConnectors,
+            showBolts: true,
+          }));
+        },
+        setKindOn: (kind, on) => {
+          // Off takes away what of the kind stands on the drawing (undoable);
+          // on puts the connectors back, the one kind that is placed, not worked out.
+          if (kind === 'connectors' || kind === 'rods' || kind === 'nuts' || kind === 'latches') {
+            const only = { connectors: false, rods: false, nuts: false, latches: false, [kind]: true };
+            commit((s) => {
+              const byId = new Map(s.materials.map((m) => [m.id, m]));
+              let pieces = on ? s.pieces : resetBolts(s.pieces, byId, only);
+              if (on && kind === 'connectors') pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
+              if (pieces === s.pieces) return {};
+              const left = new Set(pieces.map((p) => p.id));
+              return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
+            });
+          }
+          set((s) => ({
+            documents: s.documents.map((d) =>
+              d.id === s.activeDocId
+                ? { ...d, info: { ...d.info, bolts: { ...normalizeKindsOn(d.info?.bolts), [kind]: on } }, updatedAt: Date.now() }
+                : d,
+            ),
+            ...(on ? { showBolts: true } : {}),
+          }));
+        },
         // Simple mode has no view switcher, so it opens on the plan it works in -
         // through the view setters, so whatever a view change also resets, it does.
         setSimpleMode: (on) => {
@@ -3021,4 +3070,14 @@ export function mergeCatalog(
   }
 
   return materials.length ? materials : createSeedMaterials();
+}
+
+/**
+ * Which ჭანჭიკი kinds the open drawing has on (lib/boltKinds.ts). Selects the
+ * stored object, which keeps its identity between renders, and reads it out
+ * only when it changes.
+ */
+export function useKindsOn(): KindsOn {
+  const raw = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocId)?.info?.bolts);
+  return useMemo(() => normalizeKindsOn(raw), [raw]);
 }

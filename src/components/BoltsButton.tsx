@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
-import { ALL_BOLT_KINDS, type BoltKinds } from '../lib/bolts';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
+import { EVERY_KIND, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
@@ -21,17 +21,17 @@ import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HAL
 /** Which kinds ავტომატურად თავიდან დასმა puts back - remembered on this machine. */
 const KINDS_KEY = 'kubi.boltResetKinds';
 
-function loadKinds(): BoltKinds {
+function loadKinds(): KindsOn {
   try {
     const raw = localStorage.getItem(KINDS_KEY);
-    if (raw) return { ...ALL_BOLT_KINDS, ...(JSON.parse(raw) as Partial<BoltKinds>) };
+    if (raw) return { ...EVERY_KIND, ...(JSON.parse(raw) as Partial<KindsOn>) };
   } catch {
     // Storage that is blocked or holds something else: every kind, as new.
   }
-  return ALL_BOLT_KINDS;
+  return EVERY_KIND;
 }
 
-function saveKinds(kinds: BoltKinds) {
+function saveKinds(kinds: KindsOn) {
   try {
     localStorage.setItem(KINDS_KEY, JSON.stringify(kinds));
   } catch {
@@ -39,11 +39,15 @@ function saveKinds(kinds: BoltKinds) {
   }
 }
 
-const KIND_NAMES: Array<[keyof BoltKinds, string]> = [
+const KIND_NAMES: Array<[KindKey, string]> = [
   ['connectors', 'კონექტორები'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
+  ['walers', 'ვოლერები'],
+  ['cornerConnectors', 'კუთხის კონექტორი 25 სმ - გარე'],
+  ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
+  ['innerConnectors', 'კუთხის კონექტორი 25 სმ - შიდა'],
 ];
 
 export function BoltsButton() {
@@ -53,14 +57,17 @@ export function BoltsButton() {
   const toggleKindShown = useEditorStore((s) => s.toggleBoltKind);
   // The all-kinds switch left this menu but still lives in ზომების ჩვენება;
   // a kind switched on here must actually appear, whatever that one says.
-  const toggleBoltKind = (k: keyof BoltKinds) => {
+  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches') => {
     if (!shown[k]) setShowBolts(true);
     toggleKindShown(k);
   };
   const setShowBolts = useEditorStore((s) => s.setShowBolts);
   const resetBolts = useEditorStore((s) => s.resetBolts);
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
-  const groups = useMemo(() => boltGroups(pieces, byId), [pieces, byId]);
+  // Only the kinds the drawing has on are counted (lib/boltKinds.ts).
+  const on = useKindsOn();
+  const setKindOn = useEditorStore((s) => s.setKindOn);
+  const groups = useMemo(() => boltGroups(pieces, byId, on), [pieces, byId, on]);
   const walers = useMemo(() => walerTotals(soloPanels(pieces, byId)), [pieces, byId]);
   const walersShown = useEditorStore((s) => s.walersShown);
   const cc = useMemo(() => cornerConnectorTotals(cornerConnectorSpots(pieces, byId)), [pieces, byId]);
@@ -71,10 +78,10 @@ export function BoltsButton() {
   const setInnerShown = useEditorStore((s) => s.setInnerConnectorsShown);
   const setHalfShown = useEditorStore((s) => s.setHalfHeadShown);
   const setWalersShown = useEditorStore((s) => s.setWalersShown);
-  const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
+  const [kinds, setKinds] = useState<KindsOn>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const toggleKind = (k: keyof BoltKinds) => {
+  const toggleKind = (k: KindKey) => {
     const next = { ...kinds, [k]: !kinds[k] };
     setKinds(next);
     saveKinds(next);
@@ -97,10 +104,10 @@ export function BoltsButton() {
       <MenuLabel>ჭანჭიკები ამ ნახაზზე</MenuLabel>
       <MenuItem
         title="დაისმება მხოლოდ ღილაკით „ავტომატურად თავიდან დასმა“ ან ხელით - T-შეერთებაზე და შიდა კუთხე ჩაკერებასთან"
-        trail={<KindTrail groups={groups.connectors} shown={shown.connectors} />}
-        onClick={() => toggleBoltKind('connectors')}
+        trail={<KindTrail groups={groups.connectors} on={on.connectors} shown={shown.connectors} onEye={() => toggleBoltKind('connectors')} />}
+        onClick={() => setKindOn('connectors', !on.connectors)}
       >
-        <span className={`bolts-kind${shown.connectors ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.connectors ? '' : ' off'}`}>
           <svg className="bolts-btn-mark" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
             <circle r="6" />
             <line className="bolt-bar" x1="-4" y1="0" x2="4" y2="0" />
@@ -111,10 +118,10 @@ export function BoltsButton() {
       </MenuItem>
       <MenuItem
         title="შიდა და გარე მხარის ერთმანეთის პირდაპირ მდგარ შეერთებებში და ხელით დასმული"
-        trail={<KindTrail groups={groups.rods} shown={shown.rods} />}
-        onClick={() => toggleBoltKind('rods')}
+        trail={<KindTrail groups={groups.rods} on={on.rods} shown={shown.rods} onEye={() => toggleBoltKind('rods')} />}
+        onClick={() => setKindOn('rods', !on.rods)}
       >
-        <span className={`bolts-kind${shown.rods ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.rods ? '' : ' off'}`}>
           <svg className="rods-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <rect x="0.5" y="5" width="13" height="4" rx="2" />
           </svg>
@@ -123,10 +130,10 @@ export function BoltsButton() {
       </MenuItem>
       <MenuItem
         title="შტირი × 2 (თითო ბოლოზე) + კონექტორები + ვოლერის შტირები + კუთხის კონექტორები 25 სმ + შტირები 40 სმ ნახევარი თავით - თითო თითოზე"
-        trail={<KindTrail groups={groups.nuts} shown={shown.nuts} />}
-        onClick={() => toggleBoltKind('nuts')}
+        trail={<KindTrail groups={groups.nuts} on={on.nuts} shown={shown.nuts} onEye={() => toggleBoltKind('nuts')} />}
+        onClick={() => setKindOn('nuts', !on.nuts)}
       >
-        <span className={`bolts-kind${shown.nuts ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.nuts ? '' : ' off'}`}>
           <svg className="nuts-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <rect className="nut-washer" x="2.5" y="1" width="2.5" height="12" rx="0.8" />
             <rect className="nut-nut" x="5" y="4.5" width="5" height="5" rx="0.8" />
@@ -139,10 +146,10 @@ export function BoltsButton() {
       </MenuItem>
       <MenuItem
         title="შტირის ორივე მხარეს, კედლის გარე მხარეზე - შტირებს შორის: 8 300-ზე, 2 150 / 90-ზე"
-        trail={<KindTrail groups={groups.latches} shown={shown.latches} />}
-        onClick={() => toggleBoltKind('latches')}
+        trail={<KindTrail groups={groups.latches} on={on.latches} shown={shown.latches} onEye={() => toggleBoltKind('latches')} />}
+        onClick={() => setKindOn('latches', !on.latches)}
       >
-        <span className={`bolts-kind${shown.latches ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.latches ? '' : ' off'}`}>
           <svg className="latch-mark" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
             <ClampShape len={11} thick={4} px={0.7} />
           </svg>
@@ -153,13 +160,20 @@ export function BoltsButton() {
           3 up a 300, 2 up a 150 / 90 - and what each one is bolted with. */}
       <MenuItem
         title="პანელი, რომელსაც კედლის მეორე მხარეს პირისპირ პანელი არ აქვს: 300-ზე 3 ვოლერი, 150 / 90-ზე 2. თითო ვოლერზე 2 შტირი 40 სმ, 2 ჩასაკეტი, 2 ქანჩი + დისკო"
-        trail={<KindTrail groups={walers.groups} shown={walersShown} />}
-        onClick={() => {
-          if (!walersShown) setShowBolts(true);
-          setWalersShown(!walersShown);
-        }}
+        trail={
+          <KindTrail
+            groups={walers.groups}
+            on={on.walers}
+            shown={walersShown}
+            onEye={() => {
+              if (!walersShown) setShowBolts(true);
+              setWalersShown(!walersShown);
+            }}
+          />
+        }
+        onClick={() => setKindOn('walers', !on.walers)}
       >
-        <span className={`bolts-kind${walersShown ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.walers ? '' : ' off'}`}>
           <svg className="walers-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <rect x="0.5" y="4.5" width="13" height="5" rx="1.5" />
             <circle cx="4" cy="7" r="1.2" />
@@ -168,7 +182,7 @@ export function BoltsButton() {
           ვოლერები
         </span>
       </MenuItem>
-      {walers.walers > 0 && (
+      {on.walers && walers.walers > 0 && (
         <div className="bolts-sub">
           <span>{WALER_ROD_NAME}</span>
           <span className="bolts-calc">{walers.walers} × 2 =</span>
@@ -185,13 +199,20 @@ export function BoltsButton() {
           with a ჩ5 - through the through panel and the ჩ5 into the run. */}
       <MenuItem
         title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ5 დგას: 25 სმ კონექტორი ორივეში გადის, გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
-        trail={<KindTrail groups={cc.groups} shown={ccShown} />}
-        onClick={() => {
-          if (!ccShown) setShowBolts(true);
-          setCcShown(!ccShown);
-        }}
+        trail={
+          <KindTrail
+            groups={cc.groups}
+            on={on.cornerConnectors}
+            shown={ccShown}
+            onEye={() => {
+              if (!ccShown) setShowBolts(true);
+              setCcShown(!ccShown);
+            }}
+          />
+        }
+        onClick={() => setKindOn('cornerConnectors', !on.cornerConnectors)}
       >
-        <span className={`bolts-kind${ccShown ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.cornerConnectors ? '' : ' off'}`}>
           <svg className="cc-menu-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <line x1="3" y1="7" x2="13" y2="7" />
             <ellipse cx="2.5" cy="7" rx="1.6" ry="3.2" />
@@ -203,13 +224,20 @@ export function BoltsButton() {
           შტირი 40 სმ (წაჭრილი გაიკა) instead. */}
       <MenuItem
         title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ10 დგას: შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა, არა სრული თავით), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
-        trail={<KindTrail groups={cc.halfGroups} shown={halfShown} />}
-        onClick={() => {
-          if (!halfShown) setShowBolts(true);
-          setHalfShown(!halfShown);
-        }}
+        trail={
+          <KindTrail
+            groups={cc.halfGroups}
+            on={on.halfHead}
+            shown={halfShown}
+            onEye={() => {
+              if (!halfShown) setShowBolts(true);
+              setHalfShown(!halfShown);
+            }}
+          />
+        }
+        onClick={() => setKindOn('halfHead', !on.halfHead)}
       >
-        <span className={`bolts-kind${halfShown ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.halfHead ? '' : ' off'}`}>
           <svg className="cc-menu-mark half" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <line x1="3" y1="7" x2="13" y2="7" />
             <ellipse cx="2.5" cy="7" rx="1.6" ry="3.2" />
@@ -221,13 +249,20 @@ export function BoltsButton() {
           profile, ჩ5 or ჩ10 alike, with the small ბარაშკა on it. */}
       <MenuItem
         title="შიდა კუთხეში, კუთხის პროფილსა და პანელს შორის ჩ5 ან ჩ10: 25 სმ კონექტორი პროფილიდან ჩაკერებაში და პანელში, ბოლოზე პატარა ბარაშკა (გილზა + გაიკა). 300-ზე 5, 150 / 90-ზე 2"
-        trail={<KindTrail groups={cc.innerGroups} shown={innerShown} />}
-        onClick={() => {
-          if (!innerShown) setShowBolts(true);
-          setInnerShown(!innerShown);
-        }}
+        trail={
+          <KindTrail
+            groups={cc.innerGroups}
+            on={on.innerConnectors}
+            shown={innerShown}
+            onEye={() => {
+              if (!innerShown) setShowBolts(true);
+              setInnerShown(!innerShown);
+            }}
+          />
+        }
+        onClick={() => setKindOn('innerConnectors', !on.innerConnectors)}
       >
-        <span className={`bolts-kind${innerShown ? '' : ' off'}`}>
+        <span className={`bolts-kind${on.innerConnectors ? '' : ' off'}`}>
           <svg className="cc-menu-mark inner" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
             <line x1="3" y1="7" x2="13" y2="7" />
             <ellipse cx="3" cy="7" rx="1.1" ry="2.2" />
@@ -235,7 +270,7 @@ export function BoltsButton() {
           {INNER_CONNECTOR_NAME}
         </span>
       </MenuItem>
-      {cc.innerConnectors > 0 && (
+      {on.innerConnectors && cc.innerConnectors > 0 && (
         <div className="bolts-sub">
           <span>{SMALL_NUT_NAME}</span>
           <span className="bolts-calc">{cc.innerConnectors} × 1 =</span>
@@ -280,22 +315,46 @@ export function BoltsButton() {
  * the user reads the drawing: so many places on the plan × so many at each
  * (one above the other, as the 3D shows) = how many in all.
  *
- * Clicking the row hides that
- * kind - marks and placed pieces alike - and clicking again brings it back;
- * the count stays, struck through, because the drawing still needs them.
+ * Clicking the row puts the kind on the drawing or takes it off - counted and
+ * drawn, or neither (the user, 2026-11-04); the eye only shows or hides one
+ * that is on.
  */
-function KindTrail({ groups, shown }: { groups: BoltGroup[]; shown: boolean }) {
+function KindTrail({
+  groups,
+  on,
+  shown,
+  onEye,
+}: {
+  groups: BoltGroup[];
+  on: boolean;
+  shown: boolean;
+  onEye: () => void;
+}) {
   const count = groups.reduce((n, g) => n + g.places * g.each, 0);
   const calc = groups.map((g) => `${g.places} × ${g.each}`).join(' + ');
   return (
-    <span className="bolts-trail" title={shown ? 'ჩანს ნახაზზე - დააჭირე დასამალად' : 'დამალულია - დააჭირე საჩვენებლად'}>
-      {calc && (
+    <span className="bolts-trail">
+      {on && calc && (
         <span className="bolts-calc" title="ადგილი გეგმაზე × თითო ადგილზე (3D) = სულ">
           {calc} =
         </span>
       )}
-      <span className={`bolts-count${shown ? '' : ' off'}`}>{count} ც.</span>
-      <Icon name={shown ? 'eye' : 'eye-off'} size={13} />
+      <span className={`bolts-count${on && shown ? '' : ' off'}`}>{on ? `${count} ც.` : 'გამორთ.'}</span>
+      {/* The eye only shows or hides a kind that is on - the row itself is
+          what puts it on the drawing or takes it off. */}
+      <button
+        type="button"
+        className="bolts-eye"
+        disabled={!on}
+        title={!on ? 'ჯერ ჩართე - დააჭირე სტრიქონს' : shown ? 'ჩანს ნახაზზე - დამალვა' : 'დამალულია - ჩვენება'}
+        aria-label={shown ? 'დამალვა' : 'ჩვენება'}
+        onClick={(e) => {
+          e.stopPropagation();
+          onEye();
+        }}
+      >
+        <Icon name={on && shown ? 'eye' : 'eye-off'} size={13} />
+      </button>
     </span>
   );
 }

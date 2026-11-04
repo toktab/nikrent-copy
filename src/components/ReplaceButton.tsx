@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { boltKindOf, boltTotals, type BoltKindName } from '../lib/boltMarks';
 import { replacementsFor } from '../lib/replace';
 import type { Material } from '../types';
@@ -43,7 +43,8 @@ export function ReplaceButton() {
       .map(([id, count]) => ({ m: byId.get(id)!, count }))
       .sort((a, b) => a.m.category.localeCompare(b.m.category) || a.m.name.localeCompare(b.m.name, 'ka'));
   }, [pieces, byId]);
-  const totals = useMemo(() => boltTotals(pieces, byId), [pieces, byId]);
+  const on = useKindsOn();
+  const totals = useMemo(() => boltTotals(pieces, byId, on), [pieces, byId, on]);
 
   const selected = useMemo(() => {
     const set = new Set(selectedIds);

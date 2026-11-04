@@ -19,6 +19,7 @@ import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, pieceCentre } 
 import { boltKindOf, boltTotals, markedRodLength, planMarks, type BoltKindName } from './boltMarks';
 import { CATEGORY_ORDER } from '../data/categories';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
+import { normalizeKindsOn } from './boltKinds';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from './cornerConnectors';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
 
@@ -320,7 +321,8 @@ function sheetContent(
 
   // Worked out from every piece on the drawing - a placed connector takes its
   // joint's mark away whether or not connectors are printed.
-  const all = planMarks(doc.pieces, byId);
+  const kindsOn = normalizeKindsOn(doc.info?.bolts);
+  const all = planMarks(doc.pieces, byId, kindsOn);
   const marks: SheetContent['marks'] = {
     connectors: vis.connectors ? all.connectors : [],
     rods: vis.rods ? all.rods.map((rod) => ({ rod, length: markedRodLength(materials, rod) })) : [],
@@ -438,7 +440,7 @@ function legendEntries(
   }
 
   if (vis.pieces) {
-    const totals = boltTotals(doc.pieces, byId);
+    const totals = boltTotals(doc.pieces, byId, normalizeKindsOn(doc.info?.bolts));
     if (vis.connectors && totals.connectors > 0) {
       // The total split by where it stands, so each colour has its own row.
       // Only placed ones - see `connectorCount`.
@@ -484,21 +486,22 @@ function legendEntries(
     }
     // The worked-out ვოლერები - behind every panel with nothing facing it.
     const walers = walerTotals(soloPanels(doc.pieces, byId));
-    if (walers.walers > 0) {
+    const on = normalizeKindsOn(doc.info?.bolts);
+    if (on.walers && walers.walers > 0) {
       out.push({ sample: 'ვოლ.', label: 'ვოლერი', note: '300-ზე 3, 150 / 90-ზე 2 - ცალმხრივ პანელზე', count: pcs(walers.walers) });
       out.push({ sample: '40', label: WALER_ROD_NAME, note: 'ვოლერზე 2', count: pcs(walers.rods) });
       out.push({ sample: 'ჩას.', label: WALER_LOCK_NAME, note: 'თითო შტირზე', count: pcs(walers.locks) });
     }
     // ...and the კუთხის კონექტორი 25 სმ at outside corners closed with a ჩ5.
     const cc = cornerConnectorTotals(cornerConnectorSpots(doc.pieces, byId));
-    if (cc.connectors > 0) {
+    if (on.cornerConnectors && cc.connectors > 0) {
       out.push({ sample: '25', label: CORNER_CONNECTOR_NAME, note: 'გარე კუთხე ჩ5-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.connectors) });
     }
-    if (cc.innerConnectors > 0) {
+    if (on.innerConnectors && cc.innerConnectors > 0) {
       out.push({ sample: '25', label: INNER_CONNECTOR_NAME, note: 'შიდა კუთხე ჩ5 / ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.innerConnectors) });
       out.push({ sample: 'ბ.', label: SMALL_NUT_NAME, note: 'თითო შიდა კუთხის კონექტორზე', count: pcs(cc.smallNuts) });
     }
-    if (cc.halfHead > 0) {
+    if (on.halfHead && cc.halfHead > 0) {
       out.push({ sample: '40', label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });
     }
     if (vis.latches && totals.latches > 0) {

@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { soloPanels } from '../lib/walers';
 
 /** How far behind the panel's back the waler stands, and how thick it is drawn, cm. */
@@ -9,12 +9,14 @@ const WALER_CM = 8;
 /**
  * The worked-out ვოლერები on the plan: an orange beam across the back of
  * every panel with nothing facing it across the wall, with its two
- * ვოლერის შტირი marked through it, and how many go up it (3 up a 300, 2 up
- * a 150 or 90). Drawn in screen pixels over the surface, like the other
+ * ვოლერის შტირი marked through it - how many go up it is in the ჭანჭიკები
+ * menu, not on the plan (the user, 2026-11-04). Drawn in screen pixels over the surface, like the other
  * ჭანჭიკი marks, and only ever looked at - nothing here is placed.
  */
 export function WalerLayer() {
-  const shown = useEditorStore((s) => s.walersShown);
+  // On the drawing (ჭანჭიკები) and switched to show (its eye).
+  const on = useKindsOn().walers;
+  const shown = useEditorStore((s) => s.walersShown) && on;
   const pieces = useDeferredValue(useEditorStore((s) => s.pieces));
   const materials = useEditorStore((s) => s.materials);
   const sketch = useEditorStore((s) => s.sketch);
@@ -42,7 +44,6 @@ export function WalerLayer() {
   }, [solo]);
 
   if (!shown || !spots.length) return null;
-  const font = Math.max(9, Math.min(13, 10 * zoom));
 
   return (
     <svg className="bolt-layer waler-layer" width={stageW} height={stageH} aria-hidden="true">
@@ -66,9 +67,6 @@ export function WalerLayer() {
           const mid = (c0 + c1) / 2;
           return s.across ? { x: a * zoom + panX, y: mid * zoom + panY } : { x: mid * zoom + panX, y: a * zoom + panY };
         });
-        const label = s.across
-          ? { x: rect.x + rect.width / 2, y: s.back > 0 ? rect.y + rect.height + font : rect.y - font * 0.4 }
-          : { x: s.back > 0 ? rect.x + rect.width + 4 : rect.x - 4, y: rect.y + rect.height / 2 };
         return (
           <g key={`${b.x}:${b.y}:${b.w}`} className="waler-mark">
             <title>{`ვოლერი × ${s.total} - პანელს პირისპირ პანელი არ აქვს`}</title>
@@ -76,18 +74,6 @@ export function WalerLayer() {
             {rods.map((p, i) => (
               <circle key={i} className="waler-rod" cx={p.x} cy={p.y} r={Math.max(1.5, 1.6 * zoom)} />
             ))}
-            {zoom >= 0.35 && (
-              <text
-                className="waler-count"
-                x={label.x}
-                y={label.y}
-                fontSize={font}
-                textAnchor={s.across ? 'middle' : s.back > 0 ? 'start' : 'end'}
-                dominantBaseline={s.across ? 'auto' : 'middle'}
-              >
-                ×{s.total}
-              </text>
-            )}
           </g>
         );
       })}

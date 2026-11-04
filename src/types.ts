@@ -203,6 +203,8 @@ export interface DrawingDoc {
  */
 export interface DrawingInfo {
   clientName?: string;
+  /** which ჭანჭიკი kinds this drawing has on - see lib/boltKinds.ts; absent, none */
+  bolts?: Partial<Record<string, boolean>>;
 }
 
 /** Undo/redo unit: everything a user edit can change. */

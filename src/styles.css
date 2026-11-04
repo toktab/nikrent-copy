@@ -6692,3 +6692,23 @@ kbd {
 .cc-menu-mark.inner ellipse {
   stroke: #b06ad6;
 }
+
+/* The eye in a ჭანჭიკები row: a button of its own, so it only shows or hides. */
+.bolts-eye {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  margin: -2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.bolts-eye:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+.bolts-eye:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
