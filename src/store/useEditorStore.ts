@@ -24,6 +24,7 @@ import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedC
 import { withCompanyWeights } from '../data/companyWeights';
 import { findWallMate, flipWall } from '../lib/wallPen';
 import type { LineSpan } from '../lib/span';
+import { alignPieces } from '../lib/gridAlign';
 import { EVERY_KIND, KIND_KEYS, normalizeKindsOn, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import {
@@ -619,6 +620,8 @@ export interface EditorState {
   resetObjectVisibility: () => void;
   setPanelDepth: (cm: number) => void;
   setWalersShown: (on: boolean) => void;
+  /** put every piece whose outline is off whole centimetres back on them - see `alignPieces`; returns how many moved */
+  alignToGrid: () => number;
   setCornerConnectorsShown: (on: boolean) => void;
   setHalfHeadShown: (on: boolean) => void;
   setInnerConnectorsShown: (on: boolean) => void;
@@ -2272,6 +2275,14 @@ export const useEditorStore = create<EditorState>()(
           }),
         resetObjectVisibility: () => set({ objectVisibility: normalizeObjectVisibility(undefined) }),
         setWalersShown: (on) => set({ walersShown: on }),
+        alignToGrid: () => {
+          const s = get();
+          const byId = new Map(s.materials.map((m) => [m.id, m]));
+          const next = alignPieces(s.pieces, byId, s.sketch, Math.max(DRAW_STEP_CM, s.snapStep));
+          const moved = next.filter((p, i) => p !== s.pieces[i]).length;
+          if (moved) commit(() => ({ pieces: next }));
+          return moved;
+        },
         setCornerConnectorsShown: (on) => set({ cornerConnectorsShown: on }),
         setHalfHeadShown: (on) => set({ halfHeadShown: on }),
         setInnerConnectorsShown: (on) => set({ innerConnectorsShown: on }),
