@@ -111,6 +111,8 @@ function PaletteRow({ material: m, used, simple }: { material: Material; used: n
   const shortage = used > stock;
 
   const askDelete = () => {
+    // Built-ins always exist (the user, 2026-11-04).
+    if (m.builtin) return;
     if (used > 0) {
       openDialog({
         kind: 'confirm',
@@ -221,8 +223,10 @@ function PaletteRow({ material: m, used, simple }: { material: Material; used: n
                 <MenuItem
                   icon="trash"
                   danger
-                  disabled={!canManage}
-                  title={canManage ? undefined : ADMIN_ONLY_TITLE}
+                  disabled={!canManage || m.builtin}
+                  title={
+                    m.builtin ? 'ჩაშენებული კომპონენტი ყოველთვის რჩება - მისი რედაქტირება შეიძლება, წაშლა არა' : canManage ? undefined : ADMIN_ONLY_TITLE
+                  }
                   onClick={() => {
                     askDelete();
                     close();

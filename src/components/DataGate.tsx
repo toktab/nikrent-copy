@@ -57,7 +57,7 @@ export function DataGate({ children }: { children: ReactNode }) {
         return;
       }
 
-      hydrate(snapshot);
+      hydrate(snapshot, { restoreBuiltins: role === 'admin' });
       setPhase('ready');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -143,7 +143,7 @@ export function DataGate({ children }: { children: ReactNode }) {
         <button
           className="btn primary full"
           onClick={() => {
-            if (legacy) hydrate(legacy);
+            if (legacy) hydrate(legacy, { restoreBuiltins: role === 'admin' });
             setPhase('ready');
           }}
         >
@@ -152,7 +152,7 @@ export function DataGate({ children }: { children: ReactNode }) {
         <button
           className="btn full"
           onClick={() => {
-            if (server) hydrate(server);
+            if (server) hydrate(server, { restoreBuiltins: role === 'admin' });
             setPhase('ready');
           }}
         >
