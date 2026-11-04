@@ -279,7 +279,10 @@ export async function recheckInfoColumn(): Promise<boolean> {
 
 function rowInfo(value: unknown): DrawingInfo {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
-  return typeof v.clientName === 'string' && v.clientName ? { clientName: v.clientName } : {};
+  const info: DrawingInfo = {};
+  if (typeof v.clientName === 'string' && v.clientName) info.clientName = v.clientName;
+  if (v.bolts && typeof v.bolts === 'object') info.bolts = v.bolts as DrawingInfo['bolts'];
+  return info;
 }
 
 /** An optional column missing: switch it off for the session and say so. */

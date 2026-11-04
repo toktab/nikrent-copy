@@ -1,4 +1,5 @@
 import type { Material, Piece } from '../types';
+import { EVERY_KIND, type KindsOn } from './boltKinds';
 import { soloPanels, WALER_RODS_EACH } from './walers';
 import { cornerConnectorSpots } from './cornerConnectors';
 import { isConnector, normalizeRot, planW } from './geometry';
@@ -58,14 +59,15 @@ function once<T>(items: T[], key: (t: T) => string): T[] {
 
 const endKey = (e: RodEnd) => `${Math.round(e.x)}:${Math.round(e.y)}:${e.rot}`;
 
-export function planMarks(pieces: Piece[], byId: Map<string, Material>): PlanMarks {
+export function planMarks(pieces: Piece[], byId: Map<string, Material>, on: KindsOn = EVERY_KIND): PlanMarks {
   return {
     // No connector marks: connectors are placed by the ჭანჭიკები button, as pieces
     // - see `connectorCount`.
     connectors: [],
-    rods: once(openRods(pieces, byId, true), (r) => `${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}`),
-    nuts: once(openRodEnds(pieces, byId), endKey),
-    latches: once(openLatches(pieces, byId, true), (l) => `${Math.round(l.x)}:${Math.round(l.y)}`),
+    // A kind that is not on the drawing has no marks either - see boltKinds.ts.
+    rods: on.rods ? once(openRods(pieces, byId, true), (r) => `${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}`) : [],
+    nuts: on.nuts && on.rods ? once(openRodEnds(pieces, byId), endKey) : [],
+    latches: on.latches ? once(openLatches(pieces, byId, true), (l) => `${Math.round(l.x)}:${Math.round(l.y)}`) : [],
   };
 }
 
@@ -87,8 +89,21 @@ export function boltKindOf(m: Material): BoltKindName | null {
   return null;
 }
 
-/** How many of each kind the drawing needs - worked out and placed, every course. */
-export function boltTotals(pieces: Piece[], byId: Map<string, Material>): Record<BoltKindName, number> {
+/**
+ * How many of each kind the drawing needs - worked out and placed, every
+ * course. With `on`, only the kinds the drawing has on (boltKinds.ts), read
+ * off the same groups the menu shows.
+ */
+export function boltTotals(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  on?: KindsOn,
+): Record<BoltKindName, number> {
+  if (on) {
+    const g = boltGroups(pieces, byId, on);
+    const sum = (list: BoltGroup[]) => list.reduce((n, x) => n + x.places * x.each, 0);
+    return { connectors: sum(g.connectors), rods: sum(g.rods), nuts: sum(g.nuts), latches: sum(g.latches) };
+  }
   return {
     connectors: connectorCount(pieces, byId),
     rods: rodCount(pieces, byId),
@@ -123,7 +138,11 @@ function grouped(units: Array<[string, number]>): BoltGroup[] {
  * many at each, so many in all (the user, 2026-10-23). Worked out and placed
  * alike, every course - the total is the same number `boltTotals` gives.
  */
-export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record<BoltKindName, BoltGroup[]> {
+export function boltGroups(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  on: KindsOn = EVERY_KIND,
+): Record<BoltKindName, BoltGroup[]> {
   const placed = (is: (m: Material) => boolean) =>
     pieces.flatMap((p) => {
       const m = byId.get(p.materialId);
@@ -141,14 +160,16 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
   // ქანჩი + დისკო by the rule, not by what stands on the plan: as many at each
   // end of a შტირი spot as rods go up it, and one at every კონექტორი - see
   // `nutCount`, whose total this has to match.
-  const nuts: Array<[string, number]> = [
-    ...rods.flatMap(([k, n]): Array<[string, number]> => [
+  // Only what the drawing has on goes into the ქანჩი + დისკო: no nut for a
+  // rod or a connector that is not there.
+  const nuts: Array<[string, number]> = !on.nuts ? [] : [
+    ...(on.rods ? rods : []).flatMap(([k, n]): Array<[string, number]> => [
       [`${k}:a`, n],
       [`${k}:b`, n],
     ]),
-    ...connectors.map(([k, n]): [string, number] => [`c:${k}`, n]),
+    ...(on.connectors ? connectors : []).map(([k, n]): [string, number] => [`c:${k}`, n]),
     // ...and one on each ვოლერის შტირი, two to a waler.
-    ...soloPanels(pieces, byId).map((s): [string, number] => [
+    ...(on.walers ? soloPanels(pieces, byId) : []).map((s): [string, number] => [
       `w:${Math.round(s.box.x)}:${Math.round(s.box.y)}:${Math.round(s.piece.z ?? 0)}`,
       s.walers * WALER_RODS_EACH,
     ]),
@@ -156,7 +177,7 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
     // half-head შტირი 40 სმ.
     // (Not the inside-corner ones: those take the small ბარაშკა.)
     ...cornerConnectorSpots(pieces, byId)
-      .filter((s) => !s.inner)
+      .filter((s) => !s.inner && (s.filler === 10 ? on.halfHead : on.cornerConnectors))
       .map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),
   ];
 
@@ -165,7 +186,12 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
     ...placed(isLatch).map(({ p, m }): [string, number] => [spotKey(pieceCentre(p, m)), 1]),
   ];
 
-  return { connectors: grouped(connectors), rods: grouped(rods), nuts: grouped(nuts), latches: grouped(latches) };
+  return {
+    connectors: on.connectors ? grouped(connectors) : [],
+    rods: on.rods ? grouped(rods) : [],
+    nuts: grouped(nuts),
+    latches: on.latches ? grouped(latches) : [],
+  };
 }
 
 /** A kind's groups as the menu writes them: "14 × 5 = 70", or "12 × 5 + 2 × 2 = 64". */

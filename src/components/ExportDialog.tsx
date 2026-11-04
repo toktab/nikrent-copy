@@ -3,6 +3,7 @@ import type { DrawingDoc, LayoutFile } from '../types';
 import { useEditorStore } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { boltTotals } from '../lib/boltMarks';
+import { normalizeKindsOn } from '../lib/boltKinds';
 import { buildLayoutFile, exportLayoutFile, layoutFileHasContent } from '../lib/catalogFile';
 import type { PdfVisibility } from '../lib/dimensions';
 import { PDF_SCALES, SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
@@ -232,7 +233,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
   const [advanced, setAdvanced] = useState(loadAdvanced);
 
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
-  const bolts = useMemo(() => boltTotals(doc.pieces, byId), [doc.pieces, byId]);
+  const bolts = useMemo(() => boltTotals(doc.pieces, byId, normalizeKindsOn(doc.info?.bolts)), [doc.pieces, byId, doc.info?.bolts]);
 
   const [preview, setPreview] = useState<
     { url: string; scale: number; rescaled: boolean } | 'empty' | null

@@ -1,5 +1,6 @@
 import { useDeferredValue, useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
+import { NutGlyph } from './BoltLayer';
 import { cornerConnectorSpots } from '../lib/cornerConnectors';
 
 /**
@@ -11,9 +12,11 @@ import { cornerConnectorSpots } from '../lib/cornerConnectors';
  * only - each kind shown or hidden by itself.
  */
 export function CornerConnectorLayer() {
-  const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
-  const halfShown = useEditorStore((s) => s.halfHeadShown);
-  const innerShown = useEditorStore((s) => s.innerConnectorsShown);
+  // Each kind on the drawing (ჭანჭიკები) and switched to show (its eye).
+  const on = useKindsOn();
+  const ccShown = useEditorStore((s) => s.cornerConnectorsShown) && on.cornerConnectors;
+  const halfShown = useEditorStore((s) => s.halfHeadShown) && on.halfHead;
+  const innerShown = useEditorStore((s) => s.innerConnectorsShown) && on.innerConnectors;
   const shown = ccShown || halfShown || innerShown;
   const pieces = useDeferredValue(useEditorStore((s) => s.pieces));
   const materials = useEditorStore((s) => s.materials);
@@ -67,13 +70,13 @@ export function CornerConnectorLayer() {
                 : `შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა) × ${s.count} - გარე კუთხე ჩ10-ით, ქანჩი + დისკო თითოზე`}
             </title>
             <line className="cc-bar" {...line} strokeWidth={thick} />
-            <ellipse
-              className="cc-nut"
-              cx={ox}
-              cy={oy}
-              rx={(s.dir === 'h' ? ring * 0.55 : ring) * (s.inner ? 0.6 : 1)}
-              ry={(s.dir === 'h' ? ring : ring * 0.55) * (s.inner ? 0.6 : 1)}
-              strokeWidth={Math.max(1.5, zoom)}
+            {/* The ქანჩი + დისკო drawn the way the catalog's own is, facing out
+                of the corner; the inside corner's small ბარაშკა the same, smaller. */}
+            <NutGlyph
+              x={ox}
+              y={oy}
+              rot={s.dir === 'h' ? (out < 0 ? 180 : 0) : out < 0 ? 270 : 90}
+              scale={zoom * (s.inner ? 0.6 : 1)}
             />
             {zoom >= 0.35 && (
               <text

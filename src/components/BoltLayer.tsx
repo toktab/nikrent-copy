@@ -1,5 +1,5 @@
 import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import {
   LATCH_DEPTH_CM,
   LATCH_LEN_CM,
@@ -226,7 +226,9 @@ export function BoltLayer({
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   // One mark per spot - a stacked course shares its joints and rods in plan.
   // The printed sheet draws from the same list.
-  const marks = useMemo(() => planMarks(pieces, byId), [pieces, byId]);
+  // Only the kinds the drawing has on - nothing appears by itself.
+  const on = useKindsOn();
+  const marks = useMemo(() => planMarks(pieces, byId, on), [pieces, byId, on]);
   // A kind switched off in the ჭანჭიკები menu leaves the plan, marks and all.
   const shown = useEditorStore((s) => s.boltsShown);
   const spots = shown.connectors ? marks.connectors : [];
