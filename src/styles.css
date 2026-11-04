@@ -1110,6 +1110,10 @@ input.stock-input.bad {
       var(--gf, 20px) var(--gf, 20px),
     linear-gradient(90deg, var(--grid) var(--gw, 1px), transparent var(--gw, 1px)) 0 0 /
       var(--gf, 20px) var(--gf, 20px);
+  /* Each line centred on its cm, not drawn just after it: a piece's edge on a
+     grid line then sits in the middle of the line from either side, instead
+     of a line's width off on its right and bottom edges. */
+  background-position: calc(var(--gw, 1px) / -2) calc(var(--gw, 1px) / -2);
   outline: 1px solid #4a5560;
 }
 /**

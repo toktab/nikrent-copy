@@ -78,6 +78,8 @@ export function SettingsDialog() {
         />
       </div>
 
+      <AlignToGrid />
+
       <h4 className="vis-section">ხილვადობა ნახაზზე</h4>
       <p className="hint-note" style={{ marginTop: 0 }}>
         დამალული ელემენტი ნახაზზე რჩება - ითვლება სიაში და მარაგში, უბრალოდ არ ჩანს და არ
@@ -138,6 +140,30 @@ function NumberSetting({
       </span>
       <small className="menu-note">{hint}</small>
     </label>
+  );
+}
+
+/**
+ * Pieces off whole centimetres - turned panels placed while panels were 9 cm
+ * thick sit half a centimetre off the squares at 10 - back onto them, as one
+ * undo step. See `alignPieces`.
+ */
+function AlignToGrid() {
+  const alignToGrid = useEditorStore((s) => s.alignToGrid);
+  const setToast = useEditorStore((s) => s.setToast);
+  return (
+    <div className="vis-extra" style={{ marginTop: 10 }}>
+      <button
+        className="btn small"
+        onClick={() => {
+          const n = alignToGrid();
+          setToast(n ? `ბადეზე გასწორდა ${n} ელემენტი (Ctrl+Z - დაბრუნება).` : 'ყველა ელემენტი უკვე ბადეზეა.');
+        }}
+        title="ელემენტები, რომლებიც კვადრატებს შორის დგას (მაგ. 9 სმ სისქის დროს დასმული მობრუნებული პანელები), ბადეზე დაბრუნდება - ხაზთან მიბჯენილი მხარე ხაზზე რჩება"
+      >
+        <Icon name="grid" size={14} /> ელემენტების ბადეზე გასწორება
+      </button>
+    </div>
   );
 }
 
