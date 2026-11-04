@@ -8,6 +8,7 @@ import type {
   DialogState,
   DocSnapshot,
   DrawingDoc,
+  DrawingInfo,
   DrawingStatus,
   HiddenLineMode,
   InspectorTab,
@@ -193,6 +194,7 @@ const PREF_KEYS = [
   'showGaps',
   'showBolts',
   'boltsShown',
+  'walersShown',
   'objectVisibility',
   'panelDepth',
   'showSketch',
@@ -334,6 +336,8 @@ export interface EditorState {
   showBolts: boolean;
   /** each ჭანჭიკი kind shown on the plan or not - marks and placed pieces alike */
   boltsShown: BoltKinds;
+  /** the worked-out ვოლერები drawn behind panels with nothing facing them - see walers.ts */
+  walersShown: boolean;
   /** which kinds of thing the plan draws - see `ObjectVisibility` */
   objectVisibility: ObjectVisibility;
   /** the thickness every panel and ჩაკერება is drawn at, cm - see `setPanelDepthOverride` */
@@ -583,6 +587,8 @@ export interface EditorState {
   duplicateDocument: (id: string) => void;
   deleteDocument: (id: string) => void;
   setTitleBlock: (patch: Partial<Pick<DrawingDoc, 'projectName' | 'revision' | 'scale'>>) => void;
+  /** the open drawing's own details - see `DrawingInfo` */
+  setDrawingInfo: (patch: Partial<DrawingInfo>) => void;
 
   // ── actions: warehouses ──
   addWarehouse: (name: string) => void;
@@ -596,6 +602,7 @@ export interface EditorState {
   setObjectShown: (target: { category: Category } | { materialId: string }, shown: boolean) => void;
   resetObjectVisibility: () => void;
   setPanelDepth: (cm: number) => void;
+  setWalersShown: (on: boolean) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
   setShowLengths: (on: boolean) => void;
@@ -1019,6 +1026,7 @@ export const useEditorStore = create<EditorState>()(
         showGaps: false,
         showBolts: true,
         boltsShown: { ...ALL_BOLT_KINDS },
+        walersShown: true,
         objectVisibility: normalizeObjectVisibility(undefined),
         panelDepth: DEFAULT_PANEL_DEPTH_CM,
         simpleMode: false,
@@ -2111,6 +2119,13 @@ export const useEditorStore = create<EditorState>()(
             ),
           })),
 
+        setDrawingInfo: (patch) =>
+          set((s) => ({
+            documents: s.documents.map((d) =>
+              d.id === s.activeDocId ? { ...d, info: { ...d.info, ...patch }, updatedAt: Date.now() } : d,
+            ),
+          })),
+
         // ── warehouses ────────────────────────────────────────────────────
         addWarehouse: (name) =>
           set((s) => {
@@ -2200,6 +2215,7 @@ export const useEditorStore = create<EditorState>()(
             };
           }),
         resetObjectVisibility: () => set({ objectVisibility: normalizeObjectVisibility(undefined) }),
+        setWalersShown: (on) => set({ walersShown: on }),
         setPanelDepth: (cm) => {
           const depth = normalizePanelDepth(cm);
           setPanelDepthOverride(depth);
@@ -2906,6 +2922,8 @@ export function restoreDocuments(saved: Partial<EditorState> & { pieces?: Piece[
       revision: typeof d.revision === 'string' && d.revision ? d.revision : 'A',
       // 0 means "auto scale"; anything invalid falls back to 1:50
       scale: typeof d.scale === 'number' && d.scale >= 0 ? d.scale : 50,
+      // and the drawing-info window after everything else
+      ...(d.info && typeof d.info === 'object' ? { info: d.info } : {}),
     }));
 
   if (!documents.length) {

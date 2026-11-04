@@ -1,4 +1,4 @@
-import type { DrawingDoc, DrawingStatus, Material, Piece, StockByWarehouse, Warehouse } from '../types';
+import type { DrawingDoc, DrawingInfo, DrawingStatus, Material, Piece, StockByWarehouse, Warehouse } from '../types';
 import { requireSupabase } from './supabase';
 import type { DataSnapshot, SyncPlan } from './syncDiff';
 
@@ -100,6 +100,7 @@ interface DocumentRow {
   sketch?: unknown;
   measures?: unknown;
   status?: unknown;
+  info?: unknown;
   version: number;
   updated_at: string;
 }
@@ -244,9 +245,47 @@ export async function recheckStatusColumn(): Promise<boolean> {
   }
 }
 
-/** Either optional column missing: switch it off for the session and say so. */
+/**
+ * Set once the server has said it has no `documents.info` column - migration
+ * 0014 has not been run yet. The drawing still saves, without its client name,
+ * and the drawing-info window says so.
+ */
+let infoUnsupported = false;
+
+export function infoSaveUnsupported(): boolean {
+  return infoUnsupported;
+}
+
+/** The server's two ways of saying `documents.info` is not there. Narrow, as above. */
+export function isMissingInfoColumn(error: PostgrestLikeError): boolean {
+  const text = error.message ?? '';
+  return (
+    (error.code === 'PGRST204' && text.includes("'info'")) ||
+    /column "info"( of relation "documents")? does not exist/i.test(text)
+  );
+}
+
+/** Ask whether the info column has arrived. Never throws. */
+export async function recheckInfoColumn(): Promise<boolean> {
+  try {
+    const { error } = await requireSupabase().from('documents').select('info').limit(1);
+    if (error) return false;
+    infoUnsupported = false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function rowInfo(value: unknown): DrawingInfo {
+  const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  return typeof v.clientName === 'string' && v.clientName ? { clientName: v.clientName } : {};
+}
+
+/** An optional column missing: switch it off for the session and say so. */
 function adoptMissingColumn(error: PostgrestLikeError | null): boolean {
   if (!error) return false;
+  if (!infoUnsupported && isMissingInfoColumn(error)) return (infoUnsupported = true);
   if (!measuresUnsupported && isMissingMeasuresColumn(error)) return (measuresUnsupported = true);
   if (!statusUnsupported && isMissingStatusColumn(error)) return (statusUnsupported = true);
   return false;
@@ -284,6 +323,7 @@ function documentToRow(d: DrawingDoc) {
     ...row,
     ...(measuresUnsupported ? {} : { measures: d.measures ?? [] }),
     ...(statusUnsupported ? {} : { status: d.status ?? 'active' }),
+    ...(infoUnsupported ? {} : { info: d.info ?? {} }),
   };
 }
 
@@ -301,6 +341,8 @@ function rowToDocument(row: DocumentRow): DrawingDoc {
     measures: Array.isArray(row.measures) ? (row.measures as DrawingDoc['measures']) : [],
     // And no status before migration 0013 - read as active, as stock always was.
     status: rowStatus(row.status),
+    // And no info before migration 0014.
+    info: rowInfo(row.info),
     updatedAt: new Date(row.updated_at).getTime(),
   };
 }

@@ -8,6 +8,8 @@ import {
   measuresSaveUnsupported,
   recheckMeasuresColumn,
   recheckStatusColumn,
+  recheckInfoColumn,
+  infoSaveUnsupported,
   statusSaveUnsupported,
   reloadDocument,
 } from './repo';
@@ -78,6 +80,7 @@ let canWrite = true;
 let lastMeasuresProbe = 0;
 const MEASURES_PROBE_MS = 60_000;
 let lastStatusProbe = 0;
+let lastInfoProbe = 0;
 
 function snapshotOf(): DataSnapshot {
   const s = useEditorStore.getState();
@@ -157,6 +160,18 @@ export async function flush(): Promise<void> {
           });
           schedule();
         }
+      }
+    }
+    // The same for the drawing-info column and migration 0014 - no banner:
+    // the drawing-info window says it while it is open.
+    if (infoSaveUnsupported() && Date.now() - lastInfoProbe > MEASURES_PROBE_MS) {
+      lastInfoProbe = Date.now();
+      if (await recheckInfoColumn()) {
+        pending = mergePlans(pending, {
+          ...emptyPlan(),
+          documentsUpsert: useEditorStore.getState().documents,
+        });
+        schedule();
       }
     }
     // The same for drawing statuses and migration 0013.

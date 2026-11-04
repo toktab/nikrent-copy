@@ -28,6 +28,7 @@ import { ErrorLogDialog } from './components/ErrorLogDialog';
 import { PasswordDialog } from './components/PasswordDialog';
 import { DisplaySettingsDialog } from './components/DisplaySettingsDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { DrawingInfoDialog } from './components/DrawingInfoDialog';
 import { RemainingDialog } from './components/RemainingDialog';
 import { ProjectDialog } from './components/ProjectDialog';
 import { ExportDialog } from './components/ExportDialog';
@@ -169,6 +170,7 @@ export default function App() {
       {dialog?.kind === 'password' && <PasswordDialog />}
       {dialog?.kind === 'display-settings' && <DisplaySettingsDialog />}
       {dialog?.kind === 'settings' && <SettingsDialog />}
+      {dialog?.kind === 'drawing-info' && <DrawingInfoDialog />}
       {dialog?.kind === 'remaining' && <RemainingDialog />}
       {dialog?.kind === 'project' && <ProjectDialog key={dialog.docId} docId={dialog.docId} />}
       {dialog?.kind === 'export' && <ExportDialog key={dialog.tab} tab={dialog.tab} />}

@@ -5,6 +5,7 @@ import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, WingShape } from './BoltLayer';
+import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
 
 /**
  * ჭანჭიკები in the top bar: the fixings the drawing needs, in a menu.
@@ -59,6 +60,9 @@ export function BoltsButton() {
   const resetBolts = useEditorStore((s) => s.resetBolts);
   const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   const groups = useMemo(() => boltGroups(pieces, byId), [pieces, byId]);
+  const walers = useMemo(() => walerTotals(soloPanels(pieces, byId)), [pieces, byId]);
+  const walersShown = useEditorStore((s) => s.walersShown);
+  const setWalersShown = useEditorStore((s) => s.setWalersShown);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -110,7 +114,7 @@ export function BoltsButton() {
         </span>
       </MenuItem>
       <MenuItem
-        title="შტირი × 2 (თითო ბოლოზე) + კონექტორები - თითო თითოზე"
+        title="შტირი × 2 (თითო ბოლოზე) + კონექტორები + ვოლერის შტირები - თითო თითოზე"
         trail={<KindTrail groups={groups.nuts} shown={shown.nuts} />}
         onClick={() => toggleBoltKind('nuts')}
       >
@@ -137,6 +141,38 @@ export function BoltsButton() {
           ჩამკეტი fix
         </span>
       </MenuItem>
+      {/* ვოლერები: worked out behind every panel with nothing facing it -
+          3 up a 300, 2 up a 150 / 90 - and what each one is bolted with. */}
+      <MenuItem
+        title="პანელი, რომელსაც კედლის მეორე მხარეს პირისპირ პანელი არ აქვს: 300-ზე 3 ვოლერი, 150 / 90-ზე 2. თითო ვოლერზე 2 შტირი 40 სმ, 2 ჩასაკეტი, 2 ქანჩი + დისკო"
+        trail={<KindTrail groups={walers.groups} shown={walersShown} />}
+        onClick={() => {
+          if (!walersShown) setShowBolts(true);
+          setWalersShown(!walersShown);
+        }}
+      >
+        <span className={`bolts-kind${walersShown ? '' : ' off'}`}>
+          <svg className="walers-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <rect x="0.5" y="4.5" width="13" height="5" rx="1.5" />
+            <circle cx="4" cy="7" r="1.2" />
+            <circle cx="10" cy="7" r="1.2" />
+          </svg>
+          ვოლერები
+        </span>
+      </MenuItem>
+      {walers.walers > 0 && (
+        <div className="bolts-sub">
+          <span>{WALER_ROD_NAME}</span>
+          <span className="bolts-calc">{walers.walers} × 2 =</span>
+          <b>{walers.rods} ც.</b>
+          <span>{WALER_LOCK_NAME}</span>
+          <span className="bolts-calc">{walers.rods} × 1 =</span>
+          <b>{walers.locks} ც.</b>
+          <span>ქანჩი + დისკო ვოლერზე</span>
+          <span className="bolts-calc">{walers.rods} × 1 =</span>
+          <b>{walers.nuts} ც.</b>
+        </div>
+      )}
       <MenuSep />
       <div className="bolts-reset-row">
         <MenuItem

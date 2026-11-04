@@ -1,4 +1,5 @@
 import type { Material, Piece } from '../types';
+import { soloPanels, WALER_RODS_EACH } from './walers';
 import { isConnector, normalizeRot, planW } from './geometry';
 import {
   CONNECTORS_PER_JOINT,
@@ -145,6 +146,11 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
       [`${k}:b`, n],
     ]),
     ...connectors.map(([k, n]): [string, number] => [`c:${k}`, n]),
+    // ...and one on each ვოლერის შტირი, two to a waler.
+    ...soloPanels(pieces, byId).map((s): [string, number] => [
+      `w:${Math.round(s.box.x)}:${Math.round(s.box.y)}:${Math.round(s.piece.z ?? 0)}`,
+      s.walers * WALER_RODS_EACH,
+    ]),
   ];
 
   const latches: Array<[string, number]> = [

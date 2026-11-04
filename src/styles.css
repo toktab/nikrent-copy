@@ -6565,3 +6565,83 @@ kbd {
   fill: #1b1f24;
   font-weight: 700;
 }
+
+/* The drawing-info window: the products, folded under one row. */
+.drawing-info-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 8px 4px;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line, #2a313b);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.drawing-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.drawing-info-table th {
+  text-align: left;
+  font-weight: 500;
+  opacity: 0.7;
+  padding: 4px 6px;
+}
+.drawing-info-table td {
+  padding: 4px 6px;
+  border-top: 1px solid var(--line, #2a313b);
+}
+.drawing-info-table td:last-child,
+.drawing-info-table th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 70px;
+}
+
+/* ვოლერები: an orange beam behind each panel nothing faces, its two rods, and
+   how many go up it. Under the other ჭანჭიკი marks. */
+.waler-layer {
+  z-index: 40;
+}
+.waler-bar {
+  fill: #e2733a;
+  fill-opacity: 0.85;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1;
+}
+.waler-rod {
+  fill: #f3e3c3;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1;
+}
+.waler-count {
+  fill: #f0a46f;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(20, 24, 30, 0.85);
+  stroke-width: 3px;
+}
+.walers-mark rect {
+  fill: #e2733a;
+}
+.walers-mark circle {
+  fill: #f3e3c3;
+}
+/* What each waler is bolted with, under its row. */
+.bolts-sub {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 2px 8px;
+  padding: 2px 12px 8px 34px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.bolts-sub b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

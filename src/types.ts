@@ -192,6 +192,17 @@ export interface DrawingDoc {
   revision: string;
   /** drawn-to scale denominator, e.g. 50 for 1:50 */
   scale: number;
+  /** the job's own details - the drawing-info window; absent on older drawings */
+  info?: DrawingInfo;
+}
+
+/**
+ * What the drawing is for, outside the formwork itself (the user, 2026-11-01):
+ * who it is for, so far. Kept as one object so the fields still to come land
+ * in the same column without another migration.
+ */
+export interface DrawingInfo {
+  clientName?: string;
 }
 
 /** Undo/redo unit: everything a user edit can change. */
@@ -305,6 +316,7 @@ export type DialogState =
   | { kind: 'password' }
   | { kind: 'display-settings' }
   | { kind: 'settings' }
+  | { kind: 'drawing-info' }
   | { kind: 'remaining' }
   | { kind: 'project'; docId: string }
   | { kind: 'export'; tab: 'pdf' | 'json' }

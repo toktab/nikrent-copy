@@ -18,6 +18,7 @@ import { stampedName } from './files';
 import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, pieceCentre } from './bolts';
 import { boltKindOf, boltTotals, markedRodLength, planMarks, type BoltKindName } from './boltMarks';
 import { CATEGORY_ORDER } from '../data/categories';
+import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
 
 export type { SheetSize };
@@ -473,7 +474,19 @@ function legendEntries(
       });
     }
     if (vis.nuts && totals.nuts > 0) {
-      out.push({ icon: { type: 'nut' }, label: 'ქანჩი + დისკო', note: 'შტირის ორივე ბოლოზე', count: pcs(totals.nuts) });
+      out.push({
+        icon: { type: 'nut' },
+        label: 'ქანჩი + დისკო',
+        note: 'შტირის ორივე ბოლოზე, კონექტორზე და ვოლერის შტირზე',
+        count: pcs(totals.nuts),
+      });
+    }
+    // The worked-out ვოლერები - behind every panel with nothing facing it.
+    const walers = walerTotals(soloPanels(doc.pieces, byId));
+    if (walers.walers > 0) {
+      out.push({ sample: 'ვოლ.', label: 'ვოლერი', note: '300-ზე 3, 150 / 90-ზე 2 - ცალმხრივ პანელზე', count: pcs(walers.walers) });
+      out.push({ sample: '40', label: WALER_ROD_NAME, note: 'ვოლერზე 2', count: pcs(walers.rods) });
+      out.push({ sample: 'ჩას.', label: WALER_LOCK_NAME, note: 'თითო შტირზე', count: pcs(walers.locks) });
     }
     if (vis.latches && totals.latches > 0) {
       out.push({
