@@ -6,6 +6,7 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, WingShape } from './BoltLayer';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals } from '../lib/cornerConnectors';
 
 /**
  * ჭანჭიკები in the top bar: the fixings the drawing needs, in a menu.
@@ -62,6 +63,9 @@ export function BoltsButton() {
   const groups = useMemo(() => boltGroups(pieces, byId), [pieces, byId]);
   const walers = useMemo(() => walerTotals(soloPanels(pieces, byId)), [pieces, byId]);
   const walersShown = useEditorStore((s) => s.walersShown);
+  const cc = useMemo(() => cornerConnectorTotals(cornerConnectorSpots(pieces, byId)), [pieces, byId]);
+  const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
+  const setCcShown = useEditorStore((s) => s.setCornerConnectorsShown);
   const setWalersShown = useEditorStore((s) => s.setWalersShown);
   const [kinds, setKinds] = useState<BoltKinds>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -114,7 +118,7 @@ export function BoltsButton() {
         </span>
       </MenuItem>
       <MenuItem
-        title="შტირი × 2 (თითო ბოლოზე) + კონექტორები + ვოლერის შტირები - თითო თითოზე"
+        title="შტირი × 2 (თითო ბოლოზე) + კონექტორები + ვოლერის შტირები + კუთხის კონექტორები 25 სმ - თითო თითოზე"
         trail={<KindTrail groups={groups.nuts} shown={shown.nuts} />}
         onClick={() => toggleBoltKind('nuts')}
       >
@@ -171,6 +175,31 @@ export function BoltsButton() {
           <span>ქანჩი + დისკო ვოლერზე</span>
           <span className="bolts-calc">{walers.rods} × 1 =</span>
           <b>{walers.nuts} ც.</b>
+        </div>
+      )}
+      {/* კუთხის კონექტორი 25 სმ: worked out at every outside corner closed
+          with a ჩ5 - through the through panel and the ჩ5 into the run. */}
+      <MenuItem
+        title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ5 დგას: 25 სმ კონექტორი ორივეში გადის, გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
+        trail={<KindTrail groups={cc.groups} shown={ccShown} />}
+        onClick={() => {
+          if (!ccShown) setShowBolts(true);
+          setCcShown(!ccShown);
+        }}
+      >
+        <span className={`bolts-kind${ccShown ? '' : ' off'}`}>
+          <svg className="cc-menu-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <line x1="3" y1="7" x2="13" y2="7" />
+            <ellipse cx="2.5" cy="7" rx="1.6" ry="3.2" />
+          </svg>
+          {CORNER_CONNECTOR_NAME}
+        </span>
+      </MenuItem>
+      {cc.wide > 0 && (
+        <div className="bolts-sub">
+          <span>გარე კუთხე ჩ10-ით - სხვა დეტალი საჭიროა</span>
+          <span />
+          <b>{cc.wide} ადგ.</b>
         </div>
       )}
       <MenuSep />

@@ -195,6 +195,7 @@ const PREF_KEYS = [
   'showBolts',
   'boltsShown',
   'walersShown',
+  'cornerConnectorsShown',
   'objectVisibility',
   'panelDepth',
   'showSketch',
@@ -338,6 +339,8 @@ export interface EditorState {
   boltsShown: BoltKinds;
   /** the worked-out ვოლერები drawn behind panels with nothing facing them - see walers.ts */
   walersShown: boolean;
+  /** the worked-out კუთხის კონექტორი 25 სმ at outside corners - see cornerConnectors.ts */
+  cornerConnectorsShown: boolean;
   /** which kinds of thing the plan draws - see `ObjectVisibility` */
   objectVisibility: ObjectVisibility;
   /** the thickness every panel and ჩაკერება is drawn at, cm - see `setPanelDepthOverride` */
@@ -603,6 +606,7 @@ export interface EditorState {
   resetObjectVisibility: () => void;
   setPanelDepth: (cm: number) => void;
   setWalersShown: (on: boolean) => void;
+  setCornerConnectorsShown: (on: boolean) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
   setShowLengths: (on: boolean) => void;
@@ -1027,6 +1031,7 @@ export const useEditorStore = create<EditorState>()(
         showBolts: true,
         boltsShown: { ...ALL_BOLT_KINDS },
         walersShown: true,
+        cornerConnectorsShown: true,
         objectVisibility: normalizeObjectVisibility(undefined),
         panelDepth: DEFAULT_PANEL_DEPTH_CM,
         simpleMode: false,
@@ -2216,6 +2221,7 @@ export const useEditorStore = create<EditorState>()(
           }),
         resetObjectVisibility: () => set({ objectVisibility: normalizeObjectVisibility(undefined) }),
         setWalersShown: (on) => set({ walersShown: on }),
+        setCornerConnectorsShown: (on) => set({ cornerConnectorsShown: on }),
         setPanelDepth: (cm) => {
           const depth = normalizePanelDepth(cm);
           setPanelDepthOverride(depth);

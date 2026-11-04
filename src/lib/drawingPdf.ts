@@ -19,6 +19,7 @@ import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, pieceCentre } 
 import { boltKindOf, boltTotals, markedRodLength, planMarks, type BoltKindName } from './boltMarks';
 import { CATEGORY_ORDER } from '../data/categories';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals } from './cornerConnectors';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
 
 export type { SheetSize };
@@ -487,6 +488,11 @@ function legendEntries(
       out.push({ sample: 'ვოლ.', label: 'ვოლერი', note: '300-ზე 3, 150 / 90-ზე 2 - ცალმხრივ პანელზე', count: pcs(walers.walers) });
       out.push({ sample: '40', label: WALER_ROD_NAME, note: 'ვოლერზე 2', count: pcs(walers.rods) });
       out.push({ sample: 'ჩას.', label: WALER_LOCK_NAME, note: 'თითო შტირზე', count: pcs(walers.locks) });
+    }
+    // ...and the კუთხის კონექტორი 25 სმ at outside corners closed with a ჩ5.
+    const cc = cornerConnectorTotals(cornerConnectorSpots(doc.pieces, byId));
+    if (cc.connectors > 0) {
+      out.push({ sample: '25', label: CORNER_CONNECTOR_NAME, note: 'გარე კუთხე ჩ5-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.connectors) });
     }
     if (vis.latches && totals.latches > 0) {
       out.push({
