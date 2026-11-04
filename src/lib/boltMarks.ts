@@ -154,7 +154,10 @@ export function boltGroups(pieces: Piece[], byId: Map<string, Material>): Record
     ]),
     // ...and one on the outer end of each კუთხის კონექტორი 25 სმ and each
     // half-head შტირი 40 სმ.
-    ...cornerConnectorSpots(pieces, byId).map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),
+    // (Not the inside-corner ones: those take the small ბარაშკა.)
+    ...cornerConnectorSpots(pieces, byId)
+      .filter((s) => !s.inner)
+      .map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),
   ];
 
   const latches: Array<[string, number]> = [

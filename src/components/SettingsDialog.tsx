@@ -88,6 +88,7 @@ export function SettingsDialog() {
       <WalersSwitch />
       <CornerConnectorsSwitch />
       <HalfHeadSwitch />
+      <InnerConnectorsSwitch />
     </Modal>
   );
 }
@@ -205,6 +206,28 @@ function HalfHeadSwitch() {
       />
       <span>
         შტირი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
+      </span>
+    </label>
+  );
+}
+
+/** The worked-out inside-corner 25 cm connectors - like the others. */
+function InnerConnectorsSwitch() {
+  const on = useEditorStore((s) => s.innerConnectorsShown);
+  const setOn = useEditorStore((s) => s.setInnerConnectorsShown);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          setOn(e.target.checked);
+        }}
+      />
+      <span>
+        კუთხის კონექტორი 25 სმ შიდა კუთხეში ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხე ჩ5 / ჩ10-ით</span>
       </span>
     </label>
   );

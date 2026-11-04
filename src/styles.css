@@ -6685,3 +6685,10 @@ kbd {
 .cc-menu-mark.half line {
   stroke: #e5484d;
 }
+/* The inside-corner connector: its small ბარაშკა drawn purple, as the user drew it. */
+.cc-mark.inner .cc-nut {
+  stroke: #b06ad6;
+}
+.cc-menu-mark.inner ellipse {
+  stroke: #b06ad6;
+}
