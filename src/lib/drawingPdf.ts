@@ -454,30 +454,22 @@ function legendEntries(
 
   if (vis.pieces) {
     const totals = boltTotals(doc.pieces, byId, normalizeKindsOn(doc.info?.bolts));
-    if (vis.connectors && totals.connectors > 0) {
-      // The total split by where it stands, so each colour has its own row.
-      // Only placed ones - see `connectorCount`.
-      const atCorner = connectorsAtCorners(doc.pieces, byId);
-      let tee = 0;
-      let corner = 0;
-      for (const p of doc.pieces) {
-        const m = byId.get(p.materialId);
-        if (!m || !isConnector(m)) continue;
-        if (atCorner.has(p.id)) corner++;
-        else tee++;
-      }
-      // Each mark is five connectors - see `CONNECTORS_PER_JOINT`.
-      tee *= CONNECTORS_PER_JOINT;
-      corner *= CONNECTORS_PER_JOINT;
-      if (tee) {
-        out.push({ icon: { type: 'connector', kind: 'tee' }, label: 'კონექტორი', note: 'T-შეერთება - 5 ც. ნიშანზე', count: pcs(tee) });
-      }
-      if (corner) {
+    // Every კონექტორი 25 სმ in one row (the user, 2026-11-07): the placed ones
+    // at T-joints and the worked-out ones at outside and inside corners are
+    // one part. Each placed mark is five - see `CONNECTORS_PER_JOINT`.
+    {
+      const kinds = normalizeKindsOn(doc.info?.bolts);
+      const corners = cornerConnectorTotals(cornerConnectorSpots(doc.pieces, byId));
+      const all =
+        (vis.connectors ? totals.connectors : 0) +
+        (kinds.cornerConnectors && vis.cornerConnectors ? corners.connectors : 0) +
+        (kinds.innerConnectors && vis.innerConnectors ? corners.innerConnectors : 0);
+      if (all > 0) {
         out.push({
-          icon: { type: 'connector', kind: 'corner' },
-          label: 'კონექტორი',
-          note: 'კუთხესთან, ჩაკერებაზე - 5 ც. ნიშანზე',
-          count: pcs(corner),
+          icon: { type: 'connector', kind: 'tee' },
+          label: 'კონექტორი 25 სმ',
+          note: 'T-შეერთება (5 ც. ნიშანზე), გარე და შიდა კუთხე (300-ზე 5, 150 / 90-ზე 2)',
+          count: pcs(all),
         });
       }
     }
@@ -507,22 +499,22 @@ function legendEntries(
     }
     // ...and the კუთხის კონექტორი 25 სმ at outside corners closed with a ჩ5.
     const cc = cornerConnectorTotals(cornerConnectorSpots(doc.pieces, byId));
-    if (on.cornerConnectors && vis.cornerConnectors && cc.connectors > 0) {
-      out.push({ sample: '25', label: CORNER_CONNECTOR_NAME, note: 'გარე კუთხე ჩ5-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.connectors) });
-    }
+    // (the corner connectors are in the კონექტორი row above)
     if (on.innerConnectors && vis.innerConnectors && cc.innerConnectors > 0) {
-      out.push({ sample: '25', label: INNER_CONNECTOR_NAME, note: 'შიდა კუთხე ჩ5 / ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.innerConnectors) });
       out.push({ sample: 'ბ.', label: SMALL_NUT_NAME, note: 'თითო შიდა კუთხის კონექტორზე', count: pcs(cc.smallNuts) });
     }
     const fullHead = findCornerRods(doc.pieces, byId).reduce((n, r) => n + r.count, 0);
     if (on.fullHead && vis.fullHead && fullHead > 0) {
-      out.push({ sample: '40', label: FULL_HEAD_NAME, note: 'შიდა კუთხის ფეხთან - 300-ზე 5, 150 / 90-ზე 2', count: pcs(fullHead) });
+      out.push({ icon: { type: 'connector', kind: 'tee', head: 'full' }, label: FULL_HEAD_NAME, note: 'შიდა კუთხის ფეხთან - 300-ზე 5, 150 / 90-ზე 2', count: pcs(fullHead) });
     }
     if (on.halfHead && vis.halfHead && cc.halfHead > 0) {
-      out.push({ sample: '40', label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });
+      out.push({ icon: { type: 'connector', kind: 'tee', head: 'half' }, label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });
     }
     if (vis.crocodiles && totals.crocodiles > 0) {
       out.push({ sample: 'ნიან.', label: 'ნიანგი (ჩამკეტი რეგულირებადი)', note: 'პანელი - ჩაკერება - პანელი; 300-ზე 4, 150 / 90-ზე 2', count: pcs(totals.crocodiles) });
+    }
+    if (vis.props && totals.props > 0) {
+      out.push({ sample: 'დგ.', label: 'დგარი და თავი', note: 'პატარა - 150 / 90-ზე, დიდი - 300-ზე; ცალმხრივ პანელზე', count: pcs(totals.props) });
     }
     if (vis.frogs && totals.frogs > 0) {
       out.push({ sample: 'ბაყ.', label: 'ბაყაყი (სამაგრი ფიქსი)', note: 'პანელი - პანელი; 300-ზე 4, 150 / 90-ზე 2', count: pcs(totals.frogs) });

@@ -305,38 +305,53 @@ function WalerShape({ m, strokeWidth }: { m: Material; strokeWidth: number }) {
  * ground with its anchor holes (the far edge). A plain bar the colour of the
  * category was all it used to be, and read as one more waler.
  */
+/**
+ * დგარი და თავი from above (the user's photo, 2026-11-07): the head - a steel
+ * bracket gripping the panel's frame - at the top edge, on the panel; the
+ * blue outer tube and the thinner inner one; the turning handle, a loop
+ * standing off the tube at the joint; and the foot plate with its two anchor
+ * holes on the ground at the far end. The big one is the same, longer.
+ */
 function PostShape({ m, stroke, strokeWidth }: { m: Material; stroke: string; strokeWidth: number }) {
   const pw = planW(m);
   const ph = planH(m);
-  const sw = Math.min(strokeWidth, pw / 8);
-  const head = Math.min(2, ph / 10);
-  const foot = Math.min(4, ph / 6);
-  const tube = pw * 0.36;
-  const collar = pw * 0.6;
-  const mid = ph * 0.55;
+  const sw = Math.max(Math.min(strokeWidth, pw / 8), Math.min(pw, ph) * 0.02);
+  const steel = '#4a525c';
+  // Blue, the user's choice (2026-11-07).
+  const blue = '#2f7de1';
+  const dark = '#163f78';
+  const head = Math.min(4, ph / 8);
+  const foot = Math.min(5, ph / 6);
+  const tube = pw * 0.34;
+  const inner = tube * 0.62;
+  const joint = ph * 0.5;
+  const cx = pw / 2;
   return (
     <>
       {/* faint footprint, so the drag / hit area stays obvious */}
-      <rect x={0} y={0} width={pw} height={ph} fill={m.color} opacity={0.1} />
-      {/* the tube, inner and outer, the inner one narrower past the collar */}
-      <rect x={(pw - tube) / 2} y={head} width={tube} height={mid - head} fill={m.color} stroke={stroke} strokeWidth={sw} />
-      <rect
-        x={(pw - tube * 0.7) / 2}
-        y={mid}
-        width={tube * 0.7}
-        height={ph - foot - mid}
-        fill={m.color}
-        stroke={stroke}
-        strokeWidth={sw}
+      <rect x={0} y={0} width={pw} height={ph} fill={blue} opacity={0.08} />
+      {/* the inner tube, from the joint to the foot */}
+      <rect x={cx - inner / 2} y={joint} width={inner} height={ph - foot - joint} fill={blue} stroke={dark} strokeWidth={sw} />
+      {/* the outer tube, from the head to the joint */}
+      <rect x={cx - tube / 2} y={head} width={tube} height={joint - head} rx={tube / 4} fill={blue} stroke={dark} strokeWidth={sw} />
+      {/* the turning handle: a loop off the side of the tube, at the joint */}
+      <path
+        d={`M ${cx + tube / 2} ${joint - 3.2} H ${cx + tube / 2 + pw * 0.28} V ${joint + 3.2} H ${cx + tube / 2}`}
+        fill="none"
+        stroke={dark}
+        strokeWidth={sw * 2.2}
+        strokeLinejoin="round"
       />
-      {/* the adjusting collar */}
-      <rect x={(pw - collar) / 2} y={mid - 1.5} width={collar} height={3} rx={0.6} fill={m.color} stroke={stroke} strokeWidth={sw} />
-      {/* head plate, on the panel */}
-      <rect x={0} y={0} width={pw} height={head} fill="#5b6470" stroke={stroke} strokeWidth={sw} />
-      {/* foot plate, on the ground, with its two anchor holes */}
-      <rect x={0} y={ph - foot} width={pw} height={foot} fill="#5b6470" stroke={stroke} strokeWidth={sw} />
-      <circle cx={pw * 0.25} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="rgba(0,0,0,.6)" />
-      <circle cx={pw * 0.75} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="rgba(0,0,0,.6)" />
+      <rect x={cx - tube * 0.75} y={joint - 1.4} width={tube * 1.5} height={2.8} rx={0.8} fill={blue} stroke={dark} strokeWidth={sw} />
+      {/* the head: a bracket gripping the panel, its two jaws on the frame */}
+      <rect x={pw * 0.1} y={0} width={pw * 0.8} height={head * 0.55} fill={steel} stroke={stroke} strokeWidth={sw} />
+      <rect x={pw * 0.1} y={0} width={pw * 0.14} height={head} fill={steel} stroke={stroke} strokeWidth={sw} />
+      <rect x={pw * 0.76} y={0} width={pw * 0.14} height={head} fill={steel} stroke={stroke} strokeWidth={sw} />
+      <circle cx={cx} cy={head * 0.6} r={tube * 0.32} fill="#c9ced4" stroke={stroke} strokeWidth={sw} />
+      {/* the foot plate on the ground, with its two anchor holes */}
+      <rect x={0} y={ph - foot} width={pw} height={foot} rx={0.8} fill={steel} stroke={stroke} strokeWidth={sw} />
+      <circle cx={pw * 0.24} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="#15181c" />
+      <circle cx={pw * 0.76} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="#15181c" />
     </>
   );
 }

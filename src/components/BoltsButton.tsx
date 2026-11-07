@@ -4,7 +4,7 @@ import { EVERY_KIND, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
-import { ClampShape, ConnectorGlyph, WingShape } from './BoltLayer';
+import { ClampShape, ConnectorGlyph, RING, WingShape } from './BoltLayer';
 import { findCornerRods } from '../lib/bolts';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
@@ -42,17 +42,16 @@ function saveKinds(kinds: KindsOn) {
 }
 
 const KIND_NAMES: Array<[KindKey, string]> = [
-  ['connectors', 'კონექტორები'],
+  ['connectors', 'კონექტორები (25 სმ) - T, გარე და შიდა კუთხე'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
   ['walers', 'ვოლერები'],
-  ['cornerConnectors', 'კუთხის კონექტორი 25 სმ - გარე'],
   ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
   ['fullHead', 'შტირი 40 სმ მთლიანი თავით'],
-  ['innerConnectors', 'კუთხის კონექტორი 25 სმ - შიდა'],
   ['crocodiles', 'ნიანგი'],
   ['frogs', 'ბაყაყი'],
+  ['props', 'დგარი და თავი'],
 ];
 
 export function BoltsButton() {
@@ -62,7 +61,7 @@ export function BoltsButton() {
   const toggleKindShown = useEditorStore((s) => s.toggleBoltKind);
   // The all-kinds switch left this menu but still lives in ზომების ჩვენება;
   // a kind switched on here must actually appear, whatever that one says.
-  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs') => {
+  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs' | 'props') => {
     if (!shown[k]) setShowBolts(true);
     toggleKindShown(k);
   };
@@ -90,6 +89,26 @@ export function BoltsButton() {
     return [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each);
   }, [pieces, byId]);
   const setWalersShown = useEditorStore((s) => s.setWalersShown);
+  // The three connector kinds, one row: counted together, on and shown together.
+  const connectorsOn = on.connectors || on.cornerConnectors || on.innerConnectors;
+  const connectorsShown = shown.connectors && ccShown && innerShown;
+  const connectorGroups = useMemo(() => {
+    const by = new Map<number, number>();
+    const add = (list: Array<{ places: number; each: number }>) => {
+      for (const g of list) by.set(g.each, (by.get(g.each) ?? 0) + g.places);
+    };
+    add(groups.connectors);
+    if (on.cornerConnectors) add(cc.groups);
+    if (on.innerConnectors) add(cc.innerGroups);
+    return [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each);
+  }, [groups.connectors, cc, on.cornerConnectors, on.innerConnectors]);
+  const toggleConnectorsShown = () => {
+    const next = !connectorsShown;
+    if (next) setShowBolts(true);
+    if (shown.connectors !== next) toggleKindShown('connectors');
+    setCcShown(next);
+    setInnerShown(next);
+  };
   const [kinds, setKinds] = useState<KindsOn>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -114,18 +133,21 @@ export function BoltsButton() {
       )}
     >
       <MenuLabel>ჭანჭიკები ამ ნახაზზე</MenuLabel>
+      {/* კონექტორები 25 სმ - every one of them in one row (the user, 2026-11-07):
+          the placed ones at T-joints and the worked-out ones at outside and
+          inside corners are the same part. */}
       <MenuItem
-        title="დაისმება მხოლოდ ღილაკით „ავტომატურად თავიდან დასმა“ ან ხელით - T-შეერთებაზე და შიდა კუთხე ჩაკერებასთან"
-        trail={<KindTrail groups={groups.connectors} on={on.connectors} shown={shown.connectors} onEye={() => toggleBoltKind('connectors')} />}
-        onClick={() => setKindOn('connectors', !on.connectors)}
+        title="კონექტორი 25 სმ: T-შეერთებაზე (5 ც. ადგილზე), გარე კუთხეში ჩ5-ით და შიდა კუთხეში ჩ5 / ჩ10-ით (300-ზე 5, 150 / 90-ზე 2). დაისმება „ავტომატურად თავიდან დასმა“-თი ან ხელით"
+        trail={<KindTrail groups={connectorGroups} on={connectorsOn} shown={connectorsShown} onEye={toggleConnectorsShown} />}
+        onClick={() => {
+          for (const k of ['connectors', 'cornerConnectors', 'innerConnectors'] as const) setKindOn(k, !connectorsOn);
+        }}
       >
-        <span className={`bolts-kind${on.connectors ? '' : ' off'}`}>
-          <svg className="bolts-btn-mark" width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
-            <circle r="6" />
-            <line className="bolt-bar" x1="-4" y1="0" x2="4" y2="0" />
-            <line className="bolt-slash" x1="-2.5" y1="-4" x2="2.5" y2="4" />
+        <span className={`bolts-kind${connectorsOn ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+            <ConnectorGlyph cx={0} cy={0} r={6.2} px={0.5} label="" ring={RING.connector} />
           </svg>
-          კონექტორები
+          კონექტორები (25 სმ)
         </span>
       </MenuItem>
       <MenuItem
@@ -207,31 +229,6 @@ export function BoltsButton() {
           <b>{walers.nuts} ც.</b>
         </div>
       )}
-      {/* კუთხის კონექტორი 25 სმ: worked out at every outside corner closed
-          with a ჩ5 - through the through panel and the ჩ5 into the run. */}
-      <MenuItem
-        title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ5 დგას: 25 სმ კონექტორი ორივეში გადის, გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
-        trail={
-          <KindTrail
-            groups={cc.groups}
-            on={on.cornerConnectors}
-            shown={ccShown}
-            onEye={() => {
-              if (!ccShown) setShowBolts(true);
-              setCcShown(!ccShown);
-            }}
-          />
-        }
-        onClick={() => setKindOn('cornerConnectors', !on.cornerConnectors)}
-      >
-        <span className={`bolts-kind${on.cornerConnectors ? '' : ' off'}`}>
-          <svg className="cc-menu-mark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-            <line x1="3" y1="7" x2="13" y2="7" />
-            <ellipse cx="2.5" cy="7" rx="1.6" ry="3.2" />
-          </svg>
-          {CORNER_CONNECTOR_NAME}
-        </span>
-      </MenuItem>
       {/* ...and where the corner is closed with a ჩ10, the half-head
           შტირი 40 სმ (წაჭრილი გაიკა) instead. */}
       <MenuItem
@@ -250,9 +247,8 @@ export function BoltsButton() {
         onClick={() => setKindOn('halfHead', !on.halfHead)}
       >
         <span className={`bolts-kind${on.halfHead ? '' : ' off'}`}>
-          <svg className="cc-menu-mark half" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-            <line x1="3" y1="7" x2="13" y2="7" />
-            <ellipse cx="2.5" cy="7" rx="1.6" ry="3.2" />
+          <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+            <ConnectorGlyph cx={0} cy={0} r={6.2} px={0.5} label="" head="half" ring={RING.halfHead} />
           </svg>
           {HALF_HEAD_NAME}
         </span>
@@ -276,34 +272,9 @@ export function BoltsButton() {
       >
         <span className={`bolts-kind${on.fullHead ? '' : ' off'}`}>
           <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
-            <ConnectorGlyph cx={0} cy={0} r={6.5} px={0.5} label="" head="full" />
+            <ConnectorGlyph cx={0} cy={0} r={6.2} px={0.5} label="" head="full" ring={RING.fullHead} />
           </svg>
           {FULL_HEAD_NAME}
-        </span>
-      </MenuItem>
-      {/* ...and at inside corners: the same 25 cm connector from inside the
-          profile, ჩ5 or ჩ10 alike, with the small ბარაშკა on it. */}
-      <MenuItem
-        title="შიდა კუთხეში, კუთხის პროფილსა და პანელს შორის ჩ5 ან ჩ10: 25 სმ კონექტორი პროფილიდან ჩაკერებაში და პანელში, ბოლოზე პატარა ბარაშკა (გილზა + გაიკა). 300-ზე 5, 150 / 90-ზე 2"
-        trail={
-          <KindTrail
-            groups={cc.innerGroups}
-            on={on.innerConnectors}
-            shown={innerShown}
-            onEye={() => {
-              if (!innerShown) setShowBolts(true);
-              setInnerShown(!innerShown);
-            }}
-          />
-        }
-        onClick={() => setKindOn('innerConnectors', !on.innerConnectors)}
-      >
-        <span className={`bolts-kind${on.innerConnectors ? '' : ' off'}`}>
-          <svg className="cc-menu-mark inner" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-            <line x1="3" y1="7" x2="13" y2="7" />
-            <ellipse cx="3" cy="7" rx="1.1" ry="2.2" />
-          </svg>
-          {INNER_CONNECTOR_NAME}
         </span>
       </MenuItem>
       {on.innerConnectors && cc.innerConnectors > 0 && (
@@ -354,6 +325,21 @@ export function BoltsButton() {
           ბაყაყი
         </span>
       </MenuItem>
+      <MenuItem
+        title="დგარი და თავი: პატარა - 150 / 90-იან პანელზე, დიდი - 300-იანზე. „ავტომატურად თავიდან დასმა“ - თითო ყოველ ცალმხრივ პანელზე (პირისპირ პანელი რომ არ აქვს), ზურგიდან, შუაში. ხელითაც - პანელს ეკვრის"
+        trail={<KindTrail groups={groups.props} on={on.props} shown={shown.props} onEye={() => toggleBoltKind('props')} />}
+        onClick={() => setKindOn('props', !on.props)}
+      >
+        <span className={`bolts-kind${on.props ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <rect x="5.5" y="1" width="3" height="11" rx="1" fill="#2f7de1" stroke="#163f78" strokeWidth="0.6" />
+            <rect x="3" y="0.5" width="8" height="2" fill="#4a525c" />
+            <rect x="2.5" y="11.5" width="9" height="2" fill="#4a525c" />
+            <path d="M 8.5 5.5 H 11 V 7.5 H 8.5" fill="none" stroke="#163f78" strokeWidth="0.9" />
+          </svg>
+          დგარი და თავი
+        </span>
+      </MenuItem>
       <MenuSep />
       <div className="bolts-reset-row">
         <MenuItem
@@ -361,7 +347,8 @@ export function BoltsButton() {
           disabled={chosen.length === 0}
           title={`${chosen.join(', ') || 'არაფერი არ არის არჩეული'} - ხელით გადატანილი და წაშლილი ისევ ავტომატურად დაისმება. Ctrl+Z აბრუნებს`}
           onClick={() => {
-            resetBolts(kinds);
+            // The corner connectors go with the კონექტორები choice - one part.
+            resetBolts({ ...kinds, cornerConnectors: kinds.connectors, innerConnectors: kinds.connectors });
             setShowBolts(true);
           }}
         >

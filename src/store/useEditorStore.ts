@@ -285,6 +285,8 @@ function retiredDocuments<T extends { pieces: Piece[] }>(documents: T[]): T[] {
 
 /** Built-ins renamed by the user: a saved catalog with the old name takes the new one. */
 const BUILTIN_RENAMES: Array<{ id: string; from: string; to: string }> = [
+  { id: 'post-100', from: 'დგარი 100', to: 'დგარი და თავი - პატარა (150 / 90)' },
+  { id: 'post-200', from: 'დგარი 200', to: 'დგარი და თავი - დიდი (300)' },
   { id: 'acc-latch-adjustable', from: 'ჩამკეტი რეგულირებადი', to: 'ნიანგი (ჩამკეტი რეგულირებადი)' },
 ];
 
@@ -1486,6 +1488,27 @@ export const useEditorStore = create<EditorState>()(
               return { guideX: null, guideY: null, pieces: [...others, moved] };
             }
             /**
+             * A დგარი და თავი sticks to the panel face it is brought up to, as
+             * when it is dropped (`snapPost`); loose, it moves on the grid.
+             */
+            if (view === 'plan' && !freehand && rm && rm.category === 'post' && lifted.length === 1 && !sketchBaseline?.length) {
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const head = pieceCentre(lifted[0], rm);
+              const spot = snapPost(
+                { x: head.x + duCm, y: head.y + dvCm },
+                rm,
+                others,
+                byId,
+                // From its middle: the head is half its reach nearer the face.
+                Math.max(40, 60 / s.zoom) + planH(rm) / 2,
+                s.snap ? s.snapStep : 0,
+              );
+              const moved = spot
+                ? { ...lifted[0], x: spot.x, y: spot.y, rot: spot.rot }
+                : { ...lifted[0], x: lifted[0].x + gridDu, y: lifted[0].y + gridDv };
+              return { guideX: null, guideY: null, pieces: [...others, moved] };
+            }
+            /**
              * A ნიანგი or ბაყაყი goes from place to place along the faces: the
              * nearest the rule names, turned onto the back of the face. Loose,
              * it moves on the grid.
@@ -2505,7 +2528,7 @@ export const useEditorStore = create<EditorState>()(
             let pieces = s.pieces;
             // Connectors, ნიანგი and ბაყაყი are pieces already (or not there
             // yet), and the სამაგრი is only placed by hand: only marks are made real.
-            if ('bolts' in target && !['connectors', 'crocodiles', 'frogs', 'holders'].includes(target.bolts)) {
+            if ('bolts' in target && !['connectors', 'crocodiles', 'frogs', 'holders', 'props'].includes(target.bolts)) {
               pieces = materializeBolts(s.pieces, byId, s.materials, target.bolts, uid).pieces;
             }
             const picked = pieces.filter((p) => {
@@ -2556,6 +2579,7 @@ export const useEditorStore = create<EditorState>()(
             // ...and the ნიანგი and ბაყაყი on the places theirs names.
             if (chosen.crocodiles) pieces = materializeBolts(pieces, byId, s.materials, 'crocodiles', uid, s.sketch).pieces;
             if (chosen.frogs) pieces = materializeBolts(pieces, byId, s.materials, 'frogs', uid, s.sketch).pieces;
+            if (chosen.props) pieces = materializeBolts(pieces, byId, s.materials, 'props', uid, s.sketch).pieces;
             const left = new Set(pieces.map((p) => p.id));
             return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
           });
@@ -2572,7 +2596,7 @@ export const useEditorStore = create<EditorState>()(
             boltsShown: {
               ...s.boltsShown,
               ...Object.fromEntries(
-                (['connectors', 'rods', 'nuts', 'latches', 'crocodiles', 'frogs'] as const)
+                (['connectors', 'rods', 'nuts', 'latches', 'crocodiles', 'frogs', 'props'] as const)
                   .filter((k) => chosen[k])
                   .map((k) => [k, true]),
               ),
@@ -2594,7 +2618,8 @@ export const useEditorStore = create<EditorState>()(
             kind === 'nuts' ||
             kind === 'latches' ||
             kind === 'crocodiles' ||
-            kind === 'frogs'
+            kind === 'frogs' ||
+            kind === 'props'
           ) {
             const only = {
               connectors: false,
@@ -2604,12 +2629,13 @@ export const useEditorStore = create<EditorState>()(
               holders: false,
               crocodiles: false,
               frogs: false,
+              props: false,
               [kind]: true,
             };
             commit((s) => {
               const byId = new Map(s.materials.map((m) => [m.id, m]));
               let pieces = on ? s.pieces : resetBolts(s.pieces, byId, only);
-              if (on && (kind === 'connectors' || kind === 'crocodiles' || kind === 'frogs')) {
+              if (on && (kind === 'connectors' || kind === 'crocodiles' || kind === 'frogs' || kind === 'props')) {
                 pieces = materializeBolts(pieces, byId, s.materials, kind, uid, s.sketch).pieces;
               }
               if (pieces === s.pieces) return {};

@@ -21,6 +21,7 @@ import {
 } from './bolts';
 import { boltKindOf, type BoltKindName } from './boltMarks';
 import { clampMaterial, clampPieces, clampSpots, isClampOf } from './clamps';
+import { propPieces } from './posts';
 
 /*
  * ჩანაცვლება - swap pieces on the drawing for another catalog item.
@@ -115,6 +116,9 @@ export function materializeBolts(
   } else if (kind === 'nuts') {
     const m = nutMaterial(materials);
     if (m) for (const e of openRodEnds(pieces, byId)) made.push(...fittingStack(m, e, [], newId));
+  } else if (kind === 'props') {
+    // One on the back of every panel nothing faces - see `propPieces`.
+    made.push(...propPieces(pieces, byId, materials, sketch, newId));
   } else if (kind === 'crocodiles' || kind === 'frogs') {
     // One at every place the rule names that has none of its kind on it yet.
     const m = clampMaterial(materials, kind);

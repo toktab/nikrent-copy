@@ -6268,21 +6268,24 @@ kbd {
 .piece.connector.selected {
   outline: none;
 }
-.piece.connector.selected .bolt-glyph circle {
+.piece.connector.selected .bolt-glyph .bolt-disc {
   stroke: var(--sel);
 }
-.bolt-glyph circle,
+/* Only the disc: its ring takes the colour of its kind (`RING`), and the
+   halo and the head ring round the red stroke keep their own. */
+.bolt-glyph .bolt-disc,
 .bolts-btn-mark circle {
   fill: #f5d90a;
+}
+.bolts-btn-mark circle {
   stroke: #b59c00;
   stroke-width: 1.5;
 }
 /* At a კუთხე the mark goes a light orange: the inner-corner bolt sits on a
    filler, which is yellow already, and a placed connector clamping a corner
    reads as that at a glance. */
-.bolt-glyph.corner circle {
+.bolt-glyph.corner .bolt-disc {
   fill: #f5a623;
-  stroke: #b8740e;
 }
 .bolt-glyph .bolt-bar,
 .bolts-btn-mark .bolt-bar {
@@ -6610,6 +6613,14 @@ kbd {
 /* The card a picked ჭანჭიკი gets in the რეკომენდაცია tab. */
 .bolt-info {
   margin-top: 12px;
+}
+.bolt-info-picture {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+}
+.bolt-info-picture:empty {
+  display: none;
 }
 .bolt-info-name {
   margin: 4px 0 2px;

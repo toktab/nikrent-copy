@@ -59,6 +59,7 @@ describe('boltTotals', () => {
       holders: 0,
       crocodiles: 0,
       frogs: 0,
+      props: 0,
     });
   });
 });
@@ -148,7 +149,7 @@ describe('the PDF switches for the key and the ჭანჭიკები', () 
 
 describe('which ჭანჭიკები the plan shows', () => {
   it('shows every kind unless one was switched off', () => {
-    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true, holders: true, crocodiles: true, frogs: true });
+    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true, holders: true, crocodiles: true, frogs: true, props: true });
     expect(normalizeBoltKinds({ rods: false, nuts: 'x' })).toEqual({
       connectors: true,
       rods: false,
@@ -157,6 +158,7 @@ describe('which ჭანჭიკები the plan shows', () => {
       holders: true,
       crocodiles: true,
       frogs: true,
+      props: true,
     });
   });
 });

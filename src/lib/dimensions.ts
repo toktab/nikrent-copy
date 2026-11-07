@@ -102,6 +102,8 @@ export interface PdfVisibility {
   /** ნიანგი and ბაყაყი */
   crocodiles: boolean;
   frogs: boolean;
+  /** დგარი და თავი */
+  props: boolean;
   /** the worked-out ვოლერები and კუთხის კონექტორები 25 სმ (გარე, ნახევარი თავით, შიდა) */
   walers: boolean;
   cornerConnectors: boolean;
@@ -130,6 +132,7 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   holders: true,
   crocodiles: true,
   frogs: true,
+  props: true,
   walers: true,
   cornerConnectors: true,
   halfHead: true,

@@ -266,6 +266,8 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
     () => boltInfoCounts(doc.pieces, byId, normalizeKindsOn(doc.info?.bolts), doc.sketch ?? []),
     [doc.pieces, byId, doc.info?.bolts, doc.sketch],
   );
+  // The კონექტორი 25 სმ, every one - placed at T-joints and worked out at corners.
+  const allConnectors = bolts.connectors + (worked.cornerConnectors ?? 0) + (worked.innerConnectors ?? 0);
   const bomOn = vis.bomPage && counts.pieces > 0;
 
   return (
@@ -358,12 +360,12 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
             <h4 className="vis-section">ჭანჭიკები</h4>
             <div className="vis-extra">
               <Check
-                label="კონექტორები"
-                note="T-შეერთება და შიდა კუთხე ჩაკერებასთან"
-                count={bolts.connectors}
+                label="კონექტორები (25 სმ)"
+                note="T-შეერთება, გარე და შიდა კუთხე - ერთი ნაწილი"
+                count={allConnectors}
                 checked={vis.connectors}
-                onChange={set('connectors')}
-                disabledWhy={boltWhy(bolts.connectors)}
+                onChange={(v) => setPdfVisibility({ connectors: v, cornerConnectors: v, innerConnectors: v })}
+                disabledWhy={boltWhy(allConnectors)}
               />
               <Check
                 label="შტირები"
@@ -412,20 +414,20 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(bolts.frogs)}
               />
               <Check
+                label="დგარი და თავი"
+                note="პატარა - 150 / 90-ზე, დიდი - 300-ზე"
+                count={bolts.props}
+                checked={vis.props}
+                onChange={set('props')}
+                disabledWhy={boltWhy(bolts.props)}
+              />
+              <Check
                 label="ვოლერები"
                 note="ცალმხრივ პანელზე; შტირებით და ჩასაკეტებით"
                 count={worked.walers ?? 0}
                 checked={vis.walers}
                 onChange={set('walers')}
                 disabledWhy={boltWhy(worked.walers ?? 0)}
-              />
-              <Check
-                label="კუთხის კონექტორი 25 სმ - გარე"
-                note="გარე კუთხე ჩ5-ით"
-                count={worked.cornerConnectors ?? 0}
-                checked={vis.cornerConnectors}
-                onChange={set('cornerConnectors')}
-                disabledWhy={boltWhy(worked.cornerConnectors ?? 0)}
               />
               <Check
                 label="შტირი 40 სმ ნახევარი თავით"
@@ -442,14 +444,6 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 checked={vis.fullHead}
                 onChange={set('fullHead')}
                 disabledWhy={boltWhy(worked.fullHead ?? 0)}
-              />
-              <Check
-                label="კუთხის კონექტორი 25 სმ - შიდა"
-                note="შიდა კუთხე; პატარა ბარაშკით"
-                count={worked.innerConnectors ?? 0}
-                checked={vis.innerConnectors}
-                onChange={set('innerConnectors')}
-                disabledWhy={boltWhy(worked.innerConnectors ?? 0)}
               />
             </div>
 

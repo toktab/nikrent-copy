@@ -1,6 +1,72 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { BOLT_INFO, boltInfoCounts, boltInfoOf, type BoltInfoId } from '../lib/boltInfo';
+import { ClampShape, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
+import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
+
+/**
+ * The part as it is drawn on the plan, large, at the top of its card (the
+ * user, 2026-11-07) - so the disc picked is recognised at once: 25 for a
+ * კონექტორი, 40 with a cut head or a whole one.
+ */
+function BoltPicture({ id }: { id: BoltInfoId }) {
+  const disc = (label: string, head: 'none' | 'half' | 'full', kind: 'tee' | 'corner' = 'tee') => (
+    <svg width="96" height="96" viewBox="-48 -48 96 96" aria-hidden="true">
+      <ConnectorGlyph cx={0} cy={0} r={36} px={2.2} kind={kind} label={label} head={head} />
+    </svg>
+  );
+  switch (id) {
+    case 'connectors':
+    case 'cornerConnectors':
+      return disc('25', 'none');
+    case 'innerConnectors':
+      return disc('25', 'none', 'corner');
+    case 'halfHead':
+      return disc('40', 'half');
+    case 'fullHead':
+    case 'walerRod':
+      return disc('40', 'full');
+    case 'rods':
+      return (
+        <svg width="160" height="40" viewBox="-80 -20 160 40" aria-hidden="true">
+          <RodGlyph length={150} scale={2} px={1} />
+        </svg>
+      );
+    case 'nuts':
+    case 'smallNut':
+      return (
+        <svg width="96" height="64" viewBox="-20 -32 64 64" aria-hidden="true">
+          <NutGlyph x={0} y={0} rot={0} scale={3} px={1} />
+        </svg>
+      );
+    case 'latches':
+      return (
+        <svg width="96" height="64" viewBox="-24 -16 48 32" aria-hidden="true">
+          <ClampShape len={30} thick={10} px={1} />
+        </svg>
+      );
+    case 'holders':
+      return (
+        <svg width="80" height="80" viewBox="-0.5 -0.5 7 7" aria-hidden="true">
+          <PanelHolderShape w={6} h={6} px={0.12} />
+        </svg>
+      );
+    case 'crocodiles':
+      return (
+        <svg width="180" height="40" viewBox="-0.5 -0.5 25 5" aria-hidden="true">
+          <CrocodileShape w={24} h={4} px={0.1} />
+        </svg>
+      );
+    case 'frogs':
+      return (
+        <svg width="140" height="44" viewBox="-0.5 -0.5 15 5" aria-hidden="true">
+          <FrogShape w={14} h={4} px={0.08} />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
 
 /**
  * The card a picked ჭანჭიკი gets in the რეკომენდაცია tab (the user,
@@ -59,6 +125,9 @@ export function BoltInfoPanel() {
           ← {BOLT_INFO[trail.length > 1 ? trail[trail.length - 2] : picked].name}
         </button>
       )}
+      <div className="bolt-info-picture">
+        <BoltPicture id={id} />
+      </div>
       <h4 className="bolt-info-name">{info.name}</h4>
       {count !== undefined && (
         <p className="bolt-info-count">
