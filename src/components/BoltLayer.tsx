@@ -50,15 +50,28 @@ export function ConnectorGlyph({
   r,
   px = 1,
   kind = 'tee',
+  label = '25',
+  head = 'none',
 }: {
   cx: number;
   cy: number;
   r: number;
   px?: number;
   kind?: BoltKind;
+  /** its length in cm, written in the disc (the user, 2026-11-07): 25 for a connector, 40 for the 40 სმ შტირი */
+  label?: string;
+  /**
+   * The head at the top of the red stroke, as the user drew it: none for a
+   * connector, a cut-open ring for the წაჭრილი გაიკა (half head), a whole one
+   * for the full head.
+   */
+  head?: 'none' | 'half' | 'full';
 }) {
   const d = r * 0.7;
   const disc = kind === 'corner' ? C.corner : C.tee;
+  const hr = r * 0.17;
+  const hx = cx - d * 0.6;
+  const hy = cy - d;
   return (
     <g className={`bolt-glyph ${kind}`}>
       <circle cx={cx} cy={cy} r={r} fill={disc.fill} stroke={disc.stroke} style={{ strokeWidth: 1.5 * px }} />
@@ -82,6 +95,32 @@ export function ConnectorGlyph({
         y2={cy + d}
         style={{ strokeWidth: 1.6 * px }}
       />
+      {head === 'full' && (
+        <circle cx={hx} cy={hy - hr * 0.6} r={hr} fill="none" stroke={C.slash} style={{ strokeWidth: 1.4 * px }} />
+      )}
+      {head === 'half' && (
+        // A ring with a bite out of its top-left: the head cut down.
+        <path
+          d={`M ${hx - hr * 0.7} ${hy - hr * 1.3} A ${hr} ${hr} 0 1 0 ${hx + hr * 0.2} ${hy - hr * 1.6}`}
+          fill="none"
+          stroke={C.slash}
+          strokeLinecap="round"
+          style={{ strokeWidth: 1.4 * px }}
+        />
+      )}
+      {label && (
+        <text
+          x={cx + d * 0.62}
+          y={cy - d * 0.12}
+          textAnchor="middle"
+          fontSize={r * 0.42}
+          fontWeight={600}
+          fill={C.slash}
+          style={{ stroke: 'none' }}
+        >
+          {label}
+        </text>
+      )}
     </g>
   );
 }
