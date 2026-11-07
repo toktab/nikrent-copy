@@ -210,8 +210,8 @@ function Drawing({ d }: { d: SheetDrawing }) {
           r={r}
           px={rPx}
           kind={c.kind === 'innerConnectors' ? 'corner' : 'tee'}
-          label={c.kind === 'halfHead' ? '40' : '25'}
-          head={c.kind === 'halfHead' ? 'half' : 'none'}
+          label={c.kind === 'halfHead' || c.kind === 'fullHead' ? '40' : '25'}
+          head={c.kind === 'halfHead' ? 'half' : c.kind === 'fullHead' ? 'full' : 'none'}
         />
       ))}
 

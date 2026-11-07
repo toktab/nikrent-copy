@@ -31,6 +31,8 @@ import { pieceBounds, type Rect } from './geometry';
 export const CORNER_CONNECTOR_NAME = 'კუთხის კონექტორი 25 სმ';
 export const CORNER_CONNECTOR_CM = 25;
 export const HALF_HEAD_NAME = 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)';
+/** The uncut one, at an inside corner's leg end - see `findCornerRods` in bolts.ts. */
+export const FULL_HEAD_NAME = 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
 export const INNER_CONNECTOR_NAME = 'კუთხის კონექტორი 25 სმ - შიდა კუთხე';
 export const SMALL_NUT_NAME = 'ბარაშკა პატარა (გილზა + გაიკა)';
 /** How far into the corner profile's leg the inside-corner connector starts, cm. */

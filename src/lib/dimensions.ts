@@ -106,6 +106,7 @@ export interface PdfVisibility {
   walers: boolean;
   cornerConnectors: boolean;
   halfHead: boolean;
+  fullHead: boolean;
   innerConnectors: boolean;
 }
 
@@ -132,6 +133,7 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   walers: true,
   cornerConnectors: true,
   halfHead: true,
+  fullHead: true,
   innerConnectors: true,
 };
 

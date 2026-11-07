@@ -21,7 +21,8 @@ import { CATEGORY_ORDER } from '../data/categories';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
 import { cornerConnectorBars, walerBars, type CornerConnectorBar, type WalerBar } from './workedMarks';
 import { normalizeKindsOn } from './boltKinds';
-import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from './cornerConnectors';
+import { findCornerRods } from './bolts';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from './cornerConnectors';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
 
 export type { SheetSize };
@@ -512,6 +513,10 @@ function legendEntries(
     if (on.innerConnectors && vis.innerConnectors && cc.innerConnectors > 0) {
       out.push({ sample: '25', label: INNER_CONNECTOR_NAME, note: 'შიდა კუთხე ჩ5 / ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.innerConnectors) });
       out.push({ sample: 'ბ.', label: SMALL_NUT_NAME, note: 'თითო შიდა კუთხის კონექტორზე', count: pcs(cc.smallNuts) });
+    }
+    const fullHead = findCornerRods(doc.pieces, byId).reduce((n, r) => n + r.count, 0);
+    if (on.fullHead && vis.fullHead && fullHead > 0) {
+      out.push({ sample: '40', label: FULL_HEAD_NAME, note: 'შიდა კუთხის ფეხთან - 300-ზე 5, 150 / 90-ზე 2', count: pcs(fullHead) });
     }
     if (on.halfHead && vis.halfHead && cc.halfHead > 0) {
       out.push({ sample: '40', label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });

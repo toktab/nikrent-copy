@@ -6,6 +6,7 @@ import { isConnector, isPanelHolder, normalizeRot, planW } from './geometry';
 import { clampEach, isCrocodile, isFrog } from './clamps';
 import {
   CONNECTORS_PER_JOINT,
+  findCornerRods,
   connectorCount,
   latchCount,
   isLatch,
@@ -204,6 +205,11 @@ export function boltGroups(
     // ...and one on the outer end of each კუთხის კონექტორი 25 სმ and each
     // half-head შტირი 40 სმ.
     // (Not the inside-corner ones: those take the small ბარაშკა.)
+    // ...and on the outer end of each 40 სმ შტირი at an inside corner.
+    ...(on.fullHead ? findCornerRods(pieces, byId) : []).map((r): [string, number] => [
+      `fh:${r.dir}:${Math.round(r.x)}:${Math.round(r.y)}:${Math.round(r.z)}`,
+      r.count,
+    ]),
     ...cornerConnectorSpots(pieces, byId)
       .filter((s) => !s.inner && (s.filler === 10 ? on.halfHead : on.cornerConnectors))
       .map((s): [string, number] => [`cc:${s.dir}:${Math.round(s.at)}:${Math.round(s.outer.x)}:${Math.round(s.outer.y)}`, s.count]),

@@ -90,6 +90,7 @@ export function SettingsDialog() {
       <WalersSwitch />
       <CornerConnectorsSwitch />
       <HalfHeadSwitch />
+      <FullHeadSwitch />
       <InnerConnectorsSwitch />
       <HoldersSwitch />
     </Modal>
@@ -211,6 +212,28 @@ function CornerConnectorsSwitch() {
       />
       <span>
         კუთხის კონექტორი 25 სმ ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ5-ით</span>
+      </span>
+    </label>
+  );
+}
+
+/** The worked-out whole-head შტირი 40 სმ at inside corner leg ends - like the others. */
+function FullHeadSwitch() {
+  const on = useEditorStore((s) => s.fullHeadShown);
+  const setOn = useEditorStore((s) => s.setFullHeadShown);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          setOn(e.target.checked);
+        }}
+      />
+      <span>
+        შტირი 40 სმ მთლიანი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხის ფეხთან</span>
       </span>
     </label>
   );
