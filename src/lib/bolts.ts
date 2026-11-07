@@ -406,6 +406,8 @@ export interface BoltKinds {
   /** ნიანგი and ბაყაყი - see lib/clamps.ts */
   crocodiles: boolean;
   frogs: boolean;
+  /** დგარი და თავი - see lib/posts.ts */
+  props: boolean;
   /** the worked-out kinds, whose marks taken off by hand a reset puts back */
   walers?: boolean;
   cornerConnectors?: boolean;
@@ -422,6 +424,7 @@ export const ALL_BOLT_KINDS: BoltKinds = {
   holders: true,
   crocodiles: true,
   frogs: true,
+  props: true,
 };
 
 /** A taken-off entry in `Piece.boltsOff` that belongs to a შტირი, not a connector. */
@@ -447,6 +450,7 @@ export function resetBolts(
       if (kinds.latches && isLatch(m)) return false;
       if (kinds.crocodiles && isCrocodile(m)) return false;
       if (kinds.frogs && isFrog(m)) return false;
+      if (kinds.props && m.category === 'post') return false;
       return true;
     })
     .map((p) => {

@@ -49,7 +49,7 @@ export interface SheetDrawing {
 export type LegendIcon =
   /** `mmPerCm`: one scale for every material in the key, so their sizes compare */
   | { type: 'material'; material: Material; mmPerCm: number }
-  | { type: 'connector'; kind: 'tee' | 'corner' }
+  | { type: 'connector'; kind: 'tee' | 'corner'; head?: 'none' | 'half' | 'full' }
   | { type: 'rod' }
   | { type: 'nut' }
   | { type: 'latch' }
@@ -175,7 +175,7 @@ function Drawing({ d }: { d: SheetDrawing }) {
           );
         }
         // The სამაგრი, ნიანგი and ბაყაყი draw as their own shapes, below.
-        if (kind && kind !== 'holders' && kind !== 'crocodiles' && kind !== 'frogs') {
+        if (kind && kind !== 'holders' && kind !== 'crocodiles' && kind !== 'frogs' && kind !== 'props') {
           return <FixingBody key={piece.id} piece={piece} material={material} px={px} />;
         }
         return <PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />;
@@ -291,7 +291,17 @@ function Icon({ icon, box }: PlacedIcon) {
       );
     }
     case 'connector':
-      return <ConnectorGlyph cx={cx} cy={cy} r={1.3} px={1.3 * CONNECTOR_PX_SHARE} kind={icon.kind} />;
+      return (
+        <ConnectorGlyph
+          cx={cx}
+          cy={cy}
+          r={1.3}
+          px={1.3 * CONNECTOR_PX_SHARE}
+          kind={icon.kind}
+          head={icon.head}
+          label={icon.head && icon.head !== 'none' ? '40' : '25'}
+        />
+      );
     case 'rod':
       return (
         <g transform={`translate(${cx} ${cy})`} style={{ strokeWidth: 0.6 * PX_MM }}>

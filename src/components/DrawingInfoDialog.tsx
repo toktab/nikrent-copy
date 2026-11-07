@@ -11,10 +11,11 @@ import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 /** The four ჭანჭიკი kinds as the ჭანჭიკები menu names them. */
-const BOLT_NAMES: Array<['connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs', string]> = [
+const BOLT_NAMES: Array<['connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs' | 'props', string]> = [
   ['crocodiles', 'ნიანგი (ჩამკეტი რეგულირებადი)'],
   ['frogs', 'ბაყაყი (სამაგრი ფიქსი)'],
-  ['connectors', 'კონექტორები'],
+  ['props', 'დგარი და თავი'],
+  ['connectors', 'კონექტორი 25 სმ'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
@@ -51,7 +52,6 @@ export function DrawingInfoDialog() {
   const rows = bom.groups.flatMap((g) =>
     g.rows.filter((r) => r.used > 0 && !boltKindOf(r.material)).map((r) => ({ group: g.label, row: r })),
   );
-  const boltRows = BOLT_NAMES.filter(([k]) => bolts[k] > 0);
   const walers = useMemo(
     () => walerTotals(soloPanels(pieces, new Map(materials.map((m) => [m.id, m])))),
     [pieces, materials],
@@ -60,13 +60,18 @@ export function DrawingInfoDialog() {
     () => cornerConnectorTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m])))),
     [pieces, materials],
   );
-  const walerRows: Array<[string, number]> =
-    on.cornerConnectors && cc.connectors ? [[CORNER_CONNECTOR_NAME, cc.connectors]] : [];
+  // The corner connectors are the same კონექტორი 25 სმ - counted in its row.
+  const countOf = (k: (typeof BOLT_NAMES)[number][0]) =>
+    k === 'connectors'
+      ? bolts.connectors + (on.cornerConnectors ? cc.connectors : 0) + (on.innerConnectors ? cc.innerConnectors : 0)
+      : bolts[k];
+  const boltRows = BOLT_NAMES.filter(([k]) => countOf(k) > 0);
+  const walerRows: Array<[string, number]> = [];
   if (on.halfHead && cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
   const full = findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))).reduce((n, r) => n + r.count, 0);
   if (on.fullHead && full) walerRows.push([FULL_HEAD_NAME, full]);
   if (on.innerConnectors && cc.innerConnectors) {
-    walerRows.push([INNER_CONNECTOR_NAME, cc.innerConnectors], [SMALL_NUT_NAME, cc.smallNuts]);
+    walerRows.push([SMALL_NUT_NAME, cc.smallNuts]);
   }
   walerRows.push(...(on.walers && walers.walers
     ? [
@@ -141,7 +146,7 @@ export function DrawingInfoDialog() {
                   {name}
                   <span className="menu-note"> · ჭანჭიკები</span>
                 </td>
-                <td>{bolts[k]}</td>
+                <td>{countOf(k)}</td>
               </tr>
             ))}
             {walerRows.map(([name, n]) => (

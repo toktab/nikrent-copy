@@ -1,5 +1,6 @@
-import type { Material, Piece } from '../types';
+import type { Material, Piece, SketchPath } from '../types';
 import { pieceBounds, planH, planW } from './geometry';
+import { soloPanels } from './walers';
 
 /**
  * დგარები - the props that brace a wall's formwork from outside.
@@ -15,6 +16,69 @@ import { pieceBounds, planH, planW } from './geometry';
  */
 export function isPost(m: Material): boolean {
   return m.category === 'post';
+}
+
+/*
+ * დგარი და თავი - the push-pull prop with its head (the user, 2026-11-07):
+ * a ჭანჭიკი kind of its own. Two sizes - the small one for a 150 or 90
+ * panel, the big one for a 300 - placed by ავტომატურად თავიდან დასმა or by
+ * hand, and always stuck to a panel face (`snapPost`).
+ *
+ * Where the reset puts them: one on the back of every panel with nothing
+ * facing it across the wall - the panel a შტირი cannot hold, the same one a
+ * ვოლერი goes on - on the bottom course, in the middle of the panel. My
+ * reading of "automatic"; the user named the sizes, not the places.
+ */
+
+/** The catalog prop for a panel this tall: the big one up a 300, the small one up a 150 / 90. */
+export function propMaterial(materials: Material[], panelH: number): Material | undefined {
+  const big = panelH >= 250;
+  const id = big ? 'post-200' : 'post-100';
+  const posts = materials.filter(isPost);
+  return (
+    materials.find((m) => m.id === id) ??
+    [...posts].sort((a, b) => (big ? Math.max(b.w, b.h) - Math.max(a.w, a.h) : Math.max(a.w, a.h) - Math.max(b.w, b.h)))[0]
+  );
+}
+
+/** One prop on the back of each panel nothing faces, bottom course, mid-panel - see above. */
+export function propPieces(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  materials: Material[],
+  sketch: SketchPath[],
+  newId: () => string,
+): Piece[] {
+  const have = pieces.flatMap((p) => {
+    const m = byId.get(p.materialId);
+    if (!m || !isPost(m)) return [];
+    const b = pieceBounds(p, m);
+    return [{ x: b.x + b.w / 2, y: b.y + b.h / 2, b }];
+  });
+  const out: Piece[] = [];
+  for (const s of soloPanels(pieces, byId, sketch)) {
+    if (Math.round(s.piece.z ?? 0) !== 0) continue;
+    const m = propMaterial(materials, s.material.h);
+    if (!m) continue;
+    const r = s.box;
+    // A prop already standing against this panel's back is its prop.
+    const touching = have.some(({ b }) =>
+      s.across
+        ? b.x < r.x + r.w && b.x + b.w > r.x && (s.back > 0 ? Math.abs(b.y - (r.y + r.h)) <= 2 : Math.abs(b.y + b.h - r.y) <= 2)
+        : b.y < r.y + r.h && b.y + b.h > r.y && (s.back > 0 ? Math.abs(b.x - (r.x + r.w)) <= 2 : Math.abs(b.x + b.w - r.x) <= 2),
+    );
+    if (touching) continue;
+    const pw = planW(m);
+    const ph = planH(m);
+    const line = s.across ? (s.back > 0 ? r.y + r.h : r.y) : s.back > 0 ? r.x + r.w : r.x;
+    const along = s.across ? r.x + r.w / 2 : r.y + r.h / 2;
+    const off = line + (s.back * ph) / 2;
+    const cx = s.across ? along : off;
+    const cy = s.across ? off : along;
+    const rot = s.across ? (s.back > 0 ? 0 : 180) : s.back > 0 ? 270 : 90;
+    out.push({ id: newId(), materialId: m.id, x: cx - pw / 2, y: cy - ph / 2, rot, z: 0 });
+  }
+  return out;
 }
 
 /** How far out from the face a prop's foot lands, cm - see above. */

@@ -81,7 +81,7 @@ export function markedRodLength(materials: Material[], rod: Rod): number {
 }
 
 /** Which of the placeable ჭანჭიკი kinds a material is, if any. */
-export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs';
+export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs' | 'props';
 
 export function boltKindOf(m: Material): BoltKindName | null {
   if (isConnector(m)) return 'connectors';
@@ -91,6 +91,7 @@ export function boltKindOf(m: Material): BoltKindName | null {
   if (isPanelHolder(m)) return 'holders';
   if (isCrocodile(m)) return 'crocodiles';
   if (isFrog(m)) return 'frogs';
+  if (m.category === 'post') return 'props';
   return null;
 }
 
@@ -115,6 +116,7 @@ export function boltTotals(
       holders: sum(g.holders),
       crocodiles: sum(g.crocodiles),
       frogs: sum(g.frogs),
+      props: sum(g.props),
     };
   }
   return {
@@ -128,6 +130,7 @@ export function boltTotals(
     }).length,
     crocodiles: clampTotal(pieces, byId, isCrocodile),
     frogs: clampTotal(pieces, byId, isFrog),
+    props: pieces.filter((p) => byId.get(p.materialId)?.category === 'post').length,
   };
 }
 
@@ -236,6 +239,10 @@ export function boltGroups(
   return {
     crocodiles: on.crocodiles ? grouped(clampUnits(isCrocodile)) : [],
     frogs: on.frogs ? grouped(clampUnits(isFrog)) : [],
+    // დგარი და თავი: one each, wherever it stands.
+    props: on.props
+      ? grouped(placed((m) => m.category === 'post').map(({ p }): [string, number] => [p.id, 1]))
+      : [],
     connectors: on.connectors ? grouped(connectors) : [],
     rods: on.rods ? grouped(rods) : [],
     nuts: grouped(nuts),
@@ -266,5 +273,6 @@ export function normalizeBoltKinds(raw: unknown): BoltKinds {
     holders: r.holders !== false,
     crocodiles: r.crocodiles !== false,
     frogs: r.frogs !== false,
+    props: r.props !== false,
   };
 }

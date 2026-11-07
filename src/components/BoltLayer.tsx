@@ -44,6 +44,17 @@ export const markRadiusPx = (zoom: number) => Math.max(MIN_R_PX, Math.min(MAX_R_
  * units it is drawn in, so the strokes stay the same on screen whether it is
  * drawn in screen space here or in world cm as a placed piece.
  */
+/**
+ * The coloured ring round each kind of connector disc (the user, 2026-11-07):
+ * a soft glow so the three read apart at a glance - blue the 25 სმ
+ * კონექტორი, pink the წაჭრილი გაიკა, green the whole-head 40.
+ */
+export const RING = {
+  connector: '#2f9bff',
+  halfHead: '#ff4fa3',
+  fullHead: '#22c55e',
+} as const;
+
 export function ConnectorGlyph({
   cx,
   cy,
@@ -52,6 +63,7 @@ export function ConnectorGlyph({
   kind = 'tee',
   label = '25',
   head = 'none',
+  ring,
 }: {
   cx: number;
   cy: number;
@@ -66,7 +78,10 @@ export function ConnectorGlyph({
    * for the full head.
    */
   head?: 'none' | 'half' | 'full';
+  /** the glowing ring's colour; by default the one its head names - see `RING` */
+  ring?: string;
 }) {
+  const glow = ring ?? (head === 'half' ? RING.halfHead : head === 'full' ? RING.fullHead : RING.connector);
   const d = r * 0.7;
   const disc = kind === 'corner' ? C.corner : C.tee;
   const hr = r * 0.17;
@@ -76,7 +91,10 @@ export function ConnectorGlyph({
   const hy = cy - s;
   return (
     <g className={`bolt-glyph ${kind}`}>
-      <circle cx={cx} cy={cy} r={r} fill={disc.fill} stroke={disc.stroke} style={{ strokeWidth: 1.5 * px }} />
+      {/* the glow: a soft wide halo, then the ring itself - plain strokes, so
+          the printed sheet draws it too */}
+      <circle className="bolt-halo" cx={cx} cy={cy} r={r + 2 * px} fill="none" stroke={glow} strokeOpacity={0.3} style={{ strokeWidth: 4.5 * px }} />
+      <circle className="bolt-disc" cx={cx} cy={cy} r={r} fill={disc.fill} stroke={glow} style={{ strokeWidth: 1.8 * px }} />
       <line
         className="bolt-bar"
         x1={cx - d}
