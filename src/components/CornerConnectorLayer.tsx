@@ -35,7 +35,8 @@ export function CornerConnectorLayer() {
     () =>
       shown
         ? cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))).filter((s) =>
-            s.inner ? innerShown : s.filler === 10 ? halfShown : ccShown,
+            // A hand-placed one is a piece, drawn as itself.
+            !s.placed && (s.inner ? innerShown : s.filler === 10 ? halfShown : ccShown),
           )
         : [],
     [shown, ccShown, halfShown, innerShown, pieces, materials],
@@ -43,7 +44,7 @@ export function CornerConnectorLayer() {
   // ...and the whole-head შტირი 40 სმ at inside corner leg ends.
   const fullShown = useEditorStore((s) => s.fullHeadShown) && on.fullHead;
   const full = useMemo(
-    () => (fullShown ? findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))) : []),
+    () => (fullShown ? findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))).filter((r) => !r.placed) : []),
     [fullShown, pieces, materials],
   );
   if (!(shown && spots.length) && !full.length) return null;

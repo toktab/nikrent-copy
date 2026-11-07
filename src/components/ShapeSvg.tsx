@@ -2,6 +2,7 @@ import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
 import { isConnector, isPanelHolder, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
 import { isCrocodile, isFrog } from '../lib/clamps';
+import { isFullHeadPart, isHalfHeadPart } from '../lib/cornerConnectors';
 import { ClampShape, ConnectorGlyph, NutGlyph } from './BoltLayer';
 import { isLatch, isNut, LATCH_DEPTH_CM, LATCH_LEN_CM, NUT_CM, WASHER_CM, WASHER_T_CM, WING_HUB_CM, WING_SPAN_CM } from '../lib/bolts';
 
@@ -64,6 +65,19 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
+  // ...the two 40 სმ heads as their discs...
+  if (isHalfHeadPart(m) || isFullHeadPart(m)) {
+    return (
+      <ConnectorGlyph
+        cx={pw / 2}
+        cy={ph / 2}
+        r={(Math.min(pw, ph) / 2) * 0.82}
+        px={strokeWidth}
+        label="40"
+        head={isHalfHeadPart(m) ? 'half' : 'full'}
+      />
+    );
+  }
   // ...the ნიანგი and ბაყაყი as the clamps they are...
   if (isCrocodile(m)) return <CrocodileShape w={pw} h={ph} px={strokeWidth} />;
   if (isFrog(m)) return <FrogShape w={pw} h={ph} px={strokeWidth} />;
