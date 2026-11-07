@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
-import { NutGlyph } from './BoltLayer';
+import { ConnectorGlyph, markRadiusPx } from './BoltLayer';
 import { cornerConnectorSpots } from '../lib/cornerConnectors';
 
 /**
@@ -40,7 +40,6 @@ export function CornerConnectorLayer() {
     [shown, ccShown, halfShown, innerShown, pieces, materials],
   );
   if (!shown || !spots.length) return null;
-  const thick = Math.max(2.5, 2 * zoom);
 
   return (
     <svg className="bolt-layer corner-connector-layer" width={stageW} height={stageH} aria-hidden="true">
@@ -56,9 +55,6 @@ export function CornerConnectorLayer() {
         const oy = s.outer.y * zoom + panY;
         if (ox < -40 || oy < -40 || ox > stageW + 40 || oy > stageH + 40) return null;
         const fits = s.inner || s.filler === 5;
-        // Which way is out of the corner - the way the nut faces. No count on
-        // the plan (the user, 2026-11-04): the ჭანჭიკები menu has it.
-        const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
         return (
           <g
             key={`${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`}
@@ -81,14 +77,15 @@ export function CornerConnectorLayer() {
                 ? `კუთხის კონექტორი 25 სმ × ${s.count} - ქანჩი + დისკო თითოზე`
                 : `შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა) × ${s.count} - გარე კუთხე ჩ10-ით, ქანჩი + დისკო თითოზე`}
             </title>
-            <line className="cc-bar" {...line} strokeWidth={thick} />
-            {/* The ქანჩი + დისკო drawn the way the catalog's own is, facing out
-                of the corner; the inside corner's small ბარაშკა the same, smaller. */}
-            <NutGlyph
-              x={ox}
-              y={oy}
-              rot={s.dir === 'h' ? (out < 0 ? 180 : 0) : out < 0 ? 270 : 90}
-              scale={zoom * (s.inner ? 0.6 : 1)}
+            {/* A disc, as the user drew it (2026-11-07): 25 for a connector, 40 with
+                a cut-open head for the half-head შტირი. Its nut is only counted. */}
+            <ConnectorGlyph
+              cx={(line.x1 + line.x2) / 2}
+              cy={(line.y1 + line.y2) / 2}
+              r={markRadiusPx(zoom)}
+              kind={s.inner ? 'corner' : 'tee'}
+              label={fits ? '25' : '40'}
+              head={fits ? 'none' : 'half'}
             />
           </g>
         );

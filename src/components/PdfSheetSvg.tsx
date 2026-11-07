@@ -200,19 +200,19 @@ function Drawing({ d }: { d: SheetDrawing }) {
           ))}
         </g>
       ))}
+      {/* A disc each, as the user drew them (2026-11-07): 25 for the
+          connectors, 40 with a cut head for the half-head შტირი. */}
       {d.cornerConnectors.map((c, i) => (
-        <g key={`cc:${i}`}>
-          <line
-            x1={c.x1}
-            y1={c.y1}
-            x2={c.x2}
-            y2={c.y2}
-            stroke={c.kind === 'halfHead' ? '#e5484d' : '#9b1c1c'}
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-          <NutGlyph x={c.nut.x} y={c.nut.y} rot={c.nut.rot} scale={c.kind === 'innerConnectors' ? 0.6 : 1} px={px} />
-        </g>
+        <ConnectorGlyph
+          key={`cc:${i}`}
+          cx={(c.x1 + c.x2) / 2}
+          cy={(c.y1 + c.y2) / 2}
+          r={r}
+          px={rPx}
+          kind={c.kind === 'innerConnectors' ? 'corner' : 'tee'}
+          label={c.kind === 'halfHead' ? '40' : '25'}
+          head={c.kind === 'halfHead' ? 'half' : 'none'}
+        />
       ))}
 
       {/* The worked-out marks over the pieces, in the screen's order: the
