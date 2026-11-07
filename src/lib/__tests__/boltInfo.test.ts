@@ -36,3 +36,19 @@ describe('ჭანჭიკი cards', () => {
     expect(of('panel-90x300')).toBeNull();
   });
 });
+
+describe('the 40 სმ heads put down by hand (the user, 2026-11-07)', () => {
+  it('count with the worked-out ones: 5 by a 300', async () => {
+    const { cornerConnectorTotals, cornerConnectorSpots } = await import('../cornerConnectors');
+    const { findCornerRods } = await import('../bolts');
+    const byId = new Map(SEED_MATERIALS.map((m) => [m.id, m]));
+    const pieces = [
+      { id: 'p', materialId: 'panel-90x300', x: 0, y: 0, rot: 0 },
+      { id: 'h', materialId: 'rod-40-half-head', x: 10, y: 9, rot: 0 },
+      { id: 'f', materialId: 'rod-40-full-head', x: 50, y: 9, rot: 0 },
+    ];
+    expect(cornerConnectorTotals(cornerConnectorSpots(pieces, byId)).halfHead).toBe(5);
+    expect(findCornerRods(pieces, byId).reduce((n, r) => n + r.count, 0)).toBe(5);
+    expect(boltInfoOf(byId.get('rod-40-full-head')!)).toBe('fullHead');
+  });
+});

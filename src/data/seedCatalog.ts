@@ -85,7 +85,9 @@ const SEEDS: Seed[] = [
   // lines, so a 40 cm rod here is never taken for a tie rod across a wall.
   ['waler-rod-40', 'ვოლერის შტირი 40 სმ (მთლიანი თავით)', 'acc', 5, 40, 'rect'],
   ['waler-rod-lock', 'ვოლერის შტირის თავის ჩასაკეტი', 'acc', 6, 6, 'rect'],
-  ['rod-40-half-head', 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 5, 40, 'rect'],
+  // The two 40 სმ heads, drawn as their discs (the user, 2026-11-07).
+  ['rod-40-half-head', 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 8, 8, 'rect'],
+  ['rod-40-full-head', 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)', 'acc', 8, 8, 'rect'],
   ['acc-small-barashka', 'ბარაშკა პატარა (გილზა + გაიკა)', 'acc', 6, 6, 'rect'],
 ];
 

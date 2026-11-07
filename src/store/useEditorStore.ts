@@ -47,6 +47,7 @@ import {
 import { makeMaterialId, uid } from '../lib/ids';
 import { snapPost } from '../lib/posts';
 import { isCrocodile, isFrog, snapClamp } from '../lib/clamps';
+import { isFullHeadPart, isHalfHeadPart } from '../lib/cornerConnectors';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
 import {
@@ -239,6 +240,8 @@ const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; toH?: 
   // The ჩამკეტი რეგულირებადი became the ნიანგი, drawn along the back of a
   // face across panel, ჩაკერება and panel (the user, 2026-11-07).
   { id: 'acc-latch-adjustable', fromW: 10, toW: 24, toH: 4 },
+  // The წაჭრილი გაიკა drawn as its disc (2026-11-07).
+  { id: 'rod-40-half-head', fromW: 5, toW: 8, toH: 8 },
   // The პანელის ბეტონზე სამაგრი drawn as the user sketched it (2026-11-07).
   { id: 'acc-panel-concrete-anchor', fromW: 12, toW: 6, toH: 6 },
   // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
@@ -1338,6 +1341,12 @@ export const useEditorStore = create<EditorState>()(
           const m = s.materials.find((mm) => mm.id === materialId);
           if (m && isPanelHolder(m) && !s.boltsShown.holders) {
             set({ boltsShown: { ...s.boltsShown, holders: true }, showBolts: true });
+          }
+          // A 40 სმ head put down by hand brings its kind onto the drawing, so it counts.
+          if (m && (isHalfHeadPart(m) || isFullHeadPart(m))) {
+            const kind = isHalfHeadPart(m) ? 'halfHead' : 'fullHead';
+            const doc = s.documents.find((d) => d.id === s.activeDocId);
+            if (!normalizeKindsOn(doc?.info?.bolts)[kind]) s.setKindOn(kind, true);
           }
         },
 

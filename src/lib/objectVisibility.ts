@@ -40,8 +40,17 @@ export const DEFAULT_OBJECT_VISIBILITY: ObjectVisibility = {
   materials: {},
 };
 
-/** A ნიანგი is shown unless its own row says otherwise, whatever its category. */
-const isNiangi = (m: Material) => m.name.includes('ნიანგ');
+/**
+ * A ნიანგი is shown unless its own row says otherwise, whatever its category -
+ * and so is every ჭანჭიკი part put down by hand from the catalog (the user,
+ * 2026-11-07): the 40 სმ heads, the waler's rod and lock, the small ბარაშკა.
+ */
+const isNiangi = (m: Material) =>
+  m.name.includes('ნიანგ') ||
+  ['rod-40-half-head', 'rod-40-full-head', 'waler-rod-40', 'waler-rod-lock', 'acc-small-barashka'].includes(m.id) ||
+  m.name.includes('თავით') ||
+  m.name.includes('ბარაშკა') ||
+  m.name.includes('ჩასაკეტი');
 
 export function isMaterialShown(vis: ObjectVisibility, m: Material): boolean {
   const own = vis.materials[m.id];

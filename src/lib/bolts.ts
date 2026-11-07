@@ -3,6 +3,7 @@ import { soloPanels, walerTotals } from './walers';
 import { cornerConnectorSpots, cornerConnectorTotals } from './cornerConnectors';
 import { isConnector, isLatch, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
 import { isCrocodile, isFrog } from './clamps';
+import { isFullHeadPart, placedHeadCount } from './cornerConnectors';
 import { cornerLeg } from './shapePath';
 
 /**
@@ -518,6 +519,8 @@ export interface Rod {
    * the 40 სმ შტირი with a whole head (წაჭრის გარეშე) - see `findCornerRods`.
    */
   corner?: boolean;
+  /** a whole-head 40 სმ put down by hand - the piece is drawn, not a mark */
+  placed?: boolean;
   /** the two panels on one face whose joint it goes through - its key */
   a: string;
   b: string;
@@ -635,7 +638,31 @@ export function findRods(pieces: Piece[], byId: Map<string, Material>, all = fal
  * never one of them.
  */
 export function findCornerRods(pieces: Piece[], byId: Map<string, Material>, all = false): Rod[] {
-  return allRods(pieces, byId, all).filter((r) => r.corner);
+  // ...and the ones put down by hand from the catalog, counted with them (the
+  // piece draws itself - `placed`).
+  const placed: Rod[] = [];
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || !isFullHeadPart(m)) continue;
+    const c = pieceCentre(p, m);
+    const z = p.z ?? 0;
+    placed.push({
+      dir: 'v',
+      at: c.x,
+      from: c.y - 1,
+      to: c.y + 1,
+      x: c.x,
+      y: c.y,
+      z,
+      h: 0,
+      count: placedHeadCount(p, m, pieces, byId),
+      corner: true,
+      placed: true,
+      a: p.id,
+      b: p.id,
+    });
+  }
+  return [...allRods(pieces, byId, all).filter((r) => r.corner), ...placed];
 }
 
 function allRods(pieces: Piece[], byId: Map<string, Material>, all: boolean): Rod[] {

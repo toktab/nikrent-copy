@@ -9,6 +9,7 @@ import { DEFAULT_WAREHOUSE, stockIn, totalStock } from '../lib/inventory';
 import { Swatch } from './ShapeSvg';
 import { Menu, MenuItem } from './Menu';
 import { Icon } from './Icon';
+import { boltInfoOf } from '../lib/boltInfo';
 
 /**
  * Simple mode lists only what gets drawn - panels, fillers, corners. Walers,
@@ -40,6 +41,21 @@ export function Palette() {
       }))
       .filter((g) => g.items.length > 0);
   }, [materials, query, simple]);
+
+  /**
+   * Every ჭანჭიკი in one group at the top (the user, 2026-11-07): whatever the
+   * ჭანჭიკები menu counts can be dragged onto the drawing from here by hand -
+   * კონექტორი, შტირი, ქანჩი + დისკო, ჩამკეტი, the 40 სმ heads, სამაგრი,
+   * ნიანგი, ბაყაყი, დგარი და თავი, the walers and their parts. Built-ins, so every
+   * start of the app has them. They stay in their own groups too.
+   */
+  const bolts = useMemo(() => {
+    const f = query.trim().toLowerCase();
+    // ...and the ვოლერი beams themselves (the user, 2026-11-07: "do it all").
+    return materials.filter(
+      (m) => (boltInfoOf(m) !== null || m.category === 'waler') && (!f || m.name.toLowerCase().includes(f)),
+    );
+  }, [materials, query]);
 
   const setPaletteOpen = useEditorStore((s) => s.setPaletteOpen);
 
@@ -79,6 +95,18 @@ export function Palette() {
       </div>
 
       <div className="matlist">
+        {bolts.length > 0 && (
+          <div key="bolts">
+            <div className="cathead">
+              <span className="catdot" style={{ background: '#f5d90a' }} />
+              ჭანჭიკები
+              <span className="cat-count">{bolts.length}</span>
+            </div>
+            {bolts.map((m) => (
+              <PaletteRow key={`bolt:${m.id}`} material={m} used={used.get(m.id) ?? 0} simple={simple} />
+            ))}
+          </div>
+        )}
         {groups.map((g) => (
           <div key={g.category}>
             <div className="cathead">

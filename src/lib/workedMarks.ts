@@ -61,11 +61,11 @@ export interface CornerConnectorBar {
 
 export function cornerConnectorBars(pieces: Piece[], byId: Map<string, Material>): CornerConnectorBar[] {
   // The whole-head შტირი 40 სმ at inside corner leg ends, drawn the same way.
-  const full = findCornerRods(pieces, byId).map((r): CornerConnectorBar => {
+  const full = findCornerRods(pieces, byId).filter((r) => !r.placed).map((r): CornerConnectorBar => {
     const line = r.dir === 'v' ? { x1: r.at, y1: r.from, x2: r.at, y2: r.to } : { x1: r.from, y1: r.at, x2: r.to, y2: r.at };
     return { ...line, nut: { x: line.x1, y: line.y1, rot: 0 }, kind: 'fullHead' };
   });
-  return full.concat(cornerConnectorSpots(pieces, byId).map((s) => {
+  return full.concat(cornerConnectorSpots(pieces, byId).filter((s) => !s.placed).map((s) => {
     const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
     const line =
       s.dir === 'h' ? { x1: s.from, y1: s.at, x2: s.to, y2: s.at } : { x1: s.at, y1: s.from, x2: s.at, y2: s.to };

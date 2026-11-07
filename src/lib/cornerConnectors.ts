@@ -64,6 +64,65 @@ export interface CornerConnectorSpot {
    * each filler it goes through, every course (see `CC_OFF`).
    */
   takeOff: Array<{ id: string; tag: string }>;
+  /** one put down by hand from the catalog - the piece draws itself; see `placedHeadSpots` */
+  placed?: boolean;
+}
+
+/** A catalog წაჭრილი გაიკა - the half-head შტირი 40 სმ. */
+export function isHalfHeadPart(m: Material): boolean {
+  return m.id === 'rod-40-half-head' || (m.name.includes('ნახევარი თავით') && !m.name.includes('ვოლერ'));
+}
+
+/** A catalog whole-head შტირი 40 სმ (წაჭრის გარეშე) - not the waler's own. */
+export function isFullHeadPart(m: Material): boolean {
+  return m.id === 'rod-40-full-head' || (m.name.includes('მთლიანი თავით') && !m.name.includes('ვოლერ'));
+}
+
+/**
+ * How many a hand-placed 40 სმ stands for: 5 by a 300 panel it touches, 2 by
+ * a 150 / 90, 2 touching none - the same as one worked out at that place.
+ */
+export function placedHeadCount(p: Piece, m: Material, pieces: Piece[], byId: Map<string, Material>): number {
+  const r = pieceBounds(p, m);
+  const z = Math.round(p.z ?? 0);
+  let h = 0;
+  for (const q of pieces) {
+    const qm = byId.get(q.materialId);
+    if (!qm || (qm.category !== 'panel' && qm.category !== 'filler' && qm.category !== 'corner')) continue;
+    if (Math.round(q.z ?? 0) !== z) continue;
+    const b = pieceBounds(q, qm);
+    if (b.x <= r.x + r.w + 2 && b.x + b.w >= r.x - 2 && b.y <= r.y + r.h + 2 && b.y + b.h >= r.y - 2) h = Math.max(h, qm.h);
+  }
+  return h ? connectorsUp(h) : 2;
+}
+
+/**
+ * The წაჭრილი გაიკა put down by hand from the catalog (the user, 2026-11-07:
+ * everything in ჭანჭიკები can be placed from the left menu), as spots - so the
+ * menu, the ქანჩი + დისკო, the PDF and the info count them with the worked-out
+ * ones. Not drawn by the marks layer: the piece is drawn as its disc itself.
+ */
+function placedHalfHeads(pieces: Piece[], byId: Map<string, Material>): CornerConnectorSpot[] {
+  const out: CornerConnectorSpot[] = [];
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || !isHalfHeadPart(m)) continue;
+    const r = pieceBounds(p, m);
+    const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+    out.push({
+      dir: 'h',
+      at: c.y,
+      from: c.x - 1,
+      to: c.x + 1,
+      outer: c,
+      filler: 10,
+      inner: false,
+      count: placedHeadCount(p, m, pieces, byId),
+      takeOff: [],
+      placed: true,
+    });
+  }
+  return out;
 }
 
 /** A filler's `Piece.boltsOff` entry for a corner connector taken off at its low (-1) or high (1) end. */
@@ -184,7 +243,7 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
       });
     }
   }
-  return [...out.values()];
+  return [...out.values(), ...placedHalfHeads(pieces, byId)];
 }
 
 export interface CornerConnectorTotals {
