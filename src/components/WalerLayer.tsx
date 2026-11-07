@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
-import { soloPanels } from '../lib/walers';
+import { soloPanels, WALER_OFF } from '../lib/walers';
 
 /** How far behind the panel's back the waler stands, and how thick it is drawn, cm. */
 const GAP_CM = 2;
@@ -11,7 +11,8 @@ const WALER_CM = 8;
  * every panel with nothing facing it across the wall, with its two
  * ვოლერის შტირი marked through it - how many go up it is in the ჭანჭიკები
  * menu, not on the plan (the user, 2026-11-04). Drawn in screen pixels over the surface, like the other
- * ჭანჭიკი marks, and only ever looked at - nothing here is placed.
+ * ჭანჭიკი marks. Nothing here is placed, but a beam can be picked like any
+ * piece (the user, 2026-11-07), and Delete takes it off that panel.
  */
 export function WalerLayer() {
   // On the drawing (ჭანჭიკები) and switched to show (its eye).
@@ -25,6 +26,9 @@ export function WalerLayer() {
   const panY = useEditorStore((s) => s.panY);
   const stageW = useEditorStore((s) => s.stageW);
   const stageH = useEditorStore((s) => s.stageH);
+  const picked = useEditorStore((s) => (s.selectedMark?.kind === 'waler' ? s.selectedMark.key : null));
+  const selectMark = useEditorStore((s) => s.selectMark);
+  const tool = useEditorStore((s) => s.tool);
 
   const solo = useMemo(
     () => (shown ? soloPanels(pieces, new Map(materials.map((m) => [m.id, m])), sketch) : []),
@@ -33,12 +37,14 @@ export function WalerLayer() {
   // One beam per place on the plan - a stacked course has its walers in the
   // same place - with the most any course there needs written on it.
   const spots = useMemo(() => {
-    const at = new Map<string, (typeof solo)[number] & { total: number }>();
+    const at = new Map<string, (typeof solo)[number] & { total: number; key: string; ids: string[] }>();
     for (const s of solo) {
       const k = `${Math.round(s.box.x)}:${Math.round(s.box.y)}:${Math.round(s.box.w)}`;
       const had = at.get(k);
-      if (had) had.total += s.walers;
-      else at.set(k, { ...s, total: s.walers });
+      if (had) {
+        had.total += s.walers;
+        had.ids.push(s.piece.id);
+      } else at.set(k, { ...s, total: s.walers, key: k, ids: [s.piece.id] });
     }
     return [...at.values()];
   }, [solo]);
@@ -68,7 +74,15 @@ export function WalerLayer() {
           return s.across ? { x: a * zoom + panX, y: mid * zoom + panY } : { x: mid * zoom + panX, y: a * zoom + panY };
         });
         return (
-          <g key={`${b.x}:${b.y}:${b.w}`} className="waler-mark">
+          <g
+            key={`${b.x}:${b.y}:${b.w}`}
+            className={`waler-mark pickable${picked === s.key ? ' picked' : ''}`}
+            onPointerDown={(e) => {
+              if (e.button !== 0 || tool !== 'select') return;
+              e.stopPropagation();
+              selectMark({ kind: 'waler', key: s.key, targets: s.ids.map((id) => ({ id, tag: WALER_OFF })) });
+            }}
+          >
             <title>{`ვოლერი × ${s.total} - პანელს პირისპირ პანელი არ აქვს`}</title>
             <rect className="waler-bar" {...rect} rx={Math.min(rect.width, rect.height) / 3} />
             {rods.map((p, i) => (
