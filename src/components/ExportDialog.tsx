@@ -4,6 +4,7 @@ import { useEditorStore } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { boltTotals } from '../lib/boltMarks';
 import { normalizeKindsOn } from '../lib/boltKinds';
+import { boltInfoCounts } from '../lib/boltInfo';
 import { buildLayoutFile, exportLayoutFile, layoutFileHasContent } from '../lib/catalogFile';
 import type { PdfVisibility } from '../lib/dimensions';
 import { PDF_SCALES, SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
@@ -260,6 +261,11 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
   const noPieces = counts.pieces === 0 ? 'ნახაზზე ელემენტები არ არის' : undefined;
   const piecesOff = noPieces ?? (vis.pieces ? undefined : 'ჯერ ჩართე ყალიბის ელემენტები');
   const boltWhy = (n: number) => piecesOff ?? (n ? undefined : 'ამ ნახაზზე არ არის');
+  // The worked-out kinds too - ვოლერები and the 25 სმ corner connectors.
+  const worked = useMemo(
+    () => boltInfoCounts(doc.pieces, byId, normalizeKindsOn(doc.info?.bolts), doc.sketch ?? []),
+    [doc.pieces, byId, doc.info?.bolts, doc.sketch],
+  );
   const bomOn = vis.bomPage && counts.pieces > 0;
 
   return (
@@ -404,6 +410,38 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 checked={vis.frogs}
                 onChange={set('frogs')}
                 disabledWhy={boltWhy(bolts.frogs)}
+              />
+              <Check
+                label="ვოლერები"
+                note="ცალმხრივ პანელზე; შტირებით და ჩასაკეტებით"
+                count={worked.walers ?? 0}
+                checked={vis.walers}
+                onChange={set('walers')}
+                disabledWhy={boltWhy(worked.walers ?? 0)}
+              />
+              <Check
+                label="კუთხის კონექტორი 25 სმ - გარე"
+                note="გარე კუთხე ჩ5-ით"
+                count={worked.cornerConnectors ?? 0}
+                checked={vis.cornerConnectors}
+                onChange={set('cornerConnectors')}
+                disabledWhy={boltWhy(worked.cornerConnectors ?? 0)}
+              />
+              <Check
+                label="შტირი 40 სმ ნახევარი თავით"
+                note="გარე კუთხე ჩ10-ით"
+                count={worked.halfHead ?? 0}
+                checked={vis.halfHead}
+                onChange={set('halfHead')}
+                disabledWhy={boltWhy(worked.halfHead ?? 0)}
+              />
+              <Check
+                label="კუთხის კონექტორი 25 სმ - შიდა"
+                note="შიდა კუთხე; პატარა ბარაშკით"
+                count={worked.innerConnectors ?? 0}
+                checked={vis.innerConnectors}
+                onChange={set('innerConnectors')}
+                disabledWhy={boltWhy(worked.innerConnectors ?? 0)}
               />
             </div>
 

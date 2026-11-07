@@ -5,6 +5,7 @@ import { DetailsPanel } from './DetailsPanel';
 import { BomPanel } from './BomPanel';
 import { InventoryPanel } from './InventoryPanel';
 import { RecommendPanel } from './RecommendPanel';
+import { BoltInfoPanel } from './BoltInfoPanel';
 import { Icon } from './Icon';
 
 /** Right-hand inspector with the working views. ნაშთი has its own window - see RemainingDialog. */
@@ -96,11 +97,14 @@ function SelectionTab() {
   // Lines picked up with their panels (Shift + click) still get the
   // recommendations - that is how the outer face of a built wall is asked for.
   const recommend = lines > 0;
+  // A worked-out mark picked on the plan is not a piece: it has its card alone.
+  const mark = useEditorStore((s) => !!s.selectedMark);
 
   return (
     <>
       {recommend && <h3 className="section-title">დეტალები</h3>}
-      <DetailsPanel />
+      {!(mark && !pieces && !lines) && <DetailsPanel />}
+      <BoltInfoPanel />
       {/* Always mounted, only hidden: the height, filters and picks live in it,
           and they reset every time a panel was clicked and the line picked
           again. Hidden, it previews nothing on the drawing. */}

@@ -315,6 +315,8 @@ export interface SelectedMark {
   /** which one on the plan */
   key: string;
   targets: Array<{ id: string; tag: string }>;
+  /** which ჭანჭიკი card it opens in the რეკომენდაცია tab - see lib/boltInfo.ts */
+  info?: string;
 }
 
 export interface EditorState {
