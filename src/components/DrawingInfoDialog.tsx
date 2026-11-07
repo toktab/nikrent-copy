@@ -10,11 +10,12 @@ import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 /** The four ჭანჭიკი kinds as the ჭანჭიკები menu names them. */
-const BOLT_NAMES: Array<['connectors' | 'rods' | 'nuts' | 'latches', string]> = [
+const BOLT_NAMES: Array<['connectors' | 'rods' | 'nuts' | 'latches' | 'holders', string]> = [
   ['connectors', 'კონექტორები'],
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
+  ['holders', 'ბეტონზე პანელის დამჭერი'],
 ];
 
 /**

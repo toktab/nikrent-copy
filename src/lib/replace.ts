@@ -113,7 +113,7 @@ export function materializeBolts(
   } else if (kind === 'nuts') {
     const m = nutMaterial(materials);
     if (m) for (const e of openRodEnds(pieces, byId)) made.push(...fittingStack(m, e, [], newId));
-  } else {
+  } else if (kind === 'latches') {
     const m = latchMaterial(materials);
     if (m) for (const s of openLatches(pieces, byId)) made.push(...latchStack(m, s, [], newId));
   }

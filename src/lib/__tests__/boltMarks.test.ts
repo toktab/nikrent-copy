@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { boltGroups, boltKindOf, boltTotals, groupsText, markedRodLength, normalizeBoltKinds, planMarks } from '../boltMarks';
-import { connectorCount, latchCount, nutCount, rodCount } from '../bolts';
+import { connectorCount, latchCount, nutCount, resetBolts, rodCount } from '../bolts';
+import { normalizeKindsOn } from '../boltKinds';
 import { DEFAULT_PDF_VISIBILITY, normalizePdfVisibility } from '../dimensions';
 import { SEED_MATERIALS } from '../../data/seedCatalog';
 import type { Piece } from '../../types';
@@ -55,7 +56,38 @@ describe('boltTotals', () => {
       rods: rodCount(pieces, byId),
       nuts: nutCount(pieces, byId),
       latches: latchCount(pieces, byId),
+      holders: 0,
     });
+  });
+});
+
+describe('ბეტონზე პანელის დამჭერი - placed by hand, counted as placed', () => {
+  // A lone panel along x with two holders put down behind it by hand.
+  const lone = () => [put('panel-90x300', 0, 0), put('acc-panel-holder', 10, 10), put('acc-panel-holder', 70, 10)];
+
+  it('is its own ჭანჭიკი kind, one each', () => {
+    expect(boltKindOf(byId.get('acc-panel-holder')!)).toBe('holders');
+    expect(boltTotals(lone(), byId).holders).toBe(2);
+    expect(groupsText(boltGroups(lone(), byId).holders)).toBe('2 × 1 = 2');
+  });
+
+  it('is never worked out - a lone panel alone has none', () => {
+    expect(boltTotals([put('panel-90x300', 0, 0)], byId).holders).toBe(0);
+  });
+
+  it('counts nothing while its kind is off on the drawing', () => {
+    const on = { ...normalizeKindsOn({}), rods: true };
+    expect(boltTotals(lone(), byId, on).holders).toBe(0);
+    expect(boltTotals(lone(), byId, { ...on, holders: true }).holders).toBe(2);
+  });
+
+  it('is left alone by a reset of every kind', () => {
+    const pieces = lone();
+    expect(resetBolts(pieces, byId)).toHaveLength(pieces.length);
+  });
+
+  it('is not the older პანელის ბეტონზე სამაგრი', () => {
+    expect(boltKindOf(byId.get('acc-panel-concrete-anchor')!)).toBeNull();
   });
 });
 
@@ -113,12 +145,13 @@ describe('the PDF switches for the key and the ჭანჭიკები', () 
 
 describe('which ჭანჭიკები the plan shows', () => {
   it('shows every kind unless one was switched off', () => {
-    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true });
+    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true, holders: true });
     expect(normalizeBoltKinds({ rods: false, nuts: 'x' })).toEqual({
       connectors: true,
       rods: false,
       nuts: true,
       latches: true,
+      holders: true,
     });
   });
 });

@@ -2,7 +2,7 @@ import type { Material, Piece } from '../types';
 import { EVERY_KIND, type KindsOn } from './boltKinds';
 import { soloPanels, WALER_RODS_EACH } from './walers';
 import { cornerConnectorSpots } from './cornerConnectors';
-import { isConnector, normalizeRot, planW } from './geometry';
+import { isConnector, isPanelHolder, normalizeRot, planW } from './geometry';
 import {
   CONNECTORS_PER_JOINT,
   connectorCount,
@@ -78,14 +78,15 @@ export function markedRodLength(materials: Material[], rod: Rod): number {
   return m ? Math.max(m.w, m.h) : span + ROD_OVERHANG_CM * 2;
 }
 
-/** Which of the four ჭანჭიკი kinds a material is, if any. */
-export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches';
+/** Which of the placeable ჭანჭიკი kinds a material is, if any. */
+export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders';
 
 export function boltKindOf(m: Material): BoltKindName | null {
   if (isConnector(m)) return 'connectors';
   if (isRod(m)) return 'rods';
   if (isNut(m)) return 'nuts';
   if (isLatch(m)) return 'latches';
+  if (isPanelHolder(m)) return 'holders';
   return null;
 }
 
@@ -102,13 +103,23 @@ export function boltTotals(
   if (on) {
     const g = boltGroups(pieces, byId, on);
     const sum = (list: BoltGroup[]) => list.reduce((n, x) => n + x.places * x.each, 0);
-    return { connectors: sum(g.connectors), rods: sum(g.rods), nuts: sum(g.nuts), latches: sum(g.latches) };
+    return {
+      connectors: sum(g.connectors),
+      rods: sum(g.rods),
+      nuts: sum(g.nuts),
+      latches: sum(g.latches),
+      holders: sum(g.holders),
+    };
   }
   return {
     connectors: connectorCount(pieces, byId),
     rods: rodCount(pieces, byId),
     nuts: nutCount(pieces, byId),
     latches: latchCount(pieces, byId),
+    holders: pieces.filter((p) => {
+      const m = byId.get(p.materialId);
+      return !!m && isPanelHolder(m);
+    }).length,
   };
 }
 
@@ -186,11 +197,18 @@ export function boltGroups(
     ...placed(isLatch).map(({ p, m }): [string, number] => [spotKey(pieceCentre(p, m)), 1]),
   ];
 
+  // ბეტონზე პანელის დამჭერი: only what was placed, one each - nothing worked out.
+  const holders: Array<[string, number]> = placed(isPanelHolder).map(({ p, m }): [string, number] => [
+    `${spotKey(pieceCentre(p, m))}:${Math.round(p.z ?? 0)}`,
+    1,
+  ]);
+
   return {
     connectors: on.connectors ? grouped(connectors) : [],
     rods: on.rods ? grouped(rods) : [],
     nuts: grouped(nuts),
     latches: on.latches ? grouped(latches) : [],
+    holders: on.holders ? grouped(holders) : [],
   };
 }
 
@@ -213,5 +231,6 @@ export function normalizeBoltKinds(raw: unknown): BoltKinds {
     rods: r.rods !== false,
     nuts: r.nuts !== false,
     latches: r.latches !== false,
+    holders: r.holders !== false,
   };
 }

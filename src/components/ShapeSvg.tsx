@@ -1,6 +1,6 @@
 import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
-import { isConnector, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
+import { isConnector, isPanelHolder, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
 import { ClampShape, ConnectorGlyph, NutGlyph } from './BoltLayer';
 import { isLatch, isNut, LATCH_DEPTH_CM, LATCH_LEN_CM, NUT_CM, WASHER_CM, WASHER_T_CM, WING_HUB_CM, WING_SPAN_CM } from '../lib/bolts';
 
@@ -63,6 +63,9 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
+  // ...and the ბეტონზე პანელის დამჭერი as the user drew it.
+  if (isPanelHolder(m)) return <PanelHolderShape w={pw} h={ph} px={strokeWidth} />;
+
   // A waler as the worked-out one is drawn - the orange beam with its two
   // rods - so the one placed by hand and the one worked out look the same
   // (the user, 2026-11-04).
@@ -96,6 +99,37 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     <LineBar m={m} stroke={stroke} strokeWidth={sw} />
   ) : (
     <rect x={0} y={0} width={pw} height={ph} fill={m.color} stroke={stroke} strokeWidth={sw} />
+  );
+}
+
+/**
+ * A ბეტონზე პანელის დამჭერი from above, in its own w × h cm, as the user drew
+ * it (2026-11-07): the square tube standing straight out from the panel's
+ * face, outlined in orange, with a pin sleeve on a short stem either side of
+ * it, halfway along - the two pipes the pins go down through into the
+ * concrete. The top edge is the tube's end against the panel - turn it to
+ * face the panel it holds.
+ */
+export const PANEL_HOLDER_COLOR = '#ff7a1a';
+
+export function PanelHolderShape({ w, h, px }: { w: number; h: number; px: number }) {
+  // A drawn line about a third of a centimetre, as on his sketch; never
+  // thinner than a screen pixel.
+  const sw = Math.max(px, Math.min(w, h) * 0.06);
+  const tubeL = w / 3;
+  const tubeR = (w * 2) / 3;
+  const r = Math.min(w, h) * 0.12;
+  const mid = h / 2;
+  return (
+    <g fill="none" stroke={PANEL_HOLDER_COLOR} strokeWidth={sw}>
+      {/* the whole square takes the click, as the outline alone is thin */}
+      <rect x={0} y={0} width={w} height={h} fill="rgba(0, 0, 0, 0)" stroke="none" />
+      <rect x={tubeL} y={sw / 2} width={tubeR - tubeL} height={h - sw} />
+      <line x1={r * 2 + sw / 2} y1={mid} x2={tubeL} y2={mid} />
+      <line x1={tubeR} y1={mid} x2={w - r * 2 - sw / 2} y2={mid} />
+      <circle cx={r + sw / 2} cy={mid} r={r} />
+      <circle cx={w - r - sw / 2} cy={mid} r={r} />
+    </g>
   );
 }
 

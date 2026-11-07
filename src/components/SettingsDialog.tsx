@@ -91,6 +91,7 @@ export function SettingsDialog() {
       <CornerConnectorsSwitch />
       <HalfHeadSwitch />
       <InnerConnectorsSwitch />
+      <HoldersSwitch />
     </Modal>
   );
 }
@@ -254,6 +255,31 @@ function InnerConnectorsSwitch() {
       />
       <span>
         კუთხის კონექტორი 25 სმ შიდა კუთხეში ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხე ჩ5 / ჩ10-ით</span>
+      </span>
+    </label>
+  );
+}
+
+/**
+ * The ბეტონზე პანელის დამჭერი placed by hand: still counted while hidden here,
+ * like the others - only the ჭანჭიკები row takes it off the drawing.
+ */
+function HoldersSwitch() {
+  const on = useEditorStore((s) => s.boltsShown.holders);
+  const toggle = useEditorStore((s) => s.toggleBoltKind);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          toggle('holders');
+        }}
+      />
+      <span>
+        ბეტონზე პანელის დამჭერი ნახაზზე <span className="menu-note">- ხელით დასმული, ცალმხრივ პანელზე</span>
       </span>
     </label>
   );

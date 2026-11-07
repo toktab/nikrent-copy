@@ -33,6 +33,7 @@ import {
   DRAW_STEP_CM,
   drawStep,
   isConnector,
+  isPanelHolder,
   MAX_ZOOM,
   MIN_ZOOM,
   normalizeRot,
@@ -1222,7 +1223,7 @@ export const useEditorStore = create<EditorState>()(
          * caller's job (see `dropPosition` in StageCanvas) so that the drop
          * preview and the placed piece can never disagree.
          */
-        addPiece: (materialId, worldX, worldY, worldZ = 0, rot = 0) =>
+        addPiece: (materialId, worldX, worldY, worldZ = 0, rot = 0) => {
           commit((s) => {
             if (!s.materials.some((m) => m.id === materialId)) return {};
             const piece: Piece = {
@@ -1250,7 +1251,17 @@ export const useEditorStore = create<EditorState>()(
                   }
                 : {}),
             };
-          }),
+          });
+          // A ბეტონზე პანელის დამჭერი is only ever placed by hand, so putting
+          // one down is what brings its kind onto the drawing: counted, shown.
+          const s = get();
+          const m = s.materials.find((mm) => mm.id === materialId);
+          if (m && isPanelHolder(m)) {
+            const doc = s.documents.find((d) => d.id === s.activeDocId);
+            if (!normalizeKindsOn(doc?.info?.bolts).holders) s.setKindOn('holders', true);
+            else if (!s.boltsShown.holders) set({ boltsShown: { ...s.boltsShown, holders: true }, showBolts: true });
+          }
+        },
 
         setSelectedAuto: (auto) =>
           commit((s) => {
@@ -2387,7 +2398,9 @@ export const useEditorStore = create<EditorState>()(
             return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
           }),
         resetBolts: (kinds) => {
-          const chosen: KindsOn = { ...EVERY_KIND, ...kinds };
+          // Never the დამჭერი: placed by hand, it is neither taken away nor
+          // brought onto the drawing by a reset (the user, 2026-11-07).
+          const chosen: KindsOn = { ...EVERY_KIND, ...kinds, holders: false };
           commit((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
             let pieces = resetBolts(s.pieces, byId, chosen);
@@ -2419,7 +2432,7 @@ export const useEditorStore = create<EditorState>()(
           // Off takes away what of the kind stands on the drawing (undoable);
           // on puts the connectors back, the one kind that is placed, not worked out.
           if (kind === 'connectors' || kind === 'rods' || kind === 'nuts' || kind === 'latches') {
-            const only = { connectors: false, rods: false, nuts: false, latches: false, [kind]: true };
+            const only = { connectors: false, rods: false, nuts: false, latches: false, holders: false, [kind]: true };
             commit((s) => {
               const byId = new Map(s.materials.map((m) => [m.id, m]));
               let pieces = on ? s.pieces : resetBolts(s.pieces, byId, only);
@@ -2436,6 +2449,10 @@ export const useEditorStore = create<EditorState>()(
                 : d,
             ),
             ...(on ? { showBolts: true } : {}),
+            // The დამჭერი's pieces stay on the drawing when its kind is off -
+            // they were placed by hand and nothing could put them back - so
+            // off hides them as well as leaving them out of every count.
+            ...(kind === 'holders' ? { boltsShown: { ...s.boltsShown, holders: on } } : {}),
           }));
         },
         // Simple mode has no view switcher, so it opens on the plan it works in -

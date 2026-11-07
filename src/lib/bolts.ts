@@ -397,9 +397,14 @@ export interface BoltKinds {
   rods: boolean;
   nuts: boolean;
   latches: boolean;
+  /**
+   * ბეტონზე პანელის დამჭერი. Only ever shown or hidden by this: a reset never
+   * takes away or puts back what the architect placed by hand.
+   */
+  holders: boolean;
 }
 
-export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true, latches: true };
+export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true, latches: true, holders: true };
 
 /** A taken-off entry in `Piece.boltsOff` that belongs to a შტირი, not a connector. */
 const ROD_OFF = 'rod:';
