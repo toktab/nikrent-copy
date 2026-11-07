@@ -57,7 +57,15 @@ export interface CornerConnectorSpot {
   inner: boolean;
   /** connectors up this spot, every course counted */
   count: number;
+  /**
+   * What to mark to take this spot off by hand: the `Piece.boltsOff` entry on
+   * each filler it goes through, every course (see `CC_OFF`).
+   */
+  takeOff: Array<{ id: string; tag: string }>;
 }
+
+/** A filler's `Piece.boltsOff` entry for a corner connector taken off at its low (-1) or high (1) end. */
+export const CC_OFF = 'cc:';
 
 const isUpright = (p: Piece) => {
   const r = ((p.rot % 90) + 90) % 90;
@@ -107,6 +115,8 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
       [lo, hi, -1],
       [hi, lo, 1],
     ] as const) {
+      // Taken off by hand at this end - see `CC_OFF`.
+      if (f.p.boltsOff?.includes(CC_OFF + sign)) continue;
       // The through panel: standing ACROSS the run, its side on this end.
       const through = panels.find((a) => {
         if (Math.abs(a.z - f.z) > 1) return false;
@@ -153,8 +163,10 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
       const key = `${dir}:${Math.round(at)}:${Math.round(outside)}`;
       const had = out.get(key);
       const count = connectorsUp(f.m.h);
+      const tag = { id: f.p.id, tag: CC_OFF + sign };
       if (had) {
         had.count += count;
+        had.takeOff.push(tag);
         continue;
       }
       out.set(key, {
@@ -166,6 +178,7 @@ export function cornerConnectorSpots(pieces: Piece[], byId: Map<string, Material
         filler: f.m.w,
         inner: !!profile,
         count,
+        takeOff: [tag],
       });
     }
   }

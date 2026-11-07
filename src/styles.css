@@ -6607,6 +6607,19 @@ kbd {
   width: 70px;
 }
 
+/* A worked-out mark that can be picked (ვოლერი, კუთხის კონექტორი) - and the picked one. */
+.bolt-layer .pickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.bolt-layer .pickable.picked {
+  filter: drop-shadow(0 0 2px #4fb3f0) drop-shadow(0 0 2px #4fb3f0);
+}
+.waler-mark.picked .waler-bar,
+.cc-mark.picked .cc-bar {
+  stroke: #4fb3f0;
+  stroke-width: 2.5;
+}
 /* ვოლერები: an orange beam behind each panel nothing faces, its two rods, and
    how many go up it. Under the other ჭანჭიკი marks. */
 .waler-layer {
@@ -6715,4 +6728,10 @@ kbd {
 .bolts-eye:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* A corner connector is picked by its nut: its bar runs over the ჩ5 and the
+   panels, which have to stay easy to click. */
+.bolt-layer .cc-mark.pickable .cc-bar {
+  pointer-events: none;
 }

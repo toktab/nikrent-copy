@@ -28,6 +28,8 @@ const MIN_ACROSS_CM = 3;
 const MIN_COVER = 1 / 3;
 
 export const WALER_RODS_EACH = 2;
+/** The `Piece.boltsOff` entry on a panel whose waler was taken off by hand. */
+export const WALER_OFF = 'waler';
 export const WALER_ROD_NAME = 'ვოლერის შტირი 40 სმ (მთლიანი თავით)';
 export const WALER_LOCK_NAME = 'ვოლერის შტირის თავის ჩასაკეტი';
 
@@ -63,6 +65,9 @@ export function soloPanels(pieces: Piece[], byId: Map<string, Material>, sketch:
 
   const out: SoloPanel[] = [];
   for (const a of panels) {
+    // A waler taken off this panel by hand (selected and deleted) - see
+    // `Piece.boltsOff`; ავტომატურად თავიდან დასმა puts it back.
+    if (a.p.boltsOff?.includes(WALER_OFF)) continue;
     const aLo = a.across ? a.r.x : a.r.y;
     const aHi = a.across ? a.r.x + a.r.w : a.r.y + a.r.h;
     const aNear = a.across ? a.r.y : a.r.x;

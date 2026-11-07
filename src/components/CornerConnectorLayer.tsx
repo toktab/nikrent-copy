@@ -25,6 +25,10 @@ export function CornerConnectorLayer() {
   const panY = useEditorStore((s) => s.panY);
   const stageW = useEditorStore((s) => s.stageW);
   const stageH = useEditorStore((s) => s.stageH);
+  // A mark can be picked like any piece (the user, 2026-11-07); Delete takes it off.
+  const picked = useEditorStore((s) => (s.selectedMark?.kind === 'cc' ? s.selectedMark.key : null));
+  const selectMark = useEditorStore((s) => s.selectMark);
+  const tool = useEditorStore((s) => s.tool);
 
   const spots = useMemo(
     () =>
@@ -56,7 +60,15 @@ export function CornerConnectorLayer() {
         // the plan (the user, 2026-11-04): the ჭანჭიკები menu has it.
         const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
         return (
-          <g key={`${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`} className={`cc-mark${fits ? '' : ' wide'}${s.inner ? ' inner' : ''}`}>
+          <g
+            key={`${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`}
+            className={`cc-mark pickable${fits ? '' : ' wide'}${s.inner ? ' inner' : ''}${picked === `${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}` ? ' picked' : ''}`}
+            onPointerDown={(e) => {
+              if (e.button !== 0 || tool !== 'select') return;
+              e.stopPropagation();
+              selectMark({ kind: 'cc', key: `${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`, targets: s.takeOff });
+            }}
+          >
             <title>
               {s.inner
                 ? `კუთხის კონექტორი 25 სმ × ${s.count} - შიდა კუთხე, პატარა ბარაშკა თითოზე`

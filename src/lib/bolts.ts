@@ -406,6 +406,11 @@ export interface BoltKinds {
   /** ნიანგი and ბაყაყი - see lib/clamps.ts */
   crocodiles: boolean;
   frogs: boolean;
+  /** the worked-out kinds, whose marks taken off by hand a reset puts back */
+  walers?: boolean;
+  cornerConnectors?: boolean;
+  halfHead?: boolean;
+  innerConnectors?: boolean;
 }
 
 export const ALL_BOLT_KINDS: BoltKinds = {
@@ -445,7 +450,15 @@ export function resetBolts(
     })
     .map((p) => {
       if (!p.boltsOff) return p;
-      const keep = p.boltsOff.filter((k) => (k.startsWith(ROD_OFF) ? !kinds.rods : !kinds.connectors));
+      const keep = p.boltsOff.filter((k) =>
+        k === 'waler'
+          ? !kinds.walers
+          : k.startsWith('cc:')
+            ? !(kinds.cornerConnectors || kinds.halfHead || kinds.innerConnectors)
+            : k.startsWith(ROD_OFF)
+              ? !kinds.rods
+              : !kinds.connectors,
+      );
       if (keep.length === p.boltsOff.length) return p;
       const { boltsOff: _off, ...rest } = p;
       return keep.length ? { ...rest, boltsOff: keep } : rest;

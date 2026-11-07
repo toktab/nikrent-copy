@@ -310,6 +310,13 @@ export function applySizeFixes(materials: Material[]): void {
   }
 }
 
+export interface SelectedMark {
+  kind: 'waler' | 'cc';
+  /** which one on the plan */
+  key: string;
+  targets: Array<{ id: string; tag: string }>;
+}
+
 export interface EditorState {
   // ── data ──
   materials: Material[];
@@ -460,6 +467,13 @@ export interface EditorState {
   measureFirst: MeasureAnchor | null;
   /** a measured line picked out on its own - kept apart from pieces and runs */
   selectedMeasureId: string | null;
+  /**
+   * A worked-out ჭანჭიკი mark picked on the plan - a ვოლერი or a კუთხის
+   * კონექტორი - with what to mark (`Piece.boltsOff`) to take it off when it
+   * is deleted. Not a piece, so never in `selectedIds`.
+   */
+  selectedMark: SelectedMark | null;
+  selectMark: (mark: SelectedMark | null) => void;
   /** how measured lines look; a per-person preference, not part of the drawing */
   measureStyle: MeasureStyle;
   /**
@@ -1063,6 +1077,7 @@ export const useEditorStore = create<EditorState>()(
         tool: 'select',
         measureFirst: null,
         selectedMeasureId: null,
+        selectedMark: null,
         penPerimeter: 'free',
         penPoints: [],
         penRedo: [],
@@ -1236,7 +1251,13 @@ export const useEditorStore = create<EditorState>()(
 
         // ── selection ─────────────────────────────────────────────────────
         select: (id) =>
-          set(id ? { selectedIds: [id], selectedMeasureId: null } : { selectedIds: [] }),
+          set(id ? { selectedIds: [id], selectedMeasureId: null, selectedMark: null } : { selectedIds: [], selectedMark: null }),
+        selectMark: (mark) =>
+          set(
+            mark
+              ? { selectedMark: mark, selectedIds: [], selectedSketchIds: [], selectedMeasureId: null }
+              : { selectedMark: null },
+          ),
         toggleSelect: (id) =>
           set((s) => ({
             selectedIds: s.selectedIds.includes(id)
@@ -1245,7 +1266,7 @@ export const useEditorStore = create<EditorState>()(
           })),
         // Also the "clear everything" path (Escape, a press on empty surface,
         // the rubber band), so a picked measured line lets go here too.
-        setSelection: (ids) => set({ selectedIds: ids, selectedMeasureId: null }),
+        setSelection: (ids) => set({ selectedIds: ids, selectedMeasureId: null, selectedMark: null }),
         // Everything means everything: the layout is part of the drawing, and
         // "select all, move it over" is the commonest reason to want either.
         selectAll: () =>
@@ -1815,6 +1836,20 @@ export const useEditorStore = create<EditorState>()(
 
         deleteSelected: () =>
           commit((s) => {
+            // A worked-out mark is taken off where it stands: its pieces are
+            // marked (`Piece.boltsOff`) so it is neither drawn nor counted until
+            // ავტომატურად თავიდან დასმა puts it back.
+            if (s.selectedMark) {
+              const by = new Map<string, string[]>();
+              for (const t of s.selectedMark.targets) by.set(t.id, [...(by.get(t.id) ?? []), t.tag]);
+              return {
+                pieces: s.pieces.map((p) => {
+                  const tags = by.get(p.id)?.filter((t) => !p.boltsOff?.includes(t));
+                  return tags?.length ? { ...p, boltsOff: [...(p.boltsOff ?? []), ...tags] } : p;
+                }),
+                selectedMark: null,
+              };
+            }
             // Delete means "remove what is selected", and a reference line is
             // a thing that can be selected. Two lists rather than one, because
             // everything else about a piece — the bill, the gap check, the
