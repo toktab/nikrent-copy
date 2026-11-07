@@ -43,7 +43,9 @@ const SEEDS: Seed[] = [
   ['corner-inner-20x20x300-joni', 'შიდა კუთხე 20*20*300 ჯონი', 'corner', 20, 300, 'L'],
   ['corner-plate', 'კუთხის თეფში', 'corner', 15, 15, 'rect'],
   ['corner-connector', 'კუთხის კონექტორი', 'corner', 8, 8, 'rect'],
-  ['corner-connector-40', 'კუთხის კონექტორი 40სმ', 'corner', 8, 40, 'rect'],
+  // Was "კუთხის კონექტორი 40სმ": it is the whole-head შტირი 40 სმ, drawn as
+  // its disc (the user, 2026-11-07). Kept at its place - old files count by it.
+  ['corner-connector-40', 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)', 'acc', 8, 8, 'rect'],
 
   // ---- Posts ---------------------------------------------------------------
   // დგარი და თავი - a ჭანჭიკი kind since 2026-11-07: the small one for a 150
@@ -87,7 +89,6 @@ const SEEDS: Seed[] = [
   ['waler-rod-lock', 'ვოლერის შტირის თავის ჩასაკეტი', 'acc', 6, 6, 'rect'],
   // The two 40 სმ heads, drawn as their discs (the user, 2026-11-07).
   ['rod-40-half-head', 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 8, 8, 'rect'],
-  ['rod-40-full-head', 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)', 'acc', 8, 8, 'rect'],
   ['acc-small-barashka', 'ბარაშკა პატარა (გილზა + გაიკა)', 'acc', 6, 6, 'rect'],
 ];
 

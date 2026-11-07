@@ -267,11 +267,27 @@ export function holderReach(zoom: number): number {
  * დამჭერი, live for an hour, is the პანელის ბეტონზე სამაგრი. Its catalog entry
  * goes and every piece of it becomes the one kept.
  */
-const RETIRED_BUILTINS: Record<string, string> = { 'acc-panel-holder': 'acc-panel-concrete-anchor' };
+const RETIRED_BUILTINS: Record<string, string> = {
+  'acc-panel-holder': 'acc-panel-concrete-anchor',
+  // The whole-head 40 სმ added for an hour; the catalog's own
+  // "კუთხის კონექტორი 40სმ" is that part (the user, 2026-11-07).
+  'rod-40-full-head': 'corner-connector-40',
+};
+
+/**
+ * A company's own "კუთხის კონექტორი 40სმ (წაჭრილი)" is the წაჭრილი გაიკა (the
+ * user, 2026-11-07): folded into the built-in one like a retired built-in.
+ */
+const isCutConnector40 = (m: Material) =>
+  !m.builtin && m.name.includes('კონექტორ') && /40s?სმ/.test(m.name) && m.name.includes('წაჭრ');
 
 /** Drops the retired built-ins from `materials` in place; the pieces, moved over. Exported for testing. */
 export function retireBuiltins(materials: Material[]): void {
-  for (let i = materials.length - 1; i >= 0; i--) if (RETIRED_BUILTINS[materials[i].id]) materials.splice(i, 1);
+  for (let i = materials.length - 1; i >= 0; i--) {
+    const m = materials[i];
+    if (isCutConnector40(m)) RETIRED_BUILTINS[m.id] = 'rod-40-half-head';
+    if (RETIRED_BUILTINS[m.id]) materials.splice(i, 1);
+  }
 }
 
 export function retiredPieces(pieces: Piece[]): Piece[] {
@@ -293,8 +309,20 @@ const BUILTIN_RENAMES: Array<{ id: string; from: string; to: string }> = [
   { id: 'acc-latch-adjustable', from: 'ჩამკეტი რეგულირებადი', to: 'ნიანგი (ჩამკეტი რეგულირებადი)' },
 ];
 
+/** ...and the one that changed what it is: the 40 სმ corner connector, the whole-head შტირი 40 სმ. */
+function fixFullHead40(materials: Material[]): void {
+  const m = materials.find((x) => x.id === 'corner-connector-40');
+  if (!m || !m.builtin || m.name !== 'კუთხის კონექტორი 40სმ') return;
+  m.name = 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
+  m.category = 'acc';
+  m.w = 8;
+  m.h = 8;
+  m.depth = defaultDepth('acc', 8, 8);
+}
+
 /** Applies `BUILTIN_SIZE_FIXES` and `BUILTIN_RENAMES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
+  fixFullHead40(materials);
   for (const r of BUILTIN_RENAMES) {
     const m = materials.find((x) => x.id === r.id);
     if (m && m.builtin && m.name === r.from) m.name = r.to;
@@ -3171,9 +3199,10 @@ export const useEditorStore = create<EditorState>()(
         // drawing happened to be open when the tab was last written.
         const restored = restoreDocuments(saved);
         const { activeDocId, sketch, measures } = restored;
+        // The catalog first: it is what finds the company's own retired items.
+        const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         const documents = retiredDocuments(restored.documents);
         const pieces = retiredPieces(restored.pieces);
-        const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
           ...current,
           ...saved,

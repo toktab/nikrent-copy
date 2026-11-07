@@ -341,7 +341,8 @@ export function unionRect(rects: Rect[]): Rect | null {
  * word in its name is not one - a connector is a fitting, not a length.
  */
 export function isConnector(m: Material): boolean {
-  return m.name.includes('კონექტორ') && !isLinear(m);
+  // Not a 40 სმ one: those are the შტირი 40 სმ heads, not the 25 სმ connector.
+  return m.name.includes('კონექტორ') && !isLinear(m) && !/40s?სმ/.test(m.name);
 }
 
 /** A ქანჩი + დისკო - the nut and washer on a შტირი end; see `lib/bolts.ts`. */
