@@ -75,7 +75,7 @@ export function isHalfHeadPart(m: Material): boolean {
 
 /** A catalog whole-head შტირი 40 სმ (წაჭრის გარეშე) - not the waler's own. */
 export function isFullHeadPart(m: Material): boolean {
-  return m.id === 'rod-40-full-head' || (m.name.includes('მთლიანი თავით') && !m.name.includes('ვოლერ'));
+  return m.id === 'corner-connector-40' || (m.name.includes('მთლიანი თავით') && !m.name.includes('ვოლერ'));
 }
 
 /**

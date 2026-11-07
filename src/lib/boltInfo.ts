@@ -250,7 +250,7 @@ export function boltInfoOf(m: Material): BoltInfoId | null {
   if (m.id === 'waler-rod-lock' || m.name.includes('ჩასაკეტი')) return 'walerLock';
   if (m.id === 'waler-rod-40' || m.name.includes('ვოლერის შტირი')) return 'walerRod';
   if (m.id === 'rod-40-half-head' || m.name.includes('ნახევარი თავით')) return 'halfHead';
-  if (m.id === 'rod-40-full-head' || (m.name.includes('მთლიანი თავით') && !m.name.includes('ვოლერ'))) return 'fullHead';
+  if (m.id === 'corner-connector-40' || (m.name.includes('მთლიანი თავით') && !m.name.includes('ვოლერ'))) return 'fullHead';
   if (m.id === 'acc-small-barashka' || m.name.includes('ბარაშკა')) return 'smallNut';
   return null;
 }
