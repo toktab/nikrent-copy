@@ -505,7 +505,7 @@ function legendEntries(
       out.push({ sample: '40', label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });
     }
     if (vis.holders && totals.holders > 0) {
-      out.push({ sample: 'დამ.', label: 'ბეტონზე პანელის დამჭერი', note: 'ხელით დასმული - ცალმხრივ პანელზე', count: pcs(totals.holders) });
+      out.push({ sample: 'სამ.', label: 'პანელის ბეტონზე სამაგრი', note: 'ხელით დასმული - ცალმხრივ პანელზე', count: pcs(totals.holders) });
     }
     if (vis.latches && totals.latches > 0) {
       out.push({

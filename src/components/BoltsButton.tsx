@@ -278,18 +278,19 @@ export function BoltsButton() {
           <b>{cc.smallNuts} ც.</b>
         </div>
       )}
-      {/* ბეტონზე პანელის დამჭერი: placed by hand only, at the foot of a panel
+      {/* პანელის ბეტონზე სამაგრი: placed by hand only, at the foot of a panel
           with nothing facing it - counted as placed, never by the reset. */}
       <MenuItem
         title="ცალმხრივი პანელის (პირისპირ პანელი რომ არ აქვს) ძირში, ბეტონზე - მხოლოდ ხელით დაისმება ელემენტებიდან, ავტომატურად არასდროს. თითო დასმულზე 1"
-        trail={<KindTrail groups={groups.holders} on={on.holders} shown={shown.holders} onEye={() => toggleBoltKind('holders')} />}
-        onClick={() => setKindOn('holders', !on.holders)}
+        trail={<KindTrail groups={groups.holders} on shown={shown.holders} onEye={() => toggleBoltKind('holders')} />}
+        // Never off, only hidden: the row does what its eye does.
+        onClick={() => toggleBoltKind('holders')}
       >
-        <span className={`bolts-kind${on.holders ? '' : ' off'}`}>
+        <span className={`bolts-kind${shown.holders ? '' : ' off'}`}>
           <svg width="14" height="14" viewBox="0 0 6 6" aria-hidden="true">
             <PanelHolderShape w={6} h={6} px={0.5} />
           </svg>
-          ბეტონზე პანელის დამჭერი
+          პანელის ბეტონზე სამაგრი
         </span>
       </MenuItem>
       <MenuSep />

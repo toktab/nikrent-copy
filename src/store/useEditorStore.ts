@@ -232,7 +232,9 @@ const PREF_KEYS = [
  * the ReferenceError is swallowed by the persist middleware — the saved drawing
  * is silently dropped and then overwritten with an empty one.
  */
-const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; leg?: number }> = [
+const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; toH?: number; leg?: number }> = [
+  // The პანელის ბეტონზე სამაგრი drawn as the user sketched it (2026-11-07).
+  { id: 'acc-panel-concrete-anchor', fromW: 12, toW: 6, toH: 6 },
   // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
   // concrete face. The mismatch left a hole beside every corner and made the
   // column wizard lay panels that did not reach the corner profile.
@@ -243,6 +245,30 @@ const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; leg?: 
   { id: 'corner-outer-300', fromW: 24, toW: 10, leg: 0.1 },
 ];
 
+/**
+ * Built-ins folded into another (the user, 2026-11-07): the ბეტონზე პანელის
+ * დამჭერი, live for an hour, is the პანელის ბეტონზე სამაგრი. Its catalog entry
+ * goes and every piece of it becomes the one kept.
+ */
+const RETIRED_BUILTINS: Record<string, string> = { 'acc-panel-holder': 'acc-panel-concrete-anchor' };
+
+/** Drops the retired built-ins from `materials` in place; the pieces, moved over. Exported for testing. */
+export function retireBuiltins(materials: Material[]): void {
+  for (let i = materials.length - 1; i >= 0; i--) if (RETIRED_BUILTINS[materials[i].id]) materials.splice(i, 1);
+}
+
+export function retiredPieces(pieces: Piece[]): Piece[] {
+  if (!pieces.some((p) => RETIRED_BUILTINS[p.materialId])) return pieces;
+  return pieces.map((p) => (RETIRED_BUILTINS[p.materialId] ? { ...p, materialId: RETIRED_BUILTINS[p.materialId] } : p));
+}
+
+function retiredDocuments<T extends { pieces: Piece[] }>(documents: T[]): T[] {
+  return documents.map((d) => {
+    const pieces = retiredPieces(d.pieces ?? []);
+    return pieces === d.pieces ? d : { ...d, pieces };
+  });
+}
+
 /** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
   for (const fix of BUILTIN_SIZE_FIXES) {
@@ -250,6 +276,7 @@ export function applySizeFixes(materials: Material[]): void {
     if (!m || !m.builtin) continue;
     if (m.w === fix.fromW) {
       m.w = fix.toW;
+      if (fix.toH !== undefined) m.h = fix.toH;
       m.depth = defaultDepth(m.category, m.w, m.h);
       if (fix.leg !== undefined) m.leg = fix.leg;
     } else if (m.w === fix.toW && fix.leg !== undefined && m.leg === undefined) {
@@ -1096,6 +1123,7 @@ export const useEditorStore = create<EditorState>()(
               ? [...snapshot.materials]
               : createSeedMaterials();
             applySizeFixes(materials);
+            retireBuiltins(materials);
             // The built-in catalog always exists (the user, 2026-11-04): one
             // deleted, or lost when a spreadsheet replaced the catalog, comes
             // back - the გარე კუთხე 300 had - and is uploaded with the next save.
@@ -1109,7 +1137,7 @@ export const useEditorStore = create<EditorState>()(
               : [{ ...DEFAULT_WAREHOUSE }];
 
             const documents = snapshot.documents.length
-              ? snapshot.documents
+              ? retiredDocuments(snapshot.documents)
               : [newDoc('ნახაზი 1')];
 
             // Stay on the same drawing across a reload where possible.
@@ -1252,14 +1280,12 @@ export const useEditorStore = create<EditorState>()(
                 : {}),
             };
           });
-          // A ბეტონზე პანელის დამჭერი is only ever placed by hand, so putting
-          // one down is what brings its kind onto the drawing: counted, shown.
+          // A პანელის ბეტონზე სამაგრი is always counted; one put down while
+          // they are hidden brings them back into view.
           const s = get();
           const m = s.materials.find((mm) => mm.id === materialId);
-          if (m && isPanelHolder(m)) {
-            const doc = s.documents.find((d) => d.id === s.activeDocId);
-            if (!normalizeKindsOn(doc?.info?.bolts).holders) s.setKindOn('holders', true);
-            else if (!s.boltsShown.holders) set({ boltsShown: { ...s.boltsShown, holders: true }, showBolts: true });
+          if (m && isPanelHolder(m) && !s.boltsShown.holders) {
+            set({ boltsShown: { ...s.boltsShown, holders: true }, showBolts: true });
           }
         },
 
@@ -2398,7 +2424,7 @@ export const useEditorStore = create<EditorState>()(
             return { pieces: [...s.pieces, ...stack], selectedIds: stack.map((p) => p.id) };
           }),
         resetBolts: (kinds) => {
-          // Never the დამჭერი: placed by hand, it is neither taken away nor
+          // Never the ბეტონზე სამაგრი: placed by hand, it is neither taken away nor
           // brought onto the drawing by a reset (the user, 2026-11-07).
           const chosen: KindsOn = { ...EVERY_KIND, ...kinds, holders: false };
           commit((s) => {
@@ -2449,10 +2475,7 @@ export const useEditorStore = create<EditorState>()(
                 : d,
             ),
             ...(on ? { showBolts: true } : {}),
-            // The დამჭერი's pieces stay on the drawing when its kind is off -
-            // they were placed by hand and nothing could put them back - so
-            // off hides them as well as leaving them out of every count.
-            ...(kind === 'holders' ? { boltsShown: { ...s.boltsShown, holders: on } } : {}),
+
           }));
         },
         // Simple mode has no view switcher, so it opens on the plan it works in -
@@ -2962,7 +2985,10 @@ export const useEditorStore = create<EditorState>()(
         // reason `pieces` does: the top-level copy is a mirror, and a reload
         // that trusts the mirror over the document shows the lines of whichever
         // drawing happened to be open when the tab was last written.
-        const { documents, activeDocId, pieces, sketch, measures } = restoreDocuments(saved);
+        const restored = restoreDocuments(saved);
+        const { activeDocId, sketch, measures } = restored;
+        const documents = retiredDocuments(restored.documents);
+        const pieces = retiredPieces(restored.pieces);
         const materials = mergeCatalog(saved.materials, saved.removedBuiltins);
         return {
           ...current,
@@ -3130,6 +3156,7 @@ export function mergeCatalog(
     materials.push(m);
   }
   applySizeFixes(materials);
+  retireBuiltins(materials);
 
   // Every built-in, always - one removed before built-ins became permanent
   // (`removedBuiltins`) comes back too (the user, 2026-11-04).

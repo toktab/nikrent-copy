@@ -382,7 +382,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(bolts.latches)}
               />
               <Check
-                label="ბეტონზე პანელის დამჭერი"
+                label="პანელის ბეტონზე სამაგრი"
                 note="ხელით დასმული, ცალმხრივ პანელზე"
                 count={bolts.holders}
                 checked={vis.holders}

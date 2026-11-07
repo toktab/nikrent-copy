@@ -97,7 +97,7 @@ export interface PdfVisibility {
   rods: boolean;
   nuts: boolean;
   latches: boolean;
-  /** ბეტონზე პანელის დამჭერი, placed by hand */
+  /** პანელის ბეტონზე სამაგრი, placed by hand */
   holders: boolean;
 }
 

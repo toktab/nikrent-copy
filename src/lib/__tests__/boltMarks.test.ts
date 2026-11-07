@@ -61,12 +61,12 @@ describe('boltTotals', () => {
   });
 });
 
-describe('ბეტონზე პანელის დამჭერი - placed by hand, counted as placed', () => {
+describe('პანელის ბეტონზე სამაგრი - placed by hand, counted as placed', () => {
   // A lone panel along x with two holders put down behind it by hand.
-  const lone = () => [put('panel-90x300', 0, 0), put('acc-panel-holder', 10, 10), put('acc-panel-holder', 70, 10)];
+  const lone = () => [put('panel-90x300', 0, 0), put('acc-panel-concrete-anchor', 10, 10), put('acc-panel-concrete-anchor', 70, 10)];
 
   it('is its own ჭანჭიკი kind, one each', () => {
-    expect(boltKindOf(byId.get('acc-panel-holder')!)).toBe('holders');
+    expect(boltKindOf(byId.get('acc-panel-concrete-anchor')!)).toBe('holders');
     expect(boltTotals(lone(), byId).holders).toBe(2);
     expect(groupsText(boltGroups(lone(), byId).holders)).toBe('2 × 1 = 2');
   });
@@ -75,10 +75,9 @@ describe('ბეტონზე პანელის დამჭერი - pl
     expect(boltTotals([put('panel-90x300', 0, 0)], byId).holders).toBe(0);
   });
 
-  it('counts nothing while its kind is off on the drawing', () => {
-    const on = { ...normalizeKindsOn({}), rods: true };
-    expect(boltTotals(lone(), byId, on).holders).toBe(0);
-    expect(boltTotals(lone(), byId, { ...on, holders: true }).holders).toBe(2);
+  it('is always counted - it cannot be switched off, only hidden', () => {
+    expect(normalizeKindsOn({ holders: false }).holders).toBe(true);
+    expect(boltTotals(lone(), byId, normalizeKindsOn({})).holders).toBe(2);
   });
 
   it('is left alone by a reset of every kind', () => {
@@ -86,8 +85,9 @@ describe('ბეტონზე პანელის დამჭერი - pl
     expect(resetBolts(pieces, byId)).toHaveLength(pieces.length);
   });
 
-  it('is not the older პანელის ბეტონზე სამაგრი', () => {
-    expect(boltKindOf(byId.get('acc-panel-concrete-anchor')!)).toBeNull();
+  it('is still found under the name it had for an hour', () => {
+    expect(boltKindOf({ ...byId.get('acc-panel-concrete-anchor')!, id: 'x', name: 'ბეტონზე პანელის დამჭერი' })).toBe('holders');
+    expect(boltKindOf(byId.get('acc-base-clamp')!)).toBeNull();
   });
 });
 
