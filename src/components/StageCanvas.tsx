@@ -9,12 +9,13 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { Material, Piece, SketchPath } from '../types';
-import { useEditorStore } from '../store/useEditorStore';
+import { holderReach, useEditorStore } from '../store/useEditorStore';
 import {
   computeEdgeSnap,
   drawStep,
   findOverlaps,
   isConnector,
+  isPanelHolder,
   GRID_MAJOR_CM,
   gridStep,
   pieceBounds,
@@ -1287,6 +1288,16 @@ export function StageCanvas() {
       const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
       const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
       const spot = snapPost(at, material, s.pieces, lookup, Math.max(40, 60 / s.zoom), s.snapStep);
+      if (spot) {
+        return { u: spot.x, v: spot.y, w: pw, h: ph, world: { x: spot.x, y: spot.y, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
+      }
+    }
+
+    // A პანელის ბეტონზე სამაგრი the same way, on the face it is let go by.
+    if (view === 'plan' && isPanelHolder(material)) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapPost(at, material, s.pieces, lookup, holderReach(s.zoom), s.snap ? s.snapStep : 0);
       if (spot) {
         return { u: spot.x, v: spot.y, w: pw, h: ph, world: { x: spot.x, y: spot.y, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
       }
