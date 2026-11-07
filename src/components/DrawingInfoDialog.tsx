@@ -15,7 +15,7 @@ const BOLT_NAMES: Array<['connectors' | 'rods' | 'nuts' | 'latches' | 'holders',
   ['rods', 'შტირები'],
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
-  ['holders', 'ბეტონზე პანელის დამჭერი'],
+  ['holders', 'პანელის ბეტონზე სამაგრი'],
 ];
 
 /**

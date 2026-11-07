@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applySizeFixes } from '../useEditorStore';
+import { applySizeFixes, retireBuiltins, retiredPieces } from '../useEditorStore';
 import { createSeedMaterials, defaultDepth } from '../../data/seedCatalog';
 import type { Material } from '../../types';
 
@@ -87,5 +87,25 @@ describe('applySizeFixes', () => {
     const before = seeded.map(key);
     applySizeFixes(seeded);
     expect(seeded.map(key)).toEqual(before);
+  });
+});
+
+describe('the ბეტონზე სამაგრი and the დამჭერი are one part (the user, 2026-11-07)', () => {
+  it('drops the retired დამჭერი from a catalog and moves its pieces over', () => {
+    const materials = createSeedMaterials();
+    materials.push({ ...materials.find((m) => m.id === 'acc-panel-concrete-anchor')!, id: 'acc-panel-holder', name: 'ბეტონზე პანელის დამჭერი' });
+    retireBuiltins(materials);
+    expect(materials.some((m) => m.id === 'acc-panel-holder')).toBe(false);
+    const [p] = retiredPieces([{ id: 'a', materialId: 'acc-panel-holder', x: 0, y: 0, rot: 0 }]);
+    expect(p.materialId).toBe('acc-panel-concrete-anchor');
+  });
+
+  it('brings a saved 12 × 12 სამაგრი to the 6 × 6 it is drawn at', () => {
+    const materials = createSeedMaterials();
+    const m = materials.find((x) => x.id === 'acc-panel-concrete-anchor')!;
+    m.w = 12;
+    m.h = 12;
+    applySizeFixes(materials);
+    expect([m.w, m.h]).toEqual([6, 6]);
   });
 });

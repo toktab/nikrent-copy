@@ -197,7 +197,7 @@ export function boltGroups(
     ...placed(isLatch).map(({ p, m }): [string, number] => [spotKey(pieceCentre(p, m)), 1]),
   ];
 
-  // ბეტონზე პანელის დამჭერი: only what was placed, one each - nothing worked out.
+  // პანელის ბეტონზე სამაგრი: only what was placed, one each - nothing worked out.
   const holders: Array<[string, number]> = placed(isPanelHolder).map(({ p, m }): [string, number] => [
     `${spotKey(pieceCentre(p, m))}:${Math.round(p.z ?? 0)}`,
     1,

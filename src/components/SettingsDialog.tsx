@@ -261,7 +261,7 @@ function InnerConnectorsSwitch() {
 }
 
 /**
- * The ბეტონზე პანელის დამჭერი placed by hand: still counted while hidden here,
+ * The პანელის ბეტონზე სამაგრი placed by hand: still counted while hidden here,
  * like the others - only the ჭანჭიკები row takes it off the drawing.
  */
 function HoldersSwitch() {
@@ -279,7 +279,7 @@ function HoldersSwitch() {
         }}
       />
       <span>
-        ბეტონზე პანელის დამჭერი ნახაზზე <span className="menu-note">- ხელით დასმული, ცალმხრივ პანელზე</span>
+        პანელის ბეტონზე სამაგრი ნახაზზე <span className="menu-note">- ხელით დასმული, ცალმხრივ პანელზე</span>
       </span>
     </label>
   );

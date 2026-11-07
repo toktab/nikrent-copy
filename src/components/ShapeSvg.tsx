@@ -63,7 +63,7 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
-  // ...and the ბეტონზე პანელის დამჭერი as the user drew it.
+  // ...and the პანელის ბეტონზე სამაგრი as the user drew it.
   if (isPanelHolder(m)) return <PanelHolderShape w={pw} h={ph} px={strokeWidth} />;
 
   // A waler as the worked-out one is drawn - the orange beam with its two
@@ -103,7 +103,7 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
 }
 
 /**
- * A ბეტონზე პანელის დამჭერი from above, in its own w × h cm, as the user drew
+ * A პანელის ბეტონზე სამაგრი from above, in its own w × h cm, as the user drew
  * it (2026-11-07): the square tube standing straight out from the panel's
  * face, outlined in orange, with a pin sleeve on a short stem either side of
  * it, halfway along - the two pipes the pins go down through into the

@@ -20,7 +20,7 @@ export type KindKey =
   | 'cornerConnectors'
   | 'halfHead'
   | 'innerConnectors'
-  /** ბეტონზე პანელის დამჭერი - placed by hand only, never by the reset */
+  /** პანელის ბეტონზე სამაგრი - placed by hand only, never by the reset */
   | 'holders';
 
 export type KindsOn = Record<KindKey, boolean>;
@@ -40,8 +40,13 @@ export const KIND_KEYS: KindKey[] = [
 export const NO_KINDS: KindsOn = Object.fromEntries(KIND_KEYS.map((k) => [k, false])) as KindsOn;
 export const EVERY_KIND: KindsOn = Object.fromEntries(KIND_KEYS.map((k) => [k, true])) as KindsOn;
 
-/** What a drawing has on, from anything saved: absent means off. */
+/**
+ * What a drawing has on, from anything saved: absent means off - except the
+ * პანელის ბეტონზე სამაგრი, which is always on. It is only ever placed by hand,
+ * so what stands on the drawing is always counted; its row only shows or hides
+ * it (the user, 2026-11-07).
+ */
 export function normalizeKindsOn(raw: unknown): KindsOn {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  return Object.fromEntries(KIND_KEYS.map((k) => [k, r[k] === true])) as KindsOn;
+  return { ...(Object.fromEntries(KIND_KEYS.map((k) => [k, r[k] === true])) as KindsOn), holders: true };
 }

@@ -398,7 +398,7 @@ export interface BoltKinds {
   nuts: boolean;
   latches: boolean;
   /**
-   * ბეტონზე პანელის დამჭერი. Only ever shown or hidden by this: a reset never
+   * პანელის ბეტონზე სამაგრი. Only ever shown or hidden by this: a reset never
    * takes away or puts back what the architect placed by hand.
    */
   holders: boolean;
