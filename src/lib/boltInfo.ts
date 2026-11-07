@@ -1,5 +1,6 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { boltKindOf, boltTotals } from './boltMarks';
+import { findCornerRods } from './bolts';
 import type { KindsOn } from './boltKinds';
 import { soloPanels, walerTotals } from './walers';
 import { cornerConnectorSpots, cornerConnectorTotals } from './cornerConnectors';
@@ -23,6 +24,7 @@ export type BoltInfoId =
   | 'walerLock'
   | 'cornerConnectors'
   | 'halfHead'
+  | 'fullHead'
   | 'innerConnectors'
   | 'smallNut'
   | 'holders'
@@ -66,7 +68,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
   rods: {
     name: 'შტირი',
     what: 'გრძელი ჭანჭიკი, რომელიც კედელს გასჭოლავს - შიდა და გარე მხარის ყალიბს ერთმანეთზე ჭიმავს ბეტონის დასხმისას.',
-    use: 'იქ, სადაც შიდა მხარის შეერთება (პანელი + პანელი, პანელი + ჩაკერება, შიდა კუთხის ფეხი + პანელი) ზუსტად გარე მხარის შეერთების პირდაპირ დგას. მხოლოდ ერთ კედელში გადის.',
+    use: 'იქ, სადაც შიდა მხარის შეერთება (პანელი + პანელი, პანელი + ჩაკერება) ზუსტად გარე მხარის შეერთების პირდაპირ დგას. მხოლოდ ერთ კედელში გადის. შიდა კუთხის ფეხთან - 40 სმ მთლიანთავიანი.',
     per300: '5 ც. ერთ ადგილზე',
     per150: '2 ც. ერთ ადგილზე',
     example: 'შიდა: პანელი | პანელი ↔ გარე: პანელი | პანელი, ერთმანეთის პირდაპირ',
@@ -75,7 +77,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
       { id: 'nuts', note: '2 თითო შტირზე - ორივე ბოლოზე' },
       { id: 'latches', note: '300-ზე 8, 150 / 90-ზე 2 ერთ ადგილზე' },
     ],
-    usedBy: [],
+    usedBy: ['fullHead'],
   },
   nuts: {
     name: 'ქანჩი + დისკო',
@@ -86,7 +88,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
     example: 'შტირი × 2 + კონექტორები + ვოლერის შტირები + კუთხის კონექტორები',
     placing: 'ითვლება იმ ჭანჭიკებიდან, რომლებზეც დგება; ხელითაც შეიძლება დასმა.',
     needs: [],
-    usedBy: ['rods', 'connectors', 'walerRod', 'cornerConnectors', 'halfHead'],
+    usedBy: ['rods', 'connectors', 'walerRod', 'cornerConnectors', 'halfHead', 'fullHead'],
   },
   latches: {
     name: 'ჩამკეტი fix',
@@ -157,6 +159,17 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
     per300: '5 ც. ერთ ადგილზე',
     per150: '2 ც. ერთ ადგილზე',
     example: 'გამავალი პანელი + ჩ10 + პანელი (გარე კუთხე)',
+    placing: WORKED,
+    needs: [{ id: 'nuts', note: '1 გარე ბოლოზე' }],
+    usedBy: [],
+  },
+  fullHead: {
+    name: 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)',
+    what: '40 სმ შტირი მთლიანი (წაუჭრელი) თავით.',
+    use: 'შიდა კუთხეში: სადაც შიდა კუთხის ფეხის ბოლო გარე ფასადის შეერთების პირდაპირ დგას - გარე ფასადიდან კუთხის პროფილში გადის, ჩვეულებრივი შტირის ნაცვლად. ჩამკეტი fix არ სჭირდება.',
+    per300: '5 ც. ერთ ადგილზე',
+    per150: '2 ც. ერთ ადგილზე',
+    example: 'გარე: პანელი | პანელი ↔ შიდა: კუთხის ფეხი | პანელი',
     placing: WORKED,
     needs: [{ id: 'nuts', note: '1 გარე ბოლოზე' }],
     usedBy: [],
@@ -252,6 +265,7 @@ export function boltInfoCounts(
     walerLock: on.walers ? w.locks : 0,
     cornerConnectors: on.cornerConnectors ? cc.connectors : 0,
     halfHead: on.halfHead ? cc.halfHead : 0,
+    fullHead: on.fullHead ? findCornerRods(pieces, byId).reduce((n, r) => n + r.count, 0) : 0,
     innerConnectors: on.innerConnectors ? cc.innerConnectors : 0,
     smallNut: on.innerConnectors ? cc.smallNuts : 0,
   };

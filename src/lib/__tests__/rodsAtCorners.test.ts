@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { solveLayout, type LayoutVariant } from '../layoutSolver';
-import { findRods } from '../bolts';
+import { findCornerRods, findRods } from '../bolts';
 import { offsetFace, offsetSide, panelSide } from '../outerLines';
 import { createSeedMaterials } from '../../data/seedCatalog';
 import type { Piece, SketchPath } from '../../types';
@@ -26,7 +26,7 @@ const INNER: SketchPath = {
 };
 const apply = (pieces: Piece[], v: LayoutVariant) => [...pieces.filter((p) => !v.remove.includes(p.id)), ...v.add];
 
-describe('a შტირი where an inside corner leg ends', () => {
+describe('the 40 სმ whole-head შტირი where an inside corner leg ends (not a tie rod)', () => {
   it('ties the leg end to the outer joint across from it, at all four corners', () => {
     const side = panelSide(INNER, [INNER], [], materials);
     const outer = offsetFace(INNER, offsetSide(INNER, side, 'outer'), [20], 'outer')!;
@@ -39,7 +39,12 @@ describe('a შტირი where an inside corner leg ends', () => {
       pieces: [],
       filters: { keepPlaced: true },
     }).variants[0];
-    const rods = findRods(apply([], v), byId);
+    const pieces = apply([], v);
+    const rods = findCornerRods(pieces, byId);
+    // ...all four, and they are not tie rods (2026-11-07: the user's 40 სმ გაიკა).
+    expect(rods).toHaveLength(4);
+    expect(rods.every((r) => r.count === 5)).toBe(true);
+    expect(findRods(pieces, byId).some((r) => r.x === 540 && r.y === 310)).toBe(false);
     // Next to each corner, on the long walls: x 540 and 1020, top and bottom.
     const at = (x: number, y: number) => rods.some((r) => r.dir === 'v' && r.x === x && r.y === y);
     expect([at(540, 310), at(1020, 310), at(540, 620), at(1020, 620)]).toEqual([true, true, true, true]);

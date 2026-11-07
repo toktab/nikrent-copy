@@ -2,6 +2,7 @@ import type { Material, Piece, SketchPath } from '../types';
 import type { Rect } from './geometry';
 import { soloPanels } from './walers';
 import { cornerConnectorSpots } from './cornerConnectors';
+import { findCornerRods } from './bolts';
 
 /**
  * The worked-out ვოლერები and კუთხის კონექტორები as shapes in world cm - for
@@ -55,11 +56,16 @@ export interface CornerConnectorBar {
   y2: number;
   /** the nut on its outer end, facing out of the corner */
   nut: { x: number; y: number; rot: number };
-  kind: 'cornerConnectors' | 'halfHead' | 'innerConnectors';
+  kind: 'cornerConnectors' | 'halfHead' | 'innerConnectors' | 'fullHead';
 }
 
 export function cornerConnectorBars(pieces: Piece[], byId: Map<string, Material>): CornerConnectorBar[] {
-  return cornerConnectorSpots(pieces, byId).map((s) => {
+  // The whole-head შტირი 40 სმ at inside corner leg ends, drawn the same way.
+  const full = findCornerRods(pieces, byId).map((r): CornerConnectorBar => {
+    const line = r.dir === 'v' ? { x1: r.at, y1: r.from, x2: r.at, y2: r.to } : { x1: r.from, y1: r.at, x2: r.to, y2: r.at };
+    return { ...line, nut: { x: line.x1, y: line.y1, rot: 0 }, kind: 'fullHead' };
+  });
+  return full.concat(cornerConnectorSpots(pieces, byId).map((s) => {
     const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
     const line =
       s.dir === 'h' ? { x1: s.from, y1: s.at, x2: s.to, y2: s.at } : { x1: s.at, y1: s.from, x2: s.at, y2: s.to };
@@ -68,5 +74,5 @@ export function cornerConnectorBars(pieces: Piece[], byId: Map<string, Material>
       nut: { x: s.outer.x, y: s.outer.y, rot: s.dir === 'h' ? (out < 0 ? 180 : 0) : out < 0 ? 270 : 90 },
       kind: s.inner ? 'innerConnectors' : s.filler === 5 ? 'cornerConnectors' : 'halfHead',
     };
-  });
+  }));
 }

@@ -410,6 +410,7 @@ export interface BoltKinds {
   walers?: boolean;
   cornerConnectors?: boolean;
   halfHead?: boolean;
+  fullHead?: boolean;
   innerConnectors?: boolean;
 }
 
@@ -456,7 +457,7 @@ export function resetBolts(
           : k.startsWith('cc:')
             ? !(kinds.cornerConnectors || kinds.halfHead || kinds.innerConnectors)
             : k.startsWith(ROD_OFF)
-              ? !kinds.rods
+              ? !(kinds.rods || kinds.fullHead)
               : !kinds.connectors,
       );
       if (keep.length === p.boltsOff.length) return p;
@@ -508,6 +509,11 @@ export interface Rod {
   h: number;
   /** how many rods go up that height - see `rodsUpHeight` */
   count: number;
+  /**
+   * One of its two joints is an inside corner's leg end: not a tie rod but
+   * the 40 სმ შტირი with a whole head (წაჭრის გარეშე) - see `findCornerRods`.
+   */
+  corner?: boolean;
   /** the two panels on one face whose joint it goes through - its key */
   a: string;
   b: string;
@@ -613,6 +619,22 @@ const rodTakenOff = (byPiece: Map<string, Piece>, j: Joint) =>
  * ones taken off by hand: they are still where a rod can be put back.
  */
 export function findRods(pieces: Piece[], byId: Map<string, Material>, all = false): Rod[] {
+  return allRods(pieces, byId, all).filter((r) => !r.corner);
+}
+
+/**
+ * The 40 სმ შტირი with a whole head (წაჭრის გარეშე), at an inside corner (the
+ * user, 2026-11-07): where the joint straight across from an outer face's
+ * joint is an inside corner's leg end. It goes from outside the outer face
+ * into the corner profile - a ქანჩი + დისკო on its outer end only, no ჩამკეტი
+ * fix - 5 up a 300, 2 up a 150 / 90. Worked out where the tie rods are, and
+ * never one of them.
+ */
+export function findCornerRods(pieces: Piece[], byId: Map<string, Material>, all = false): Rod[] {
+  return allRods(pieces, byId, all).filter((r) => r.corner);
+}
+
+function allRods(pieces: Piece[], byId: Map<string, Material>, all: boolean): Rod[] {
   const joints = inlineJoints(pieces, byId);
   const reach = longestRod(byId) - ROD_OVERHANG_CM * 2;
   const gapBetween = (j: Joint, k: Joint) =>
@@ -687,6 +709,11 @@ export function findRods(pieces: Piece[], byId: Map<string, Material>, all = fal
       z: j.z,
       h,
       count: rodsUpHeight(h),
+      corner: [j.a, j.b, k.a, k.b].some((id) => {
+        const p = byPiece.get(id);
+        const m = p && byId.get(p.materialId);
+        return !!m && isInnerCorner(m);
+      }),
       a: j.a,
       b: j.b,
     });

@@ -436,6 +436,14 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(worked.halfHead ?? 0)}
               />
               <Check
+                label="შტირი 40 სმ მთლიანი თავით"
+                note="შიდა კუთხის ფეხთან"
+                count={worked.fullHead ?? 0}
+                checked={vis.fullHead}
+                onChange={set('fullHead')}
+                disabledWhy={boltWhy(worked.fullHead ?? 0)}
+              />
+              <Check
                 label="კუთხის კონექტორი 25 სმ - შიდა"
                 note="შიდა კუთხე; პატარა ბარაშკით"
                 count={worked.innerConnectors ?? 0}

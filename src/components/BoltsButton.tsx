@@ -4,10 +4,11 @@ import { EVERY_KIND, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
-import { ClampShape, WingShape } from './BoltLayer';
+import { ClampShape, ConnectorGlyph, WingShape } from './BoltLayer';
+import { findCornerRods } from '../lib/bolts';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
-import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 
 /**
  * ჭანჭიკები in the top bar: the fixings the drawing needs, in a menu.
@@ -48,6 +49,7 @@ const KIND_NAMES: Array<[KindKey, string]> = [
   ['walers', 'ვოლერები'],
   ['cornerConnectors', 'კუთხის კონექტორი 25 სმ - გარე'],
   ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
+  ['fullHead', 'შტირი 40 სმ მთლიანი თავით'],
   ['innerConnectors', 'კუთხის კონექტორი 25 სმ - შიდა'],
   ['crocodiles', 'ნიანგი'],
   ['frogs', 'ბაყაყი'],
@@ -80,6 +82,13 @@ export function BoltsButton() {
   const innerShown = useEditorStore((s) => s.innerConnectorsShown);
   const setInnerShown = useEditorStore((s) => s.setInnerConnectorsShown);
   const setHalfShown = useEditorStore((s) => s.setHalfHeadShown);
+  const fullShown = useEditorStore((s) => s.fullHeadShown);
+  const setFullShown = useEditorStore((s) => s.setFullHeadShown);
+  const fullGroups = useMemo(() => {
+    const by = new Map<number, number>();
+    for (const r of findCornerRods(pieces, byId)) by.set(r.count, (by.get(r.count) ?? 0) + 1);
+    return [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each);
+  }, [pieces, byId]);
   const setWalersShown = useEditorStore((s) => s.setWalersShown);
   const [kinds, setKinds] = useState<KindsOn>(loadKinds);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -246,6 +255,30 @@ export function BoltsButton() {
             <ellipse cx="2.5" cy="7" rx="1.6" ry="3.2" />
           </svg>
           {HALF_HEAD_NAME}
+        </span>
+      </MenuItem>
+      {/* ...and where an inside corner's leg end faces an outer joint, the
+          whole-head შტირი 40 სმ (წაჭრის გარეშე). */}
+      <MenuItem
+        title="შიდა კუთხის ფეხის ბოლოს პირდაპირ, გარე ფასადის შეერთებასთან: შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
+        trail={
+          <KindTrail
+            groups={fullGroups}
+            on={on.fullHead}
+            shown={fullShown}
+            onEye={() => {
+              if (!fullShown) setShowBolts(true);
+              setFullShown(!fullShown);
+            }}
+          />
+        }
+        onClick={() => setKindOn('fullHead', !on.fullHead)}
+      >
+        <span className={`bolts-kind${on.fullHead ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+            <ConnectorGlyph cx={0} cy={0} r={6.5} px={0.5} label="" head="full" />
+          </svg>
+          {FULL_HEAD_NAME}
         </span>
       </MenuItem>
       {/* ...and at inside corners: the same 25 cm connector from inside the

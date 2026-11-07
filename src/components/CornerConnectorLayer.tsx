@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { ConnectorGlyph, markRadiusPx } from './BoltLayer';
 import { cornerConnectorSpots } from '../lib/cornerConnectors';
+import { findCornerRods } from '../lib/bolts';
 
 /**
  * The worked-out კუთხის კონექტორი 25 სმ at outside corners, drawn the way the
@@ -39,7 +40,13 @@ export function CornerConnectorLayer() {
         : [],
     [shown, ccShown, halfShown, innerShown, pieces, materials],
   );
-  if (!shown || !spots.length) return null;
+  // ...and the whole-head შტირი 40 სმ at inside corner leg ends.
+  const fullShown = useEditorStore((s) => s.fullHeadShown) && on.fullHead;
+  const full = useMemo(
+    () => (fullShown ? findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))) : []),
+    [fullShown, pieces, materials],
+  );
+  if (!(shown && spots.length) && !full.length) return null;
 
   return (
     <svg className="bolt-layer corner-connector-layer" width={stageW} height={stageH} aria-hidden="true">
@@ -87,6 +94,27 @@ export function CornerConnectorLayer() {
               label={fits ? '25' : '40'}
               head={fits ? 'none' : 'half'}
             />
+          </g>
+        );
+      })}
+      {full.map((r) => {
+        const key = `fh:${r.dir}:${r.x}:${r.y}`;
+        const x = r.x * zoom + panX;
+        const y = r.y * zoom + panY;
+        if (x < -40 || y < -40 || x > stageW + 40 || y > stageH + 40) return null;
+        return (
+          <g
+            key={key}
+            className={`cc-mark pickable${picked === key ? ' picked' : ''}`}
+            onPointerDown={(e) => {
+              if (e.button !== 0 || tool !== 'select') return;
+              e.stopPropagation();
+              // Taken off the way a tie rod is - see `withRodOff`.
+              selectMark({ kind: 'cc', key, targets: [{ id: r.a, tag: `rod:${r.b}` }], info: 'fullHead' });
+            }}
+          >
+            <title>{`შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე) × ${r.count} - შიდა კუთხის ფეხთან, ქანჩი + დისკო თითოზე`}</title>
+            <ConnectorGlyph cx={x} cy={y} r={markRadiusPx(zoom)} kind="tee" label="40" head="full" />
           </g>
         );
       })}

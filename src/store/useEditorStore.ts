@@ -203,6 +203,7 @@ const PREF_KEYS = [
   'walersShown',
   'cornerConnectorsShown',
   'halfHeadShown',
+  'fullHeadShown',
   'innerConnectorsShown',
   'objectVisibility',
   'panelDepth',
@@ -407,6 +408,8 @@ export interface EditorState {
   cornerConnectorsShown: boolean;
   /** the worked-out half-head შტირი 40 სმ at ჩ10 outside corners */
   halfHeadShown: boolean;
+  /** the worked-out whole-head შტირი 40 სმ at inside corner leg ends */
+  fullHeadShown: boolean;
   /** the worked-out 25 cm connectors at inside corners */
   innerConnectorsShown: boolean;
   /** which kinds of thing the plan draws - see `ObjectVisibility` */
@@ -690,6 +693,7 @@ export interface EditorState {
   alignToGrid: () => number;
   setCornerConnectorsShown: (on: boolean) => void;
   setHalfHeadShown: (on: boolean) => void;
+  setFullHeadShown: (on: boolean) => void;
   setInnerConnectorsShown: (on: boolean) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
@@ -1123,6 +1127,7 @@ export const useEditorStore = create<EditorState>()(
         walersShown: true,
         cornerConnectorsShown: true,
         halfHeadShown: true,
+        fullHeadShown: true,
         innerConnectorsShown: true,
         objectVisibility: normalizeObjectVisibility(undefined),
         panelDepth: DEFAULT_PANEL_DEPTH_CM,
@@ -2435,6 +2440,7 @@ export const useEditorStore = create<EditorState>()(
         },
         setCornerConnectorsShown: (on) => set({ cornerConnectorsShown: on }),
         setHalfHeadShown: (on) => set({ halfHeadShown: on }),
+        setFullHeadShown: (on) => set({ fullHeadShown: on }),
         setInnerConnectorsShown: (on) => set({ innerConnectorsShown: on }),
         setPanelDepth: (cm) => {
           const depth = normalizePanelDepth(cm);
@@ -2574,6 +2580,7 @@ export const useEditorStore = create<EditorState>()(
             walersShown: s.walersShown || chosen.walers,
             cornerConnectorsShown: s.cornerConnectorsShown || chosen.cornerConnectors,
             halfHeadShown: s.halfHeadShown || chosen.halfHead,
+            fullHeadShown: s.fullHeadShown || chosen.fullHead,
             innerConnectorsShown: s.innerConnectorsShown || chosen.innerConnectors,
             showBolts: true,
           }));

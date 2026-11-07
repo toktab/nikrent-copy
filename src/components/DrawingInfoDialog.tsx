@@ -4,7 +4,8 @@ import { buildBom } from '../lib/bom';
 import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
-import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
+import { findCornerRods } from '../lib/bolts';
+import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 import { isConfigured } from '../lib/supabase';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -62,6 +63,8 @@ export function DrawingInfoDialog() {
   const walerRows: Array<[string, number]> =
     on.cornerConnectors && cc.connectors ? [[CORNER_CONNECTOR_NAME, cc.connectors]] : [];
   if (on.halfHead && cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
+  const full = findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))).reduce((n, r) => n + r.count, 0);
+  if (on.fullHead && full) walerRows.push([FULL_HEAD_NAME, full]);
   if (on.innerConnectors && cc.innerConnectors) {
     walerRows.push([INNER_CONNECTOR_NAME, cc.innerConnectors], [SMALL_NUT_NAME, cc.smallNuts]);
   }
