@@ -45,6 +45,7 @@ import {
   unionRect,
 } from '../lib/geometry';
 import { makeMaterialId, uid } from '../lib/ids';
+import { snapPost } from '../lib/posts';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
 import {
@@ -244,6 +245,14 @@ const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; toH?: 
   // saved before either goes all the way in one load.
   { id: 'corner-outer-300', fromW: 24, toW: 10, leg: 0.1 },
 ];
+
+/**
+ * How far from a panel face a პანელის ბეტონზე სამაგრი being moved or dropped
+ * still finds it, cm: 20, or 40 screen pixels when zoomed out further.
+ */
+export function holderReach(zoom: number): number {
+  return Math.max(20, 40 / zoom);
+}
 
 /**
  * Built-ins folded into another (the user, 2026-11-07): the ბეტონზე პანელის
@@ -1405,6 +1414,35 @@ export const useEditorStore = create<EditorState>()(
                 pieces: [...others, ...stack],
                 selectedIds: stack.map((p) => p.id),
               };
+            }
+            /**
+             * A პანელის ბეტონზე სამაგრი sticks to the panel it is brought up to
+             * (the user, 2026-11-07): square on the nearest face, its end on it,
+             * turned to run out on the side it came from - the way a დგარი is
+             * stood on a face (`snapPost`). Loose, it moves on the grid.
+             */
+            if (
+              view === 'plan' &&
+              !freehand &&
+              rm &&
+              isPanelHolder(rm) &&
+              lifted.length === 1 &&
+              !sketchBaseline?.length
+            ) {
+              const centre = pieceCentre(lifted[0], rm);
+              const others = s.pieces.filter((p) => !selected.has(p.id));
+              const spot = snapPost(
+                { x: centre.x + duCm, y: centre.y + dvCm },
+                rm,
+                others,
+                byId,
+                holderReach(s.zoom),
+                s.snap ? s.snapStep : 0,
+              );
+              const moved = spot
+                ? { ...lifted[0], x: spot.x, y: spot.y, rot: spot.rot }
+                : { ...lifted[0], x: lifted[0].x + gridDu, y: lifted[0].y + gridDv };
+              return { guideX: null, guideY: null, pieces: [...others, moved] };
             }
             /** ჩამკეტი fix too: from joint to joint, as many as the joint takes. */
             if (
