@@ -19,7 +19,9 @@ export type KindKey =
   | 'walers'
   | 'cornerConnectors'
   | 'halfHead'
-  | 'innerConnectors';
+  | 'innerConnectors'
+  /** ბეტონზე პანელის დამჭერი - placed by hand only, never by the reset */
+  | 'holders';
 
 export type KindsOn = Record<KindKey, boolean>;
 
@@ -32,6 +34,7 @@ export const KIND_KEYS: KindKey[] = [
   'cornerConnectors',
   'halfHead',
   'innerConnectors',
+  'holders',
 ];
 
 export const NO_KINDS: KindsOn = Object.fromEntries(KIND_KEYS.map((k) => [k, false])) as KindsOn;

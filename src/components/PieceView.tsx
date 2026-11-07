@@ -2,7 +2,7 @@ import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Material, Piece } from '../types';
 import { PlacedShapeSvg, placedBox } from './ShapeSvg';
 import { ClampGlyph, ConnectorGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
-import { isConnector, planW, type Rect } from '../lib/geometry';
+import { isConnector, isPanelHolder, planW, type Rect } from '../lib/geometry';
 import { isLatch, isNut, isRod, outward, pieceCentre } from '../lib/bolts';
 
 interface Props {
@@ -42,7 +42,9 @@ export const PieceView = memo(function PieceView({
   const rod = isRod(material);
   const nut = isNut(material);
   const latch = isLatch(material);
-  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : latch ? ' latch' : '';
+  // The დამჭერი is always placed by hand, so it carries no hand-placed dot.
+  const holder = isPanelHolder(material);
+  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : latch ? ' latch' : holder ? ' holder' : '';
   // Placed by hand, not by the fill (`Piece.auto`): a dot in its corner, so
   // what the architect set himself reads apart from what was filled in.
   const hand = !kind && !piece.auto ? ' hand' : '';

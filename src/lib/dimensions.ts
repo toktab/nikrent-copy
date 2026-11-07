@@ -97,6 +97,8 @@ export interface PdfVisibility {
   rods: boolean;
   nuts: boolean;
   latches: boolean;
+  /** ბეტონზე პანელის დამჭერი, placed by hand */
+  holders: boolean;
 }
 
 export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
@@ -116,6 +118,7 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   rods: true,
   nuts: true,
   latches: true,
+  holders: true,
 };
 
 export function normalizePdfVisibility(raw: unknown): PdfVisibility {

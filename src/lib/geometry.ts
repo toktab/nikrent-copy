@@ -176,7 +176,8 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
       const m = byId.get(p.materialId);
       // A კონექტორი sits ON the joint, over both of the pieces it joins, and
       // the nuts up a rod end stand one above the other.
-      if (!m || isLinear(m) || isConnector(m) || isNut(m) || isLatch(m)) return null;
+      // ...and a დამჭერი stands at the foot of the panel it holds.
+      if (!m || isLinear(m) || isConnector(m) || isNut(m) || isLatch(m) || isPanelHolder(m)) return null;
       return { id: p.id, box: pieceBounds(p, m) };
     })
     .filter((v): v is { id: string; box: Rect } => v !== null);
@@ -343,6 +344,19 @@ export function isNut(m: Material): boolean {
  */
 export function isLatch(m: Material): boolean {
   return m.name.includes('ჩამკეტი') && m.name.toLowerCase().includes('fix');
+}
+
+/**
+ * A ბეტონზე პანელის დამჭერი - the small fixing at the foot of a panel that
+ * stands on its own, with no panel facing it across the wall, holding it down
+ * to the concrete (the user, 2026-11-07). Placed by hand only: the architect
+ * decides where one goes, nothing works it out or puts it back.
+ *
+ * Found by name like the other fittings. Not the older catalog item
+ * "პანელის ბეტონზე სამაგრი" - that one is a სამაგრი, not a დამჭერი.
+ */
+export function isPanelHolder(m: Material): boolean {
+  return m.name.includes('ბეტონზე') && m.name.includes('დამჭერ') && !isLinear(m);
 }
 
 /** True for materials measured by length (walers, tie rods, posts). */

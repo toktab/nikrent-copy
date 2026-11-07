@@ -5,6 +5,7 @@ import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, WingShape } from './BoltLayer';
+import { PanelHolderShape } from './ShapeSvg';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 
@@ -57,7 +58,7 @@ export function BoltsButton() {
   const toggleKindShown = useEditorStore((s) => s.toggleBoltKind);
   // The all-kinds switch left this menu but still lives in ზომების ჩვენება;
   // a kind switched on here must actually appear, whatever that one says.
-  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches') => {
+  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders') => {
     if (!shown[k]) setShowBolts(true);
     toggleKindShown(k);
   };
@@ -277,6 +278,20 @@ export function BoltsButton() {
           <b>{cc.smallNuts} ც.</b>
         </div>
       )}
+      {/* ბეტონზე პანელის დამჭერი: placed by hand only, at the foot of a panel
+          with nothing facing it - counted as placed, never by the reset. */}
+      <MenuItem
+        title="ცალმხრივი პანელის (პირისპირ პანელი რომ არ აქვს) ძირში, ბეტონზე - მხოლოდ ხელით დაისმება ელემენტებიდან, ავტომატურად არასდროს. თითო დასმულზე 1"
+        trail={<KindTrail groups={groups.holders} on={on.holders} shown={shown.holders} onEye={() => toggleBoltKind('holders')} />}
+        onClick={() => setKindOn('holders', !on.holders)}
+      >
+        <span className={`bolts-kind${on.holders ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="0 0 6 6" aria-hidden="true">
+            <PanelHolderShape w={6} h={6} px={0.5} />
+          </svg>
+          ბეტონზე პანელის დამჭერი
+        </span>
+      </MenuItem>
       <MenuSep />
       <div className="bolts-reset-row">
         <MenuItem

@@ -80,6 +80,8 @@ const SEEDS: Seed[] = [
   ['waler-rod-lock', 'ვოლერის შტირის თავის ჩასაკეტი', 'acc', 6, 6, 'rect'],
   ['rod-40-half-head', 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 5, 40, 'rect'],
   ['acc-small-barashka', 'ბარაშკა პატარა (გილზა + გაიკა)', 'acc', 6, 6, 'rect'],
+  // Placed by hand at the foot of a panel with nothing facing it (2026-11-07).
+  ['acc-panel-holder', 'ბეტონზე პანელის დამჭერი', 'acc', 6, 6, 'rect'],
 ];
 
 /** Du panels are always 9 cm thick. */

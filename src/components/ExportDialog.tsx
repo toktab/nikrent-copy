@@ -381,6 +381,14 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 onChange={set('latches')}
                 disabledWhy={boltWhy(bolts.latches)}
               />
+              <Check
+                label="ბეტონზე პანელის დამჭერი"
+                note="ხელით დასმული, ცალმხრივ პანელზე"
+                count={bolts.holders}
+                checked={vis.holders}
+                onChange={set('holders')}
+                disabledWhy={boltWhy(bolts.holders)}
+              />
             </div>
 
             <h4 className="vis-section">ზომები</h4>

@@ -212,7 +212,7 @@ describe('შტირები', () => {
     const off = withRodOff(pieces, rod);
     expect(findRods(off, byId)).toHaveLength(0);
     expect(findRods(off, byId, true)).toHaveLength(1);
-    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false, latches: false });
+    const back = resetBolts(off, byId, { connectors: false, rods: true, nuts: false, latches: false, holders: false });
     expect(findRods(back, byId)).toHaveLength(1);
   });
 
