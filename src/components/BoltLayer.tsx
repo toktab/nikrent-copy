@@ -70,8 +70,10 @@ export function ConnectorGlyph({
   const d = r * 0.7;
   const disc = kind === 'corner' ? C.corner : C.tee;
   const hr = r * 0.17;
-  const hx = cx - d * 0.6;
-  const hy = cy - d;
+  // The red stroke, 30% shorter than it was (the user, 2026-11-07).
+  const s = d * 0.7;
+  const hx = cx - s * 0.6;
+  const hy = cy - s;
   return (
     <g className={`bolt-glyph ${kind}`}>
       <circle cx={cx} cy={cy} r={r} fill={disc.fill} stroke={disc.stroke} style={{ strokeWidth: 1.5 * px }} />
@@ -89,10 +91,10 @@ export function ConnectorGlyph({
         className="bolt-slash"
         stroke={C.slash}
         strokeLinecap="round"
-        x1={cx - d * 0.6}
-        y1={cy - d}
-        x2={cx + d * 0.6}
-        y2={cy + d}
+        x1={cx - s * 0.6}
+        y1={cy - s}
+        x2={cx + s * 0.6}
+        y2={cy + s}
         style={{ strokeWidth: 1.6 * px }}
       />
       {head === 'full' && (
