@@ -170,7 +170,10 @@ function Drawing({ d }: { d: SheetDrawing }) {
             />
           );
         }
-        if (kind && kind !== 'holders') return <FixingBody key={piece.id} piece={piece} material={material} px={px} />;
+        // The სამაგრი, ნიანგი and ბაყაყი draw as their own shapes, below.
+        if (kind && kind !== 'holders' && kind !== 'crocodiles' && kind !== 'frogs') {
+          return <FixingBody key={piece.id} piece={piece} material={material} px={px} />;
+        }
         return <PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />;
       })}
 

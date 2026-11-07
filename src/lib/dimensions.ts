@@ -99,6 +99,9 @@ export interface PdfVisibility {
   latches: boolean;
   /** პანელის ბეტონზე სამაგრი, placed by hand */
   holders: boolean;
+  /** ნიანგი and ბაყაყი */
+  crocodiles: boolean;
+  frogs: boolean;
 }
 
 export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
@@ -119,6 +122,8 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   nuts: true,
   latches: true,
   holders: true,
+  crocodiles: true,
+  frogs: true,
 };
 
 export function normalizePdfVisibility(raw: unknown): PdfVisibility {

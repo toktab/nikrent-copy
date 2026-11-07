@@ -22,6 +22,8 @@ const BOLT_NAMES: Array<[BoltKindName, string]> = [
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
   ['holders', 'პანელის ბეტონზე სამაგრი'],
+  ['crocodiles', 'ნიანგი'],
+  ['frogs', 'ბაყაყი'],
 ];
 
 export function ReplaceButton() {

@@ -3,6 +3,7 @@ import { EVERY_KIND, type KindsOn } from './boltKinds';
 import { soloPanels, WALER_RODS_EACH } from './walers';
 import { cornerConnectorSpots } from './cornerConnectors';
 import { isConnector, isPanelHolder, normalizeRot, planW } from './geometry';
+import { clampEach, isCrocodile, isFrog } from './clamps';
 import {
   CONNECTORS_PER_JOINT,
   connectorCount,
@@ -79,7 +80,7 @@ export function markedRodLength(materials: Material[], rod: Rod): number {
 }
 
 /** Which of the placeable ჭანჭიკი kinds a material is, if any. */
-export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders';
+export type BoltKindName = 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs';
 
 export function boltKindOf(m: Material): BoltKindName | null {
   if (isConnector(m)) return 'connectors';
@@ -87,6 +88,8 @@ export function boltKindOf(m: Material): BoltKindName | null {
   if (isNut(m)) return 'nuts';
   if (isLatch(m)) return 'latches';
   if (isPanelHolder(m)) return 'holders';
+  if (isCrocodile(m)) return 'crocodiles';
+  if (isFrog(m)) return 'frogs';
   return null;
 }
 
@@ -109,6 +112,8 @@ export function boltTotals(
       nuts: sum(g.nuts),
       latches: sum(g.latches),
       holders: sum(g.holders),
+      crocodiles: sum(g.crocodiles),
+      frogs: sum(g.frogs),
     };
   }
   return {
@@ -120,7 +125,19 @@ export function boltTotals(
       const m = byId.get(p.materialId);
       return !!m && isPanelHolder(m);
     }).length,
+    crocodiles: clampTotal(pieces, byId, isCrocodile),
+    frogs: clampTotal(pieces, byId, isFrog),
   };
+}
+
+/** Every placed ნიანგი or ბაყაყი, 4 or 2 at each - see `clampEach`. */
+function clampTotal(pieces: Piece[], byId: Map<string, Material>, is: (m: Material) => boolean): number {
+  let n = 0;
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (m && is(m)) n += clampEach(p, m, pieces, byId);
+  }
+  return n;
 }
 
 /**
@@ -203,7 +220,16 @@ export function boltGroups(
     1,
   ]);
 
+  // ნიანგი and ბაყაყი: one on the plan at each place, 4 or 2 up it.
+  const clampUnits = (is: (m: Material) => boolean) =>
+    placed(is).map(({ p, m }): [string, number] => [
+      `${spotKey(pieceCentre(p, m))}:${Math.round(p.z ?? 0)}`,
+      clampEach(p, m, pieces, byId),
+    ]);
+
   return {
+    crocodiles: on.crocodiles ? grouped(clampUnits(isCrocodile)) : [],
+    frogs: on.frogs ? grouped(clampUnits(isFrog)) : [],
     connectors: on.connectors ? grouped(connectors) : [],
     rods: on.rods ? grouped(rods) : [],
     nuts: grouped(nuts),
@@ -232,5 +258,7 @@ export function normalizeBoltKinds(raw: unknown): BoltKinds {
     nuts: r.nuts !== false,
     latches: r.latches !== false,
     holders: r.holders !== false,
+    crocodiles: r.crocodiles !== false,
+    frogs: r.frogs !== false,
   };
 }

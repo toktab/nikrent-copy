@@ -1,6 +1,7 @@
 import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
 import { isConnector, isPanelHolder, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
+import { isCrocodile, isFrog } from '../lib/clamps';
 import { ClampShape, ConnectorGlyph, NutGlyph } from './BoltLayer';
 import { isLatch, isNut, LATCH_DEPTH_CM, LATCH_LEN_CM, NUT_CM, WASHER_CM, WASHER_T_CM, WING_HUB_CM, WING_SPAN_CM } from '../lib/bolts';
 
@@ -63,6 +64,10 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
+  // ...the ნიანგი and ბაყაყი as the clamps they are...
+  if (isCrocodile(m)) return <CrocodileShape w={pw} h={ph} px={strokeWidth} />;
+  if (isFrog(m)) return <FrogShape w={pw} h={ph} px={strokeWidth} />;
+
   // ...and the პანელის ბეტონზე სამაგრი as the user drew it.
   if (isPanelHolder(m)) return <PanelHolderShape w={pw} h={ph} px={strokeWidth} />;
 
@@ -111,6 +116,59 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
  * face the panel it holds.
  */
 export const PANEL_HOLDER_COLOR = '#ff7a1a';
+
+/**
+ * A ნიანგი from above, in its own w × h cm, its top edge on the back of the
+ * face: a long green jaw lying across panel, ჩაკერება and panel, its two ends
+ * bent in to grip the frames of the two panels, its teeth along the face -
+ * so it reads as touching all three.
+ */
+export function CrocodileShape({ w, h, px }: { w: number; h: number; px: number }) {
+  const sw = Math.max(px, Math.min(w, h) * 0.08);
+  const grip = Math.min(w * 0.12, h * 0.9);
+  const jaw = h * 0.4;
+  const n = 6;
+  const step = (w - grip * 2) / n;
+  const teeth = Array.from({ length: n }, (_, i) => {
+    const x0 = grip + i * step;
+    return `${x0},${jaw} ${x0 + step / 2},${sw * 0.6} ${x0 + step},${jaw}`;
+  }).join(' ');
+  return (
+    <g strokeLinejoin="round">
+      <rect x={0} y={0} width={w} height={h} fill="rgba(0, 0, 0, 0)" stroke="none" />
+      <rect x={0} y={jaw} width={w} height={h - jaw} rx={(h - jaw) / 2.5} fill="#3fae6a" stroke="#155c37" strokeWidth={sw} />
+      <polyline points={teeth} fill="#f3f7f0" stroke="#155c37" strokeWidth={sw * 0.7} />
+      <rect x={0} y={0} width={grip} height={h} fill="#1f7a4d" stroke="#155c37" strokeWidth={sw} />
+      <rect x={w - grip} y={0} width={grip} height={h} fill="#1f7a4d" stroke="#155c37" strokeWidth={sw} />
+      <circle cx={w - grip - step * 0.6} cy={jaw + (h - jaw) * 0.45} r={(h - jaw) * 0.18} fill="#ffe14d" stroke="#155c37" strokeWidth={sw * 0.5} />
+    </g>
+  );
+}
+
+/**
+ * A ბაყაყი from above, in its own w × h cm, its top edge on the back of the
+ * face: a round body over the joint, two legs splayed out to grip the frames
+ * of the panels either side, and its eyes on the face.
+ */
+export function FrogShape({ w, h, px }: { w: number; h: number; px: number }) {
+  const sw = Math.max(px, Math.min(w, h) * 0.07);
+  const cx = w / 2;
+  const foot = Math.min(w, h) * 0.16;
+  return (
+    <g strokeLinecap="round" strokeLinejoin="round">
+      <rect x={0} y={0} width={w} height={h} fill="rgba(0, 0, 0, 0)" stroke="none" />
+      <polyline points={`${cx - w * 0.16},${h * 0.7} ${w * 0.16},${h * 0.92} ${foot},${foot}`} fill="none" stroke="#3d6b12" strokeWidth={sw * 1.6} />
+      <polyline points={`${cx + w * 0.16},${h * 0.7} ${w * 0.84},${h * 0.92} ${w - foot},${foot}`} fill="none" stroke="#3d6b12" strokeWidth={sw * 1.6} />
+      <circle cx={foot} cy={foot} r={foot} fill="#8bc34a" stroke="#3d6b12" strokeWidth={sw} />
+      <circle cx={w - foot} cy={foot} r={foot} fill="#8bc34a" stroke="#3d6b12" strokeWidth={sw} />
+      <ellipse cx={cx} cy={h * 0.58} rx={w * 0.2} ry={h * 0.4} fill="#8bc34a" stroke="#3d6b12" strokeWidth={sw} />
+      <circle cx={cx - w * 0.08} cy={h * 0.3} r={h * 0.15} fill="#ffffff" stroke="#3d6b12" strokeWidth={sw * 0.6} />
+      <circle cx={cx + w * 0.08} cy={h * 0.3} r={h * 0.15} fill="#ffffff" stroke="#3d6b12" strokeWidth={sw * 0.6} />
+      <circle cx={cx - w * 0.08} cy={h * 0.28} r={h * 0.06} fill="#1b1b1b" stroke="none" />
+      <circle cx={cx + w * 0.08} cy={h * 0.28} r={h * 0.06} fill="#1b1b1b" stroke="none" />
+    </g>
+  );
+}
 
 export function PanelHolderShape({ w, h, px }: { w: number; h: number; px: number }) {
   // A drawn line about a third of a centimetre, as on his sketch; never

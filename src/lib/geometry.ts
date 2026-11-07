@@ -177,7 +177,18 @@ export function findOverlaps(pieces: Piece[], byId: Map<string, Material>): Set<
       // A კონექტორი sits ON the joint, over both of the pieces it joins, and
       // the nuts up a rod end stand one above the other.
       // ...and a ბეტონზე სამაგრი stands at the foot of the panel it holds.
-      if (!m || isLinear(m) || isConnector(m) || isNut(m) || isLatch(m) || isPanelHolder(m)) return null;
+      // ...and a ნიანგი or ბაყაყი clamps the pieces it is on.
+      if (
+        !m ||
+        isLinear(m) ||
+        isConnector(m) ||
+        isNut(m) ||
+        isLatch(m) ||
+        isPanelHolder(m) ||
+        m.name.includes('ნიანგ') ||
+        m.name.includes('ბაყაყ')
+      )
+        return null;
       return { id: p.id, box: pieceBounds(p, m) };
     })
     .filter((v): v is { id: string; box: Rect } => v !== null);

@@ -57,6 +57,8 @@ describe('boltTotals', () => {
       nuts: nutCount(pieces, byId),
       latches: latchCount(pieces, byId),
       holders: 0,
+      crocodiles: 0,
+      frogs: 0,
     });
   });
 });
@@ -125,7 +127,8 @@ describe('boltKindOf', () => {
     expect(boltKindOf(byId.get('rod-60')!)).toBe('rods');
     expect(boltKindOf(byId.get('acc-nut-washer')!)).toBe('nuts');
     expect(boltKindOf(byId.get('acc-latch-fix')!)).toBe('latches');
-    expect(boltKindOf(byId.get('acc-latch-adjustable')!)).toBeNull();
+    expect(boltKindOf(byId.get('acc-latch-adjustable')!)).toBe('crocodiles');
+    expect(boltKindOf(byId.get('acc-frog')!)).toBe('frogs');
     expect(boltKindOf(byId.get('panel-90x300')!)).toBeNull();
     expect(boltKindOf(byId.get('filler-5x300')!)).toBeNull();
   });
@@ -145,13 +148,15 @@ describe('the PDF switches for the key and the ჭანჭიკები', () 
 
 describe('which ჭანჭიკები the plan shows', () => {
   it('shows every kind unless one was switched off', () => {
-    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true, holders: true });
+    expect(normalizeBoltKinds(undefined)).toEqual({ connectors: true, rods: true, nuts: true, latches: true, holders: true, crocodiles: true, frogs: true });
     expect(normalizeBoltKinds({ rods: false, nuts: 'x' })).toEqual({
       connectors: true,
       rods: false,
       nuts: true,
       latches: true,
       holders: true,
+      crocodiles: true,
+      frogs: true,
     });
   });
 });

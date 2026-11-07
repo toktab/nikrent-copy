@@ -21,7 +21,11 @@ export type KindKey =
   | 'halfHead'
   | 'innerConnectors'
   /** პანელის ბეტონზე სამაგრი - placed by hand only, never by the reset */
-  | 'holders';
+  | 'holders'
+  /** ნიანგი - panel, ჩაკერება, panel; placed by the reset and by hand */
+  | 'crocodiles'
+  /** ბაყაყი - panel against panel; placed by the reset and by hand */
+  | 'frogs';
 
 export type KindsOn = Record<KindKey, boolean>;
 
@@ -35,6 +39,8 @@ export const KIND_KEYS: KindKey[] = [
   'halfHead',
   'innerConnectors',
   'holders',
+  'crocodiles',
+  'frogs',
 ];
 
 export const NO_KINDS: KindsOn = Object.fromEntries(KIND_KEYS.map((k) => [k, false])) as KindsOn;

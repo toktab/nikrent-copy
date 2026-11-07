@@ -3,6 +3,7 @@ import type { Material, Piece } from '../types';
 import { PlacedShapeSvg, placedBox } from './ShapeSvg';
 import { ClampGlyph, ConnectorGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
 import { isConnector, isPanelHolder, planW, type Rect } from '../lib/geometry';
+import { isCrocodile, isFrog } from '../lib/clamps';
 import { isLatch, isNut, isRod, outward, pieceCentre } from '../lib/bolts';
 
 interface Props {
@@ -44,7 +45,9 @@ export const PieceView = memo(function PieceView({
   const latch = isLatch(material);
   // The დამჭერი is always placed by hand, so it carries no hand-placed dot.
   const holder = isPanelHolder(material);
-  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : latch ? ' latch' : holder ? ' holder' : '';
+  // ...nor do the ნიანგი and ბაყაყი, which the reset places as often as a hand.
+  const clamp = isCrocodile(material) ? ' crocodile' : isFrog(material) ? ' frog' : '';
+  const kind = connector ? ' connector' : rod ? ' rod' : nut ? ' nut' : latch ? ' latch' : holder ? ' holder' : clamp;
   // Placed by hand, not by the fill (`Piece.auto`): a dot in its corner, so
   // what the architect set himself reads apart from what was filled in.
   const hand = !kind && !piece.auto ? ' hand' : '';
