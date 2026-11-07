@@ -1,4 +1,4 @@
-import type { Material, Piece } from '../types';
+import type { Material, Piece, SketchPath } from '../types';
 import { planH, planW } from './geometry';
 import {
   connectorMaterial,
@@ -20,6 +20,7 @@ import {
   withRodOff,
 } from './bolts';
 import { boltKindOf, type BoltKindName } from './boltMarks';
+import { clampMaterial, clampPieces, clampSpots, isClampOf } from './clamps';
 
 /*
  * ჩანაცვლება - swap pieces on the drawing for another catalog item.
@@ -92,6 +93,7 @@ export function materializeBolts(
   materials: Material[],
   kind: BoltKindName,
   newId: () => string,
+  sketch: SketchPath[] = [],
 ): { pieces: Piece[]; added: string[] } {
   let out = pieces;
   const made: Piece[] = [];
@@ -113,6 +115,20 @@ export function materializeBolts(
   } else if (kind === 'nuts') {
     const m = nutMaterial(materials);
     if (m) for (const e of openRodEnds(pieces, byId)) made.push(...fittingStack(m, e, [], newId));
+  } else if (kind === 'crocodiles' || kind === 'frogs') {
+    // One at every place the rule names that has none of its kind on it yet.
+    const m = clampMaterial(materials, kind);
+    if (m) {
+      const is = isClampOf(kind);
+      const have = pieces.flatMap((p) => {
+        const pm = byId.get(p.materialId);
+        return pm && is(pm) ? [{ ...pieceCentre(p, pm), z: Math.round(p.z ?? 0) }] : [];
+      });
+      const open = clampSpots(pieces, byId, kind, m, sketch).filter(
+        (s) => !have.some((h) => h.z === s.z && Math.hypot(h.x - s.x, h.y - s.y) <= 3),
+      );
+      made.push(...clampPieces(m, open, newId));
+    }
   } else if (kind === 'latches') {
     const m = latchMaterial(materials);
     if (m) for (const s of openLatches(pieces, byId)) made.push(...latchStack(m, s, [], newId));

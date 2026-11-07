@@ -46,6 +46,7 @@ import {
 } from '../lib/geometry';
 import { makeMaterialId, uid } from '../lib/ids';
 import { snapPost } from '../lib/posts';
+import { isCrocodile, isFrog, snapClamp } from '../lib/clamps';
 import { DEFAULT_WAREHOUSE, normalizeStock, withStockIn } from '../lib/inventory';
 import { planColumn } from '../lib/columnWizard';
 import {
@@ -234,6 +235,9 @@ const PREF_KEYS = [
  * is silently dropped and then overwritten with an empty one.
  */
 const BUILTIN_SIZE_FIXES: Array<{ id: string; fromW: number; toW: number; toH?: number; leg?: number }> = [
+  // The ჩამკეტი რეგულირებადი became the ნიანგი, drawn along the back of a
+  // face across panel, ჩაკერება and panel (the user, 2026-11-07).
+  { id: 'acc-latch-adjustable', fromW: 10, toW: 24, toH: 4 },
   // The პანელის ბეტონზე სამაგრი drawn as the user sketched it (2026-11-07).
   { id: 'acc-panel-concrete-anchor', fromW: 12, toW: 6, toH: 6 },
   // A 15 cm outer-corner leg cannot both wrap a 9 cm panel and cover 15 cm of
@@ -278,8 +282,17 @@ function retiredDocuments<T extends { pieces: Piece[] }>(documents: T[]): T[] {
   });
 }
 
-/** Applies `BUILTIN_SIZE_FIXES` in place. Exported for testing. */
+/** Built-ins renamed by the user: a saved catalog with the old name takes the new one. */
+const BUILTIN_RENAMES: Array<{ id: string; from: string; to: string }> = [
+  { id: 'acc-latch-adjustable', from: 'ჩამკეტი რეგულირებადი', to: 'ნიანგი (ჩამკეტი რეგულირებადი)' },
+];
+
+/** Applies `BUILTIN_SIZE_FIXES` and `BUILTIN_RENAMES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
+  for (const r of BUILTIN_RENAMES) {
+    const m = materials.find((x) => x.id === r.id);
+    if (m && m.builtin && m.name === r.from) m.name = r.to;
+  }
   for (const fix of BUILTIN_SIZE_FIXES) {
     const m = materials.find((x) => x.id === fix.id);
     if (!m || !m.builtin) continue;
@@ -1444,6 +1457,31 @@ export const useEditorStore = create<EditorState>()(
                 : { ...lifted[0], x: lifted[0].x + gridDu, y: lifted[0].y + gridDv };
               return { guideX: null, guideY: null, pieces: [...others, moved] };
             }
+            /**
+             * A ნიანგი or ბაყაყი goes from place to place along the faces: the
+             * nearest the rule names, turned onto the back of the face. Loose,
+             * it moves on the grid.
+             */
+            if (view === 'plan' && !freehand && rm && lifted.length === 1 && !sketchBaseline?.length) {
+              const kind = isCrocodile(rm) ? 'crocodiles' : isFrog(rm) ? 'frogs' : null;
+              if (kind) {
+                const centre = pieceCentre(lifted[0], rm);
+                const others = s.pieces.filter((p) => !selected.has(p.id));
+                const spot = snapClamp(
+                  { x: centre.x + duCm, y: centre.y + dvCm },
+                  rm,
+                  others,
+                  byId,
+                  kind,
+                  holderReach(s.zoom),
+                  s.sketch,
+                );
+                const moved = spot
+                  ? { ...lifted[0], x: spot.x - planW(rm) / 2, y: spot.y - planH(rm) / 2, rot: spot.rot, z: spot.z }
+                  : { ...lifted[0], x: lifted[0].x + gridDu, y: lifted[0].y + gridDv };
+                return { guideX: null, guideY: null, pieces: [...others, moved] };
+              }
+            }
             /** ჩამკეტი fix too: from joint to joint, as many as the joint takes. */
             if (
               view === 'plan' &&
@@ -2422,8 +2460,9 @@ export const useEditorStore = create<EditorState>()(
           commit((s) => {
             const byId = new Map(s.materials.map((m) => [m.id, m]));
             let pieces = s.pieces;
-            // Connectors are pieces already (or not there yet): only marks are made real.
-            if ('bolts' in target && target.bolts !== 'connectors') {
+            // Connectors, ნიანგი and ბაყაყი are pieces already (or not there
+            // yet), and the სამაგრი is only placed by hand: only marks are made real.
+            if ('bolts' in target && !['connectors', 'crocodiles', 'frogs', 'holders'].includes(target.bolts)) {
               pieces = materializeBolts(s.pieces, byId, s.materials, target.bolts, uid).pieces;
             }
             const picked = pieces.filter((p) => {
@@ -2471,6 +2510,9 @@ export const useEditorStore = create<EditorState>()(
             // Connectors are never there by themselves: this is what puts them
             // on the joints the rule names - see `connectorCount`.
             if (chosen.connectors) pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
+            // ...and the ნიანგი and ბაყაყი on the places theirs names.
+            if (chosen.crocodiles) pieces = materializeBolts(pieces, byId, s.materials, 'crocodiles', uid, s.sketch).pieces;
+            if (chosen.frogs) pieces = materializeBolts(pieces, byId, s.materials, 'frogs', uid, s.sketch).pieces;
             const left = new Set(pieces.map((p) => p.id));
             return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };
           });
@@ -2484,7 +2526,14 @@ export const useEditorStore = create<EditorState>()(
               return { ...d, info: { ...d.info, bolts: next }, updatedAt: Date.now() };
             }),
             // A kind brought in is a kind to see.
-            boltsShown: { ...s.boltsShown, ...Object.fromEntries((['connectors', 'rods', 'nuts', 'latches'] as const).filter((k) => chosen[k]).map((k) => [k, true])) },
+            boltsShown: {
+              ...s.boltsShown,
+              ...Object.fromEntries(
+                (['connectors', 'rods', 'nuts', 'latches', 'crocodiles', 'frogs'] as const)
+                  .filter((k) => chosen[k])
+                  .map((k) => [k, true]),
+              ),
+            },
             walersShown: s.walersShown || chosen.walers,
             cornerConnectorsShown: s.cornerConnectorsShown || chosen.cornerConnectors,
             halfHeadShown: s.halfHeadShown || chosen.halfHead,
@@ -2495,12 +2544,30 @@ export const useEditorStore = create<EditorState>()(
         setKindOn: (kind, on) => {
           // Off takes away what of the kind stands on the drawing (undoable);
           // on puts the connectors back, the one kind that is placed, not worked out.
-          if (kind === 'connectors' || kind === 'rods' || kind === 'nuts' || kind === 'latches') {
-            const only = { connectors: false, rods: false, nuts: false, latches: false, holders: false, [kind]: true };
+          if (
+            kind === 'connectors' ||
+            kind === 'rods' ||
+            kind === 'nuts' ||
+            kind === 'latches' ||
+            kind === 'crocodiles' ||
+            kind === 'frogs'
+          ) {
+            const only = {
+              connectors: false,
+              rods: false,
+              nuts: false,
+              latches: false,
+              holders: false,
+              crocodiles: false,
+              frogs: false,
+              [kind]: true,
+            };
             commit((s) => {
               const byId = new Map(s.materials.map((m) => [m.id, m]));
               let pieces = on ? s.pieces : resetBolts(s.pieces, byId, only);
-              if (on && kind === 'connectors') pieces = materializeBolts(pieces, byId, s.materials, 'connectors', uid).pieces;
+              if (on && (kind === 'connectors' || kind === 'crocodiles' || kind === 'frogs')) {
+                pieces = materializeBolts(pieces, byId, s.materials, kind, uid, s.sketch).pieces;
+              }
               if (pieces === s.pieces) return {};
               const left = new Set(pieces.map((p) => p.id));
               return { pieces, selectedIds: s.selectedIds.filter((id) => left.has(id)) };

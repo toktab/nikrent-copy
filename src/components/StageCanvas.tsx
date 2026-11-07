@@ -79,6 +79,7 @@ import {
 import { boltKindOf } from '../lib/boltMarks';
 import { isMaterialShown } from '../lib/objectVisibility';
 import { isPost, snapPost } from '../lib/posts';
+import { isCrocodile, isFrog, snapClamp } from '../lib/clamps';
 import { spanAt } from '../lib/span';
 import { WalerLayer } from './WalerLayer';
 import { CornerConnectorLayer } from './CornerConnectorLayer';
@@ -1300,6 +1301,19 @@ export function StageCanvas() {
       const spot = snapPost(at, material, s.pieces, lookup, holderReach(s.zoom), s.snap ? s.snapStep : 0);
       if (spot) {
         return { u: spot.x, v: spot.y, w: pw, h: ph, world: { x: spot.x, y: spot.y, z: 0 }, rot: spot.rot, guideX: null, guideY: null };
+      }
+    }
+
+    // A ნიანგი or ბაყაყი onto the nearest place the rule names for it.
+    const clampKind = isCrocodile(material) ? 'crocodiles' : isFrog(material) ? 'frogs' : null;
+    if (view === 'plan' && clampKind) {
+      const at = { x: (clientX - r.left - s.panX) / s.zoom, y: (clientY - r.top - s.panY) / s.zoom };
+      const lookup = new Map(s.materials.map((mm) => [mm.id, mm]));
+      const spot = snapClamp(at, material, s.pieces, lookup, clampKind, holderReach(s.zoom), s.sketch);
+      if (spot) {
+        const u = spot.x - pw / 2;
+        const v = spot.y - ph / 2;
+        return { u, v, w: pw, h: ph, world: { x: u, y: v, z: spot.z }, rot: spot.rot, guideX: null, guideY: null };
       }
     }
 

@@ -389,6 +389,22 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 onChange={set('holders')}
                 disabledWhy={boltWhy(bolts.holders)}
               />
+              <Check
+                label="ნიანგი"
+                note="პანელი - ჩაკერება - პანელი; 300-ზე 4, 150 / 90-ზე 2"
+                count={bolts.crocodiles}
+                checked={vis.crocodiles}
+                onChange={set('crocodiles')}
+                disabledWhy={boltWhy(bolts.crocodiles)}
+              />
+              <Check
+                label="ბაყაყი"
+                note="პანელი - პანელი; 300-ზე 4, 150 / 90-ზე 2"
+                count={bolts.frogs}
+                checked={vis.frogs}
+                onChange={set('frogs')}
+                disabledWhy={boltWhy(bolts.frogs)}
+              />
             </div>
 
             <h4 className="vis-section">ზომები</h4>

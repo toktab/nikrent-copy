@@ -504,6 +504,12 @@ function legendEntries(
     if (on.halfHead && cc.halfHead > 0) {
       out.push({ sample: '40', label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });
     }
+    if (vis.crocodiles && totals.crocodiles > 0) {
+      out.push({ sample: 'ნიან.', label: 'ნიანგი (ჩამკეტი რეგულირებადი)', note: 'პანელი - ჩაკერება - პანელი; 300-ზე 4, 150 / 90-ზე 2', count: pcs(totals.crocodiles) });
+    }
+    if (vis.frogs && totals.frogs > 0) {
+      out.push({ sample: 'ბაყ.', label: 'ბაყაყი (სამაგრი ფიქსი)', note: 'პანელი - პანელი; 300-ზე 4, 150 / 90-ზე 2', count: pcs(totals.frogs) });
+    }
     if (vis.holders && totals.holders > 0) {
       out.push({ sample: 'სამ.', label: 'პანელის ბეტონზე სამაგრი', note: 'ხელით დასმული - ცალმხრივ პანელზე', count: pcs(totals.holders) });
     }

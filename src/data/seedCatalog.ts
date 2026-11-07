@@ -69,7 +69,10 @@ const SEEDS: Seed[] = [
   ['acc-panel-concrete-anchor', 'პანელის ბეტონზე სამაგრი', 'acc', 6, 6, 'rect'],
   ['acc-nut-washer', 'ქანჩი + დისკო', 'acc', 8, 8, 'rect'],
   ['acc-latch-fix', 'ჩამკეტი fix', 'acc', 10, 20, 'rect'],
-  ['acc-latch-adjustable', 'ჩამკეტი რეგულირებადი', 'acc', 10, 25, 'rect'],
+  // ნიანგი across panel, ჩაკერება, panel; ბაყაყი across two panels - each
+  // drawn along the back of the face (the user, 2026-11-07).
+  ['acc-latch-adjustable', 'ნიანგი (ჩამკეტი რეგულირებადი)', 'acc', 24, 4, 'rect'],
+  ['acc-frog', 'ბაყაყი (სამაგრი ფიქსი)', 'acc', 14, 4, 'rect'],
   ['acc-base-clamp', 'ძირის სამაგრი', 'acc', 15, 15, 'rect'],
   ['acc-scaffold-foot', 'ხარაჩოს ფეხი', 'acc', 20, 30, 'rect'],
   ['acc-fixator-sleeve', 'გილზა ფიქსატორის', 'acc', 5, 15, 'rect'],

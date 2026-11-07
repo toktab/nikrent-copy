@@ -5,7 +5,7 @@ import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, WingShape } from './BoltLayer';
-import { PanelHolderShape } from './ShapeSvg';
+import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 
@@ -49,6 +49,8 @@ const KIND_NAMES: Array<[KindKey, string]> = [
   ['cornerConnectors', 'კუთხის კონექტორი 25 სმ - გარე'],
   ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
   ['innerConnectors', 'კუთხის კონექტორი 25 სმ - შიდა'],
+  ['crocodiles', 'ნიანგი'],
+  ['frogs', 'ბაყაყი'],
 ];
 
 export function BoltsButton() {
@@ -58,7 +60,7 @@ export function BoltsButton() {
   const toggleKindShown = useEditorStore((s) => s.toggleBoltKind);
   // The all-kinds switch left this menu but still lives in ზომების ჩვენება;
   // a kind switched on here must actually appear, whatever that one says.
-  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders') => {
+  const toggleBoltKind = (k: 'connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs') => {
     if (!shown[k]) setShowBolts(true);
     toggleKindShown(k);
   };
@@ -291,6 +293,32 @@ export function BoltsButton() {
             <PanelHolderShape w={6} h={6} px={0.5} />
           </svg>
           პანელის ბეტონზე სამაგრი
+        </span>
+      </MenuItem>
+      {/* ნიანგი and ბაყაყი: placed by ავტომატურად თავიდან დასმა on the places
+          the rule names, or by hand - see lib/clamps.ts. */}
+      <MenuItem
+        title="ორ პანელს შორის ჩაკერება - ნიანგი სამივეზე გადადის, ფასადის უკანა მხარეს. 300-ზე 4, 150 / 90-ზე 2. დაისმება „ავტომატურად თავიდან დასმა“-თი ან ხელით"
+        trail={<KindTrail groups={groups.crocodiles} on={on.crocodiles} shown={shown.crocodiles} onEye={() => toggleBoltKind('crocodiles')} />}
+        onClick={() => setKindOn('crocodiles', !on.crocodiles)}
+      >
+        <span className={`bolts-kind${on.crocodiles ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="0 -4 24 12" aria-hidden="true">
+            <CrocodileShape w={24} h={4} px={0.8} />
+          </svg>
+          ნიანგი
+        </span>
+      </MenuItem>
+      <MenuItem
+        title="ორი პანელი ერთმანეთის გვერდით, ჩაკერების გარეშე - ბაყაყი ორივეზე, ფასადის უკანა მხარეს. 300-ზე 4, 150 / 90-ზე 2. დაისმება „ავტომატურად თავიდან დასმა“-თი ან ხელით"
+        trail={<KindTrail groups={groups.frogs} on={on.frogs} shown={shown.frogs} onEye={() => toggleBoltKind('frogs')} />}
+        onClick={() => setKindOn('frogs', !on.frogs)}
+      >
+        <span className={`bolts-kind${on.frogs ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="0 -3 14 10" aria-hidden="true">
+            <FrogShape w={14} h={4} px={0.6} />
+          </svg>
+          ბაყაყი
         </span>
       </MenuItem>
       <MenuSep />

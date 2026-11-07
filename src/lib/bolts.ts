@@ -2,6 +2,7 @@ import type { Material, Piece } from '../types';
 import { soloPanels, walerTotals } from './walers';
 import { cornerConnectorSpots, cornerConnectorTotals } from './cornerConnectors';
 import { isConnector, isLatch, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
+import { isCrocodile, isFrog } from './clamps';
 import { cornerLeg } from './shapePath';
 
 /**
@@ -402,9 +403,20 @@ export interface BoltKinds {
    * takes away or puts back what the architect placed by hand.
    */
   holders: boolean;
+  /** ნიანგი and ბაყაყი - see lib/clamps.ts */
+  crocodiles: boolean;
+  frogs: boolean;
 }
 
-export const ALL_BOLT_KINDS: BoltKinds = { connectors: true, rods: true, nuts: true, latches: true, holders: true };
+export const ALL_BOLT_KINDS: BoltKinds = {
+  connectors: true,
+  rods: true,
+  nuts: true,
+  latches: true,
+  holders: true,
+  crocodiles: true,
+  frogs: true,
+};
 
 /** A taken-off entry in `Piece.boltsOff` that belongs to a შტირი, not a connector. */
 const ROD_OFF = 'rod:';
@@ -427,6 +439,8 @@ export function resetBolts(
       if (kinds.rods && isRod(m)) return false;
       if (kinds.nuts && isNut(m)) return false;
       if (kinds.latches && isLatch(m)) return false;
+      if (kinds.crocodiles && isCrocodile(m)) return false;
+      if (kinds.frogs && isFrog(m)) return false;
       return true;
     })
     .map((p) => {
@@ -540,6 +554,25 @@ function inlineJoints(pieces: Piece[], byId: Map<string, Material>): Joint[] {
           if (!s) continue;
           if (!A.panel && !B.panel && s.to - s.from < FULL_FACE_CM) continue;
           out.push({ ...s, z: A.p.z ?? 0, a: A.p.id, b: B.p.id });
+        }
+      }
+    }
+  }
+  /**
+   * ...and where an inside corner's leg ends on the first panel or ჩაკერება of
+   * a run: that is a joint in the face too, and the joint straight across from
+   * it on the other face takes a შტირი (the user, 2026-11-07 - the four he
+   * circled at the corners of a room; before, legs were left out).
+   */
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || !isSquare(p) || !isInnerCorner(m)) continue;
+    for (const e of cornerLegEnds(p, m)) {
+      for (const B of parts) {
+        if (!sameCourse(p, B.p)) continue;
+        for (const f of B.panel ? panelEnds(B.r) : sides(B.r)) {
+          const s = stretch(e, f);
+          if (s) out.push({ ...s, z: p.z ?? 0, a: p.id, b: B.p.id });
         }
       }
     }
