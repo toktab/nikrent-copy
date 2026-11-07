@@ -320,7 +320,8 @@ function PostShape({ m, stroke, strokeWidth }: { m: Material; stroke: string; st
   // Blue, the user's choice (2026-11-07).
   const blue = '#2f7de1';
   const dark = '#163f78';
-  const head = Math.min(4, ph / 8);
+  // The თავი is the big light block at the top, so the top reads at once.
+  const head = Math.min(12, ph / 5);
   const foot = Math.min(5, ph / 6);
   const tube = pw * 0.34;
   const inner = tube * 0.62;
@@ -333,7 +334,7 @@ function PostShape({ m, stroke, strokeWidth }: { m: Material; stroke: string; st
       {/* the inner tube, from the joint to the foot */}
       <rect x={cx - inner / 2} y={joint} width={inner} height={ph - foot - joint} fill={blue} stroke={dark} strokeWidth={sw} />
       {/* the outer tube, from the head to the joint */}
-      <rect x={cx - tube / 2} y={head} width={tube} height={joint - head} rx={tube / 4} fill={blue} stroke={dark} strokeWidth={sw} />
+      <rect x={cx - tube / 2} y={head * 0.85} width={tube} height={joint - head * 0.85} rx={tube / 4} fill={blue} stroke={dark} strokeWidth={sw} />
       {/* the turning handle: a loop off the side of the tube, at the joint */}
       <path
         d={`M ${cx + tube / 2} ${joint - 3.2} H ${cx + tube / 2 + pw * 0.28} V ${joint + 3.2} H ${cx + tube / 2}`}
@@ -343,11 +344,16 @@ function PostShape({ m, stroke, strokeWidth }: { m: Material; stroke: string; st
         strokeLinejoin="round"
       />
       <rect x={cx - tube * 0.75} y={joint - 1.4} width={tube * 1.5} height={2.8} rx={0.8} fill={blue} stroke={dark} strokeWidth={sw} />
-      {/* the head: a bracket gripping the panel, its two jaws on the frame */}
-      <rect x={pw * 0.1} y={0} width={pw * 0.8} height={head * 0.55} fill={steel} stroke={stroke} strokeWidth={sw} />
-      <rect x={pw * 0.1} y={0} width={pw * 0.14} height={head} fill={steel} stroke={stroke} strokeWidth={sw} />
-      <rect x={pw * 0.76} y={0} width={pw * 0.14} height={head} fill={steel} stroke={stroke} strokeWidth={sw} />
-      <circle cx={cx} cy={head * 0.6} r={tube * 0.32} fill="#c9ced4" stroke={stroke} strokeWidth={sw} />
+      {/* the თავი (the user's photo, 2026-11-07): a galvanised, near-white
+          clamp body. Its jaw grips the panel's frame along the top edge, the
+          screw stands off one side with its T-handle, and the round eye at
+          its bottom takes the prop's tube. */}
+      <rect x={pw * 0.04} y={0} width={pw * 0.92} height={head * 0.28} rx={0.6} fill="#e9edf1" stroke="#7d8790" strokeWidth={sw} />
+      <rect x={pw * 0.18} y={head * 0.22} width={pw * 0.64} height={head * 0.56} rx={1} fill="#f4f6f8" stroke="#7d8790" strokeWidth={sw} />
+      <line x1={pw * 0.82} y1={head * 0.45} x2={pw * 1.02} y2={head * 0.45} stroke="#7d8790" strokeWidth={sw * 2} strokeLinecap="round" />
+      <line x1={pw * 1.02} y1={head * 0.3} x2={pw * 1.02} y2={head * 0.6} stroke="#7d8790" strokeWidth={sw * 2} strokeLinecap="round" />
+      <circle cx={cx} cy={head * 0.85} r={tube * 0.62} fill="#f4f6f8" stroke="#7d8790" strokeWidth={sw} />
+      <circle cx={cx} cy={head * 0.85} r={tube * 0.24} fill="#9aa3ac" />
       {/* the foot plate on the ground, with its two anchor holes */}
       <rect x={0} y={ph - foot} width={pw} height={foot} rx={0.8} fill={steel} stroke={stroke} strokeWidth={sw} />
       <circle cx={pw * 0.24} cy={ph - foot / 2} r={Math.min(foot, pw) * 0.16} fill="#15181c" />
