@@ -7,6 +7,7 @@ import { segments } from '../lib/sketch';
 import { ClampGlyph, ClampShape, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
 import { FixingBody } from './PieceView';
 import { PlacedShapeBody, ShapeSvg } from './ShapeSvg';
+import type { CornerConnectorBar, WalerBar } from '../lib/workedMarks';
 
 /**
  * The printed sheet's linework, as one SVG in paper millimetres.
@@ -40,6 +41,9 @@ export interface SheetDrawing {
   rods: Array<{ rod: Rod; length: number }>;
   nuts: RodEnd[];
   latches: LatchSpot[];
+  /** the worked-out ვოლერები and კუთხის კონექტორები, each kind filtered already */
+  walers: WalerBar[];
+  cornerConnectors: CornerConnectorBar[];
 }
 
 export type LegendIcon =
@@ -176,6 +180,40 @@ function Drawing({ d }: { d: SheetDrawing }) {
         }
         return <PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />;
       })}
+
+      {/* The worked-out ვოლერები behind the panels nothing faces, and the
+          კუთხის კონექტორები 25 სმ through the corners - as on the screen. */}
+      {d.walers.map((w, i) => (
+        <g key={`waler:${i}`}>
+          <rect
+            x={w.rect.x}
+            y={w.rect.y}
+            width={w.rect.w}
+            height={w.rect.h}
+            rx={Math.min(w.rect.w, w.rect.h) / 3}
+            fill="#e2733a"
+            stroke="#5a2a10"
+            strokeWidth={OUTLINE_MM * k}
+          />
+          {w.rods.map((p, j) => (
+            <circle key={j} cx={p.x} cy={p.y} r={1.6} fill="#f3e3c3" stroke="#3a3a3a" strokeWidth={OUTLINE_MM * k} />
+          ))}
+        </g>
+      ))}
+      {d.cornerConnectors.map((c, i) => (
+        <g key={`cc:${i}`}>
+          <line
+            x1={c.x1}
+            y1={c.y1}
+            x2={c.x2}
+            y2={c.y2}
+            stroke={c.kind === 'halfHead' ? '#e5484d' : '#9b1c1c'}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+          <NutGlyph x={c.nut.x} y={c.nut.y} rot={c.nut.rot} scale={c.kind === 'innerConnectors' ? 0.6 : 1} px={px} />
+        </g>
+      ))}
 
       {/* The worked-out marks over the pieces, in the screen's order: the
           connector discs first, so nothing that shares a joint hides under one. */}

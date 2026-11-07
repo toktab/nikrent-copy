@@ -66,7 +66,12 @@ export function CornerConnectorLayer() {
             onPointerDown={(e) => {
               if (e.button !== 0 || tool !== 'select') return;
               e.stopPropagation();
-              selectMark({ kind: 'cc', key: `${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`, targets: s.takeOff });
+              selectMark({
+                kind: 'cc',
+                key: `${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`,
+                targets: s.takeOff,
+                info: s.inner ? 'innerConnectors' : fits ? 'cornerConnectors' : 'halfHead',
+              });
             }}
           >
             <title>

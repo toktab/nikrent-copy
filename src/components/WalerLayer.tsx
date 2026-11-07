@@ -80,7 +80,7 @@ export function WalerLayer() {
             onPointerDown={(e) => {
               if (e.button !== 0 || tool !== 'select') return;
               e.stopPropagation();
-              selectMark({ kind: 'waler', key: s.key, targets: s.ids.map((id) => ({ id, tag: WALER_OFF })) });
+              selectMark({ kind: 'waler', key: s.key, targets: s.ids.map((id) => ({ id, tag: WALER_OFF })), info: 'walers' });
             }}
           >
             <title>{`ვოლერი × ${s.total} - პანელს პირისპირ პანელი არ აქვს`}</title>

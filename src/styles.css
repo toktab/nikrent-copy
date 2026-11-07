@@ -6607,6 +6607,59 @@ kbd {
   width: 70px;
 }
 
+/* The card a picked ჭანჭიკი gets in the რეკომენდაცია tab. */
+.bolt-info {
+  margin-top: 12px;
+}
+.bolt-info-name {
+  margin: 4px 0 2px;
+  font-size: 15px;
+}
+.bolt-info-count {
+  margin: 0 0 8px;
+  opacity: 0.85;
+}
+.bolt-info-list {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.bolt-info-list dt {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  opacity: 0.6;
+}
+.bolt-info-list dd {
+  margin: 2px 0 0;
+}
+.bolt-info-list ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.bolt-info-example {
+  font-weight: 600;
+}
+.bolt-info-link,
+.bolt-info-back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #4fb3f0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.bolt-info-link:hover,
+.bolt-info-back:hover {
+  text-decoration: underline;
+}
+.bolt-info-back {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
 /* A worked-out mark that can be picked (ვოლერი, კუთხის კონექტორი) - and the picked one. */
 .bolt-layer .pickable {
   pointer-events: auto;
