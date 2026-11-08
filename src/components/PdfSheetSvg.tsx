@@ -44,6 +44,10 @@ export interface SheetDrawing {
   /** the worked-out ვოლერები and კუთხის კონექტორები, each kind filtered already */
   walers: WalerBar[];
   cornerConnectors: CornerConnectorBar[];
+  /** how big each kind is drawn, by material id (the inspector's size setting) */
+  scales: Record<string, number>;
+  /** a corner disc's radius, world cm - its catalog item's size, scaled */
+  discR: (kind: CornerConnectorBar['kind']) => number;
 }
 
 export type LegendIcon =
@@ -161,24 +165,33 @@ function Drawing({ d }: { d: SheetDrawing }) {
 
       {d.pieces.map(({ piece, material }) => {
         const kind = boltKindOf(material);
+        // Drawn at its kind's size setting, about its middle, as on the screen.
+        const s = d.scales[material.id] ?? 1;
+        const at = pieceCentre(piece, material);
+        const sized = (el: JSX.Element) =>
+          s === 1 ? el : (
+            <g key={piece.id} transform={`translate(${at.x} ${at.y}) scale(${s}) translate(${-at.x} ${-at.y})`}>
+              {el}
+            </g>
+          );
         if (kind === 'connectors') {
-          const c = pieceCentre(piece, material);
-          return (
+          // The size of the 40 სმ discs (the user, 2026-11-08): its catalog box.
+          return sized(
             <ConnectorGlyph
               key={piece.id}
-              cx={c.x}
-              cy={c.y}
-              r={r}
+              cx={at.x}
+              cy={at.y}
+              r={(Math.min(planW(material), planH(material)) / 2) * 0.82}
               px={rPx}
               kind={d.atCorners.has(piece.id) ? 'corner' : 'tee'}
-            />
+            />,
           );
         }
         // The სამაგრი, ნიანგი and ბაყაყი draw as their own shapes, below.
         if (kind && kind !== 'holders' && kind !== 'crocodiles' && kind !== 'frogs' && kind !== 'props') {
-          return <FixingBody key={piece.id} piece={piece} material={material} px={px} />;
+          return sized(<FixingBody key={piece.id} piece={piece} material={material} px={px} />);
         }
-        return <PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />;
+        return sized(<PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />);
       })}
 
       {/* The worked-out ვოლერები behind the panels nothing faces, and the
@@ -207,7 +220,7 @@ function Drawing({ d }: { d: SheetDrawing }) {
           key={`cc:${i}`}
           cx={(c.x1 + c.x2) / 2}
           cy={(c.y1 + c.y2) / 2}
-          r={r}
+          r={d.discR(c.kind)}
           px={rPx}
           kind={c.kind === 'innerConnectors' ? 'corner' : 'tee'}
           label={c.kind === 'halfHead' || c.kind === 'fullHead' ? '40' : '25'}

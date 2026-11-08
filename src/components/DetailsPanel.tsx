@@ -153,6 +153,12 @@ export function DetailsPanel() {
         <RotationField rot={piece.rot} />
       </div>
       <div className="kv">
+        <span className="k" title="ნახაზზე ამ ტიპის ყველა ელემენტის ზომა - მხოლოდ ხედი, რაოდენობას არ ცვლის">
+          ზომა ნახაზზე (ყველა ასეთი)
+        </span>
+        <ScaleField materialId={material.id} />
+      </div>
+      <div className="kv">
         <span className="k">სიმაღლე ძირიდან</span>
         <ElevationField z={piece.z ?? 0} />
       </div>
@@ -252,6 +258,41 @@ function NudgeElevation() {
 }
 
 /** Exact angle for the selection: any degree, not just quarter turns. */
+/**
+ * How big every piece of this kind is drawn (the user, 2026-11-08): one
+ * setting per catalog item, so all the discs of one kind change together.
+ */
+function ScaleField({ materialId }: { materialId: string }) {
+  const scale = useEditorStore((s) => s.materialScale[materialId] ?? 1);
+  const setScale = useEditorStore((s) => s.setMaterialScale);
+  const pct = Math.round(scale * 100);
+  return (
+    <span className="rot-field">
+      <input
+        type="number"
+        step={10}
+        min={25}
+        max={400}
+        value={pct}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isFinite(n) && n > 0) setScale(materialId, n / 100);
+        }}
+      />
+      <span className="deg">%</span>
+      <input
+        className="rot-slider"
+        type="range"
+        min={25}
+        max={400}
+        step={5}
+        value={pct}
+        onChange={(e) => setScale(materialId, Number(e.target.value) / 100)}
+      />
+    </span>
+  );
+}
+
 function RotationField({ rot }: { rot: number }) {
   const setRotation = useEditorStore((s) => s.setRotation);
   const [draft, setDraft] = useState<string | null>(null);

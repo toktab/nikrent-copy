@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
-import { ConnectorGlyph, markRadiusPx } from './BoltLayer';
+import { ConnectorGlyph } from './BoltLayer';
 import { cornerConnectorSpots } from '../lib/cornerConnectors';
 import { findCornerRods } from '../lib/bolts';
 
@@ -30,6 +30,13 @@ export function CornerConnectorLayer() {
   const picked = useEditorStore((s) => (s.selectedMark?.kind === 'cc' ? s.selectedMark.key : null));
   const selectMark = useEditorStore((s) => s.selectMark);
   const tool = useEditorStore((s) => s.tool);
+  // The discs at the size of their catalog items, as placed ones are drawn,
+  // times the inspector's size setting (the user, 2026-11-08).
+  const scales = useEditorStore((s) => s.materialScale);
+  const discPx = (id: string) => {
+    const m = materials.find((mm) => mm.id === id);
+    return Math.max(3, ((m ? Math.min(m.w, m.h) : 8) / 2) * 0.82 * (scales[id] ?? 1) * zoom);
+  };
 
   const spots = useMemo(
     () =>
@@ -90,7 +97,7 @@ export function CornerConnectorLayer() {
             <ConnectorGlyph
               cx={(line.x1 + line.x2) / 2}
               cy={(line.y1 + line.y2) / 2}
-              r={markRadiusPx(zoom)}
+              r={discPx(fits ? 'corner-connector' : 'rod-40-half-head')}
               kind={s.inner ? 'corner' : 'tee'}
               label={fits ? '25' : '40'}
               head={fits ? 'none' : 'half'}
@@ -115,7 +122,7 @@ export function CornerConnectorLayer() {
             }}
           >
             <title>{`შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე) × ${r.count} - შიდა კუთხის ფეხთან, ქანჩი + დისკო თითოზე`}</title>
-            <ConnectorGlyph cx={x} cy={y} r={markRadiusPx(zoom)} kind="tee" label="40" head="full" />
+            <ConnectorGlyph cx={x} cy={y} r={discPx('corner-connector-40')} kind="tee" label="40" head="full" />
           </g>
         );
       })}
