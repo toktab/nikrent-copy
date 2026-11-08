@@ -52,3 +52,17 @@ describe('the 40 სმ heads put down by hand (the user, 2026-11-07)', () => {
     expect(boltInfoOf(byId.get('corner-connector-40')!)).toBe('fullHead');
   });
 });
+
+describe('ბარაშკა პატარა - its own kind (the user, 2026-11-08)', () => {
+  it('counts one per inside-corner connector, and those put down by hand', async () => {
+    const { smallNutTotals } = await import('../cornerConnectors');
+    const byId = new Map(SEED_MATERIALS.map((m) => [m.id, m]));
+    const pieces = [
+      { id: 'p', materialId: 'panel-90x300', x: 0, y: 0, rot: 0 },
+      { id: 'n', materialId: 'acc-small-barashka', x: 10, y: 9, rot: 0 },
+    ];
+    const inner = { dir: 'h' as const, at: 0, from: 0, to: 25, outer: { x: 0, y: 0 }, filler: 5, inner: true, count: 5, takeOff: [] };
+    const outer = { ...inner, inner: false };
+    expect(smallNutTotals([inner, outer], pieces, byId)).toEqual({ total: 10, groups: [{ places: 2, each: 5 }] });
+  });
+});

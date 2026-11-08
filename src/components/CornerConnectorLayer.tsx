@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
-import { ConnectorGlyph } from './BoltLayer';
+import { ConnectorGlyph, NutGlyph } from './BoltLayer';
 import { cornerConnectorSpots } from '../lib/cornerConnectors';
 import { findCornerRods } from '../lib/bolts';
 
@@ -54,7 +54,16 @@ export function CornerConnectorLayer() {
     () => (fullShown ? findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))).filter((r) => !r.placed) : []),
     [fullShown, pieces, materials],
   );
-  if (!(shown && spots.length) && !full.length) return null;
+  // ...and the ბარაშკა პატარა on the outer end of each inside-corner one.
+  const smallShown = useEditorStore((s) => s.smallNutsShown) && on.smallNuts;
+  const smallNuts = useMemo(
+    () =>
+      smallShown
+        ? cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))).filter((s) => s.inner && !s.placed)
+        : [],
+    [smallShown, pieces, materials],
+  );
+  if (!(shown && spots.length) && !full.length && !smallNuts.length) return null;
 
   return (
     <svg className="bolt-layer corner-connector-layer" width={stageW} height={stageH} aria-hidden="true">
@@ -101,6 +110,24 @@ export function CornerConnectorLayer() {
               kind={s.inner ? 'corner' : 'tee'}
               label={fits ? '25' : '40'}
               head={fits ? 'none' : 'half'}
+            />
+          </g>
+        );
+      })}
+      {smallNuts.map((s) => {
+        const x = s.outer.x * zoom + panX;
+        const y = s.outer.y * zoom + panY;
+        if (x < -40 || y < -40 || x > stageW + 40 || y > stageH + 40) return null;
+        // Facing out of the corner profile, the way the connector comes out of it.
+        const out = s.dir === 'h' ? (s.outer.x <= s.from ? -1 : 1) : s.outer.y <= s.from ? -1 : 1;
+        return (
+          <g key={`sn:${s.dir}:${s.at}:${s.outer.x}:${s.outer.y}`} className="small-nut-mark">
+            <title>{`ბარაშკა პატარა (გილზა + გაიკა) × ${s.count} - შიდა კუთხის კონექტორზე`}</title>
+            <NutGlyph
+              x={x}
+              y={y}
+              rot={s.dir === 'h' ? (out < 0 ? 180 : 0) : out < 0 ? 270 : 90}
+              scale={zoom * 0.6 * (scales['acc-small-barashka'] ?? 1)}
             />
           </g>
         );

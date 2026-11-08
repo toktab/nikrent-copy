@@ -68,6 +68,35 @@ export interface CornerConnectorSpot {
   placed?: boolean;
 }
 
+/** A catalog ბარაშკა პატარა (გილზა + გაიკა). */
+export function isSmallNutPart(m: Material): boolean {
+  return m.id === 'acc-small-barashka' || m.name.includes('ბარაშკა');
+}
+
+/**
+ * The ბარაშკა პატარა the drawing needs (the user, 2026-11-08: its own kind):
+ * one on each inside-corner 25 სმ connector - as many up a spot as the
+ * connectors - and the ones put down by hand, each standing for a spot's worth
+ * (5 by a 300, 2 by a 150 / 90). Groups as the menu writes them.
+ */
+export function smallNutTotals(
+  spots: CornerConnectorSpot[],
+  pieces: Piece[],
+  byId: Map<string, Material>,
+): { total: number; groups: Array<{ places: number; each: number }> } {
+  const each: number[] = spots.filter((s) => s.inner).map((s) => s.count);
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (m && isSmallNutPart(m)) each.push(placedHeadCount(p, m, pieces, byId));
+  }
+  const by = new Map<number, number>();
+  for (const n of each) by.set(n, (by.get(n) ?? 0) + 1);
+  return {
+    total: each.reduce((a, b) => a + b, 0),
+    groups: [...by].map(([e, places]) => ({ places, each: e })).sort((a, b) => b.each - a.each),
+  };
+}
+
 /** A catalog წაჭრილი გაიკა - the half-head შტირი 40 სმ. */
 export function isHalfHeadPart(m: Material): boolean {
   return m.id === 'rod-40-half-head' || (m.name.includes('ნახევარი თავით') && !m.name.includes('ვოლერ'));

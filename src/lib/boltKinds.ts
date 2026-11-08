@@ -22,6 +22,8 @@ export type KindKey =
   /** შტირი 40 სმ მთლიანი თავით - at an inside corner's leg end, worked out */
   | 'fullHead'
   | 'innerConnectors'
+  /** ბარაშკა პატარა (გილზა + გაიკა) on each inside-corner 25 სმ connector - worked out */
+  | 'smallNuts'
   /** პანელის ბეტონზე სამაგრი - placed by hand only, never by the reset */
   | 'holders'
   /** ნიანგი - panel, ჩაკერება, panel; placed by the reset and by hand */
@@ -43,6 +45,7 @@ export const KIND_KEYS: KindKey[] = [
   'halfHead',
   'fullHead',
   'innerConnectors',
+  'smallNuts',
   'holders',
   'crocodiles',
   'frogs',

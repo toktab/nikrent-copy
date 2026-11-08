@@ -377,6 +377,14 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(allConnectors)}
               />
               <Check
+                label="ბარაშკა პატარა (გილზა + გაიკა)"
+                note="შიდა კუთხის კონექტორზე"
+                count={worked.smallNut ?? 0}
+                checked={vis.smallNuts}
+                onChange={set('smallNuts')}
+                disabledWhy={boltWhy(worked.smallNut ?? 0)}
+              />
+              <Check
                 label="შტირები"
                 note="ერთი ნიშანი - 5 ც. 300-ზე, 2 ც. 150 / 90-ზე"
                 count={bolts.rods}

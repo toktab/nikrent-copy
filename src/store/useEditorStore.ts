@@ -207,6 +207,7 @@ const PREF_KEYS = [
   'halfHeadShown',
   'fullHeadShown',
   'innerConnectorsShown',
+  'smallNutsShown',
   'objectVisibility',
   'panelDepth',
   'showSketch',
@@ -454,6 +455,8 @@ export interface EditorState {
   fullHeadShown: boolean;
   /** the worked-out 25 cm connectors at inside corners */
   innerConnectorsShown: boolean;
+  /** the worked-out ბარაშკა პატარა on the inside-corner connectors */
+  smallNutsShown: boolean;
   /** which kinds of thing the plan draws - see `ObjectVisibility` */
   objectVisibility: ObjectVisibility;
   /** the thickness every panel and ჩაკერება is drawn at, cm - see `setPanelDepthOverride` */
@@ -737,6 +740,7 @@ export interface EditorState {
   setHalfHeadShown: (on: boolean) => void;
   setFullHeadShown: (on: boolean) => void;
   setInnerConnectorsShown: (on: boolean) => void;
+  setSmallNutsShown: (on: boolean) => void;
   setEdgeSnap: (on: boolean) => void;
   setOrthoLock: (on: boolean) => void;
   setShowLengths: (on: boolean) => void;
@@ -1172,6 +1176,7 @@ export const useEditorStore = create<EditorState>()(
         halfHeadShown: true,
         fullHeadShown: true,
         innerConnectorsShown: true,
+        smallNutsShown: true,
         objectVisibility: normalizeObjectVisibility(undefined),
         panelDepth: DEFAULT_PANEL_DEPTH_CM,
         simpleMode: false,
@@ -2520,6 +2525,7 @@ export const useEditorStore = create<EditorState>()(
         setHalfHeadShown: (on) => set({ halfHeadShown: on }),
         setFullHeadShown: (on) => set({ fullHeadShown: on }),
         setInnerConnectorsShown: (on) => set({ innerConnectorsShown: on }),
+        setSmallNutsShown: (on) => set({ smallNutsShown: on }),
         setPanelDepth: (cm) => {
           const depth = normalizePanelDepth(cm);
           setPanelDepthOverride(depth);
@@ -2661,6 +2667,7 @@ export const useEditorStore = create<EditorState>()(
             halfHeadShown: s.halfHeadShown || chosen.halfHead,
             fullHeadShown: s.fullHeadShown || chosen.fullHead,
             innerConnectorsShown: s.innerConnectorsShown || chosen.innerConnectors,
+            smallNutsShown: s.smallNutsShown || chosen.smallNuts,
             showBolts: true,
           }));
         },
