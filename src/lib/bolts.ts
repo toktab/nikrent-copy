@@ -415,6 +415,7 @@ export interface BoltKinds {
   halfHead?: boolean;
   fullHead?: boolean;
   innerConnectors?: boolean;
+  smallNuts?: boolean;
 }
 
 export const ALL_BOLT_KINDS: BoltKinds = {

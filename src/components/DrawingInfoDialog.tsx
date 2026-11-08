@@ -5,6 +5,7 @@ import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
 import { findCornerRods } from '../lib/bolts';
+import { smallNutTotals } from '../lib/cornerConnectors';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 import { isConfigured } from '../lib/supabase';
 import { Icon } from './Icon';
@@ -70,9 +71,8 @@ export function DrawingInfoDialog() {
   if (on.halfHead && cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
   const full = findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))).reduce((n, r) => n + r.count, 0);
   if (on.fullHead && full) walerRows.push([FULL_HEAD_NAME, full]);
-  if (on.innerConnectors && cc.innerConnectors) {
-    walerRows.push([SMALL_NUT_NAME, cc.smallNuts]);
-  }
+  const small = smallNutTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))), pieces, new Map(materials.map((m) => [m.id, m])));
+  if (on.smallNuts && small.total) walerRows.push([SMALL_NUT_NAME, small.total]);
   walerRows.push(...(on.walers && walers.walers
     ? [
         ['ვოლერი', walers.walers],

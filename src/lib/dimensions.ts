@@ -110,6 +110,8 @@ export interface PdfVisibility {
   halfHead: boolean;
   fullHead: boolean;
   innerConnectors: boolean;
+  /** ბარაშკა პატარა */
+  smallNuts: boolean;
 }
 
 export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
@@ -138,6 +140,7 @@ export const DEFAULT_PDF_VISIBILITY: PdfVisibility = {
   halfHead: true,
   fullHead: true,
   innerConnectors: true,
+  smallNuts: true,
 };
 
 export function normalizePdfVisibility(raw: unknown): PdfVisibility {

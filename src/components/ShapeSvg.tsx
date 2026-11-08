@@ -2,7 +2,7 @@ import type { Material, Piece } from '../types';
 import { barRect, drawnOutline, pointsAttr } from '../lib/shapePath';
 import { isConnector, isPanelHolder, pieceBounds, planH, planW, type Rect } from '../lib/geometry';
 import { isCrocodile, isFrog } from '../lib/clamps';
-import { isFullHeadPart, isHalfHeadPart } from '../lib/cornerConnectors';
+import { isFullHeadPart, isHalfHeadPart, isSmallNutPart } from '../lib/cornerConnectors';
 import { ClampShape, ConnectorGlyph, NutGlyph } from './BoltLayer';
 import { isLatch, isNut, LATCH_DEPTH_CM, LATCH_LEN_CM, NUT_CM, WASHER_CM, WASHER_T_CM, WING_HUB_CM, WING_SPAN_CM } from '../lib/bolts';
 
@@ -65,6 +65,12 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
     return <NutGlyph x={pw / 2 - (long * s) / 2} y={ph / 2} rot={0} scale={s} px={strokeWidth / 2} />;
   }
 
+  // ...the ბარაშკა პატარა as a small wing nut (the user, 2026-11-08)...
+  if (isSmallNutPart(m)) {
+    const sc = Math.min(pw, ph) / (Math.max(WASHER_CM, WING_SPAN_CM) + 1) * 0.8;
+    const long = WASHER_T_CM + NUT_CM + WING_HUB_CM;
+    return <NutGlyph x={pw / 2 - (long * sc) / 2} y={ph / 2} rot={0} scale={sc} px={strokeWidth / 2} />;
+  }
   // ...the two 40 სმ heads as their discs...
   if (isHalfHeadPart(m) || isFullHeadPart(m)) {
     return (

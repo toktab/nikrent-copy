@@ -92,6 +92,7 @@ export function SettingsDialog() {
       <HalfHeadSwitch />
       <FullHeadSwitch />
       <InnerConnectorsSwitch />
+      <SmallNutsSwitch />
       <HoldersSwitch />
     </Modal>
   );
@@ -256,6 +257,28 @@ function HalfHeadSwitch() {
       />
       <span>
         შტირი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
+      </span>
+    </label>
+  );
+}
+
+/** The worked-out ბარაშკა პატარა on the inside-corner connectors - like the others. */
+function SmallNutsSwitch() {
+  const on = useEditorStore((s) => s.smallNutsShown);
+  const setOn = useEditorStore((s) => s.setSmallNutsShown);
+  const setShowBolts = useEditorStore((s) => s.setShowBolts);
+  return (
+    <label className="vis-check">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          if (e.target.checked) setShowBolts(true);
+          setOn(e.target.checked);
+        }}
+      />
+      <span>
+        ბარაშკა პატარა ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხის კონექტორზე</span>
       </span>
     </label>
   );

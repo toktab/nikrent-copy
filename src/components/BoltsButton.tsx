@@ -4,7 +4,8 @@ import { EVERY_KIND, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { boltGroups, type BoltGroup } from '../lib/boltMarks';
 import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
-import { ClampShape, ConnectorGlyph, RING, WingShape } from './BoltLayer';
+import { ClampShape, ConnectorGlyph, NutGlyph, RING, WingShape } from './BoltLayer';
+import { smallNutTotals } from '../lib/cornerConnectors';
 import { findCornerRods } from '../lib/bolts';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
@@ -49,6 +50,7 @@ const KIND_NAMES: Array<[KindKey, string]> = [
   ['walers', 'ვოლერები'],
   ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
   ['fullHead', 'შტირი 40 სმ მთლიანი თავით'],
+  ['smallNuts', 'ბარაშკა პატარა (შიდა კუთხე)'],
   ['crocodiles', 'ნიანგი'],
   ['frogs', 'ბაყაყი'],
   ['props', 'დგარი და თავი'],
@@ -80,6 +82,9 @@ export function BoltsButton() {
   const halfShown = useEditorStore((s) => s.halfHeadShown);
   const innerShown = useEditorStore((s) => s.innerConnectorsShown);
   const setInnerShown = useEditorStore((s) => s.setInnerConnectorsShown);
+  const smallShown = useEditorStore((s) => s.smallNutsShown);
+  const setSmallShown = useEditorStore((s) => s.setSmallNutsShown);
+  const small = useMemo(() => smallNutTotals(cornerConnectorSpots(pieces, byId), pieces, byId), [pieces, byId]);
   const setHalfShown = useEditorStore((s) => s.setHalfHeadShown);
   const fullShown = useEditorStore((s) => s.fullHeadShown);
   const setFullShown = useEditorStore((s) => s.setFullHeadShown);
@@ -277,13 +282,32 @@ export function BoltsButton() {
           {FULL_HEAD_NAME}
         </span>
       </MenuItem>
-      {on.innerConnectors && cc.innerConnectors > 0 && (
-        <div className="bolts-sub">
-          <span>{SMALL_NUT_NAME}</span>
-          <span className="bolts-calc">{cc.innerConnectors} × 1 =</span>
-          <b>{cc.smallNuts} ც.</b>
-        </div>
-      )}
+      {/* ბარაშკა პატარა: its own kind (the user, 2026-11-08) - one on each
+          inside-corner 25 სმ connector, instead of a ქანჩი + დისკო. */}
+      <MenuItem
+        title="შიდა კუთხის 25 სმ კონექტორის ბოლოზე - თითო კონექტორზე, ქანჩი + დისკოს ნაცვლად. 300-ზე 5, 150 / 90-ზე 2 ერთ ადგილზე. ავტომატურად ან ხელით"
+        trail={
+          <KindTrail
+            groups={small.groups}
+            on={on.smallNuts}
+            shown={smallShown}
+            onEye={() => {
+              if (!smallShown) setShowBolts(true);
+              setSmallShown(!smallShown);
+            }}
+          />
+        }
+        onClick={() => setKindOn('smallNuts', !on.smallNuts)}
+      >
+        <span className={`bolts-kind${on.smallNuts ? '' : ' off'}`}>
+          <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
+            <g transform="translate(-4 0)">
+              <NutGlyph x={0} y={0} rot={0} scale={0.9} px={0.4} />
+            </g>
+          </svg>
+          {SMALL_NUT_NAME}
+        </span>
+      </MenuItem>
       {/* პანელის ბეტონზე სამაგრი: placed by hand only, at the foot of a panel
           with nothing facing it - counted as placed, never by the reset. */}
       <MenuItem

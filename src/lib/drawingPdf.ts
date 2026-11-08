@@ -22,6 +22,7 @@ import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './wale
 import { cornerConnectorBars, walerBars, type CornerConnectorBar, type WalerBar } from './workedMarks';
 import { normalizeKindsOn } from './boltKinds';
 import { findCornerRods } from './bolts';
+import { smallNutTotals } from './cornerConnectors';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from './cornerConnectors';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
 
@@ -508,8 +509,9 @@ function legendEntries(
     // ...and the კუთხის კონექტორი 25 სმ at outside corners closed with a ჩ5.
     const cc = cornerConnectorTotals(cornerConnectorSpots(doc.pieces, byId));
     // (the corner connectors are in the კონექტორი row above)
-    if (on.innerConnectors && vis.innerConnectors && cc.innerConnectors > 0) {
-      out.push({ sample: 'ბ.', label: SMALL_NUT_NAME, note: 'თითო შიდა კუთხის კონექტორზე', count: pcs(cc.smallNuts) });
+    const small = smallNutTotals(cornerConnectorSpots(doc.pieces, byId), doc.pieces, byId);
+    if (on.smallNuts && vis.smallNuts && small.total > 0) {
+      out.push({ icon: { type: 'nut' }, label: SMALL_NUT_NAME, note: 'თითო შიდა კუთხის კონექტორზე - ქანჩი + დისკოს ნაცვლად', count: pcs(small.total) });
     }
     const fullHead = findCornerRods(doc.pieces, byId).reduce((n, r) => n + r.count, 0);
     if (on.fullHead && vis.fullHead && fullHead > 0) {

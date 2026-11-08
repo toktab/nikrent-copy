@@ -3,7 +3,7 @@ import { boltKindOf, boltTotals } from './boltMarks';
 import { findCornerRods } from './bolts';
 import type { KindsOn } from './boltKinds';
 import { soloPanels, walerTotals } from './walers';
-import { cornerConnectorSpots, cornerConnectorTotals } from './cornerConnectors';
+import { cornerConnectorSpots, cornerConnectorTotals, smallNutTotals } from './cornerConnectors';
 
 /**
  * What every ჭანჭიკი is, for the რეკომენდაცია panel (the user, 2026-11-07):
@@ -193,7 +193,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
     per300: '5 ც. ერთ ადგილზე',
     per150: '2 ც. ერთ ადგილზე',
     example: 'შიდა კუთხის კონექტორი',
-    placing: 'ითვლება შიდა კუთხის კონექტორებიდან.',
+    placing: 'ავტომატურად - ჭანჭიკები → „ბარაშკა პატარა“: თითო ყოველ შიდა კუთხის კონექტორზე. ხელითაც, ელემენტებიდან. ჭანჭიკებში საკუთარი სტრიქონი აქვს, თვალით და PDF-ის გადამრთველით.',
     needs: [],
     usedBy: ['innerConnectors'],
   },
@@ -281,6 +281,6 @@ export function boltInfoCounts(
     halfHead: on.halfHead ? cc.halfHead : 0,
     fullHead: on.fullHead ? findCornerRods(pieces, byId).reduce((n, r) => n + r.count, 0) : 0,
     innerConnectors: on.innerConnectors ? cc.innerConnectors : 0,
-    smallNut: on.innerConnectors ? cc.smallNuts : 0,
+    smallNut: on.smallNuts ? smallNutTotals(cornerConnectorSpots(pieces, byId), pieces, byId).total : 0,
   };
 }
