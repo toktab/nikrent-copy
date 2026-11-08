@@ -1,8 +1,9 @@
 import { memo, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Material, Piece } from '../types';
 import { PlacedShapeSvg, placedBox } from './ShapeSvg';
-import { ClampGlyph, ConnectorGlyph, markRadiusPx, NutGlyph, RodGlyph } from './BoltLayer';
-import { isConnector, isPanelHolder, planW, type Rect } from '../lib/geometry';
+import { ClampGlyph, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
+import { isConnector, isPanelHolder, planH, planW, type Rect } from '../lib/geometry';
+import { useEditorStore } from '../store/useEditorStore';
 import { isCrocodile, isFrog } from '../lib/clamps';
 import { isLatch, isNut, isRod, outward, pieceCentre } from '../lib/bolts';
 
@@ -39,6 +40,8 @@ export const PieceView = memo(function PieceView({
   onPointerDown,
 }: Props) {
   const box = placedBox(piece, material);
+  // Drawn larger or smaller by its kind's size setting (ScaleField), about its middle.
+  const scale = useEditorStore((s) => s.materialScale[material.id] ?? 1);
   const connector = isConnector(material);
   const rod = isRod(material);
   const nut = isNut(material);
@@ -55,16 +58,18 @@ export const PieceView = memo(function PieceView({
     <div
       className={`piece${kind}${hand}${selected ? ' selected' : ''}${overlapping ? ' overlap' : ''}`}
       data-piece-id={piece.id}
-      style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
+      style={{ left: box.x, top: box.y, width: box.w, height: box.h, overflow: scale !== 1 ? 'visible' : undefined }}
       onPointerDown={(e) => onPointerDown(e, piece.id)}
     >
-      {connector ? (
-        <ConnectorPieceSvg piece={piece} material={material} box={box} zoom={zoom} atCorner={atCorner} />
-      ) : rod || nut || latch ? (
-        <FixingPieceSvg piece={piece} material={material} box={box} zoom={zoom} />
-      ) : (
-        <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
-      )}
+      <div className="piece-scale" style={scale !== 1 ? { transform: `scale(${scale})`, transformOrigin: '50% 50%', width: '100%', height: '100%' } : { width: '100%', height: '100%' }}>
+        {connector ? (
+          <ConnectorPieceSvg piece={piece} material={material} box={box} zoom={zoom} atCorner={atCorner} />
+        ) : rod || nut || latch ? (
+          <FixingPieceSvg piece={piece} material={material} box={box} zoom={zoom} />
+        ) : (
+          <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
+        )}
+      </div>
     </div>
   );
 });
@@ -149,7 +154,15 @@ export function ConnectorPieceSvg({
       style={{ display: 'block' }}
       aria-hidden="true"
     >
-      <ConnectorGlyph cx={c.x} cy={c.y} r={markRadiusPx(zoom) / zoom} px={1 / zoom} kind={atCorner ? 'corner' : 'tee'} />
+      {/* The size of the 40 სმ discs (the user, 2026-11-08): its catalog box,
+          not a fixed size on screen. */}
+      <ConnectorGlyph
+        cx={c.x}
+        cy={c.y}
+        r={(Math.min(planW(material), planH(material)) / 2) * 0.82}
+        px={1 / zoom}
+        kind={atCorner ? 'corner' : 'tee'}
+      />
     </svg>
   );
 }

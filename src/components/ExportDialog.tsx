@@ -87,6 +87,7 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
         sheet,
         scale: pdfScale,
         visibility: vis,
+        scales: useEditorStore.getState().materialScale,
         bom: bomOn ? buildBom(materials, pieces, documents, activeDocId) : null,
       });
       if (!result) {
@@ -246,7 +247,15 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
     const timer = setTimeout(() => {
       void import('../lib/drawingPdf')
         .then(({ renderDrawingSheet }) =>
-          renderDrawingSheet({ doc, materials, sheet, scale: pdfScale, visibility: vis, pxPerMm: PREVIEW_PX_PER_MM }),
+          renderDrawingSheet({
+            doc,
+            materials,
+            sheet,
+            scale: pdfScale,
+            visibility: vis,
+            pxPerMm: PREVIEW_PX_PER_MM,
+            scales: useEditorStore.getState().materialScale,
+          }),
         )
         .then((r) => {
           if (live) setPreview(r ? { url: r.dataUrl, scale: r.scale, rescaled: r.rescaled } : 'empty');

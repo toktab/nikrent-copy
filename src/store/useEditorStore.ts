@@ -201,6 +201,7 @@ const PREF_KEYS = [
   'showGaps',
   'showBolts',
   'boltsShown',
+  'materialScale',
   'walersShown',
   'cornerConnectorsShown',
   'halfHeadShown',
@@ -435,6 +436,14 @@ export interface EditorState {
   showBolts: boolean;
   /** each ჭანჭიკი kind shown on the plan or not - marks and placed pieces alike */
   boltsShown: BoltKinds;
+  /**
+   * How big each kind of piece is drawn, by material id - 1 is its catalog
+   * size (the user, 2026-11-08: a size adjuster in the inspector that resizes
+   * every piece of that kind). Looks only: counts, stock and the fill are
+   * untouched.
+   */
+  materialScale: Record<string, number>;
+  setMaterialScale: (materialId: string, scale: number) => void;
   /** the worked-out ვოლერები drawn behind panels with nothing facing them - see walers.ts */
   walersShown: boolean;
   /** the worked-out კუთხის კონექტორი 25 სმ at outside corners - see cornerConnectors.ts */
@@ -1157,6 +1166,7 @@ export const useEditorStore = create<EditorState>()(
         showGaps: false,
         showBolts: true,
         boltsShown: { ...ALL_BOLT_KINDS },
+        materialScale: {},
         walersShown: true,
         cornerConnectorsShown: true,
         halfHeadShown: true,
@@ -2490,6 +2500,14 @@ export const useEditorStore = create<EditorState>()(
           }),
         resetObjectVisibility: () => set({ objectVisibility: normalizeObjectVisibility(undefined) }),
         setWalersShown: (on) => set({ walersShown: on }),
+        setMaterialScale: (materialId, scale) =>
+          set((s) => {
+            const next = { ...s.materialScale };
+            const v = Math.round(Math.min(4, Math.max(0.25, scale)) * 100) / 100;
+            if (v === 1) delete next[materialId];
+            else next[materialId] = v;
+            return { materialScale: next };
+          }),
         alignToGrid: () => {
           const s = get();
           const byId = new Map(s.materials.map((m) => [m.id, m]));

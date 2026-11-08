@@ -85,6 +85,8 @@ export interface DrawingSheetOptions {
   visibility?: PdfVisibility;
   /** render density, px per mm; lower for an on-screen preview */
   pxPerMm?: number;
+  /** how big each kind is drawn, by material id - the inspector's size setting */
+  scales?: Record<string, number>;
 }
 
 export interface SheetResult {
@@ -209,6 +211,12 @@ export async function renderDrawingSheet(options: DrawingSheetOptions): Promise<
     latches: content.marks.latches,
     walers: content.marks.walers,
     cornerConnectors: content.marks.cornerConnectors,
+    scales: options.scales ?? {},
+    discR: (kind) => {
+      const id = kind === 'halfHead' ? 'rod-40-half-head' : kind === 'fullHead' ? 'corner-connector-40' : 'corner-connector';
+      const m = byId.get(id);
+      return ((m ? Math.min(m.w, m.h) : 8) / 2) * 0.82 * (options.scales?.[id] ?? 1);
+    },
   };
   const legendTop = paper.h - MARGIN_MM - titleH - legendH;
   const icons: PlacedIcon[] = [];
