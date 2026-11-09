@@ -6,7 +6,7 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, ConnectorGlyph, NutGlyph, RING, WingShape } from './BoltLayer';
 import { smallNutTotals } from '../lib/cornerConnectors';
-import { findCornerRods } from '../lib/bolts';
+import { fullHeadTotals } from '../lib/bolts';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
@@ -88,11 +88,11 @@ export function BoltsButton() {
   const setHalfShown = useEditorStore((s) => s.setHalfHeadShown);
   const fullShown = useEditorStore((s) => s.fullHeadShown);
   const setFullShown = useEditorStore((s) => s.setFullHeadShown);
-  const fullGroups = useMemo(() => {
-    const by = new Map<number, number>();
-    for (const r of findCornerRods(pieces, byId)) by.set(r.count, (by.get(r.count) ?? 0) + 1);
-    return [...by].map(([each, places]) => ({ places, each })).sort((a, b) => b.each - a.each);
-  }, [pieces, byId]);
+  // At inside corners and on the walers alike - one part, one row.
+  const fullGroups = useMemo(
+    () => fullHeadTotals(pieces, byId, { fullHead: on.fullHead, walers: on.walers }).groups,
+    [pieces, byId, on.fullHead, on.walers],
+  );
   const setWalersShown = useEditorStore((s) => s.setWalersShown);
   // The three connector kinds, one row: counted together, on and shown together.
   const connectorsOn = on.connectors || on.cornerConnectors || on.innerConnectors;
@@ -221,17 +221,21 @@ export function BoltsButton() {
           ვოლერები
         </span>
       </MenuItem>
+      {/* What the walers take. Two of the three are parts with rows of their
+          own and are counted there - shown here only as the walers' share
+          (the user, 2026-11-08: so no total is read twice). The ჩასაკეტი is
+          only here. */}
       {on.walers && walers.walers > 0 && (
         <div className="bolts-sub">
-          <span>{WALER_ROD_NAME}</span>
-          <span className="bolts-calc">{walers.walers} × 2 =</span>
-          <b>{walers.rods} ც.</b>
           <span>{WALER_LOCK_NAME}</span>
           <span className="bolts-calc">{walers.rods} × 1 =</span>
           <b>{walers.locks} ც.</b>
-          <span>ქანჩი + დისკო ვოლერზე</span>
+          <span className="bolts-included">შტირი 40 სმ მთლიანი თავით - შედის თავის სტრიქონში</span>
+          <span className="bolts-calc">{walers.walers} × 2 =</span>
+          <b className="bolts-included">{walers.rods} ც.</b>
+          <span className="bolts-included">ქანჩი + დისკო - შედის ზედა ქანჩი + დისკოში</span>
           <span className="bolts-calc">{walers.rods} × 1 =</span>
-          <b>{walers.nuts} ც.</b>
+          <b className="bolts-included">{walers.nuts} ც.</b>
         </div>
       )}
       {/* ...and where the corner is closed with a ჩ10, the half-head
@@ -261,11 +265,11 @@ export function BoltsButton() {
       {/* ...and where an inside corner's leg end faces an outer joint, the
           whole-head შტირი 40 სმ (წაჭრის გარეშე). */}
       <MenuItem
-        title="შიდა კუთხის ფეხის ბოლოს პირდაპირ, გარე ფასადის შეერთებასთან: შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
+        title="შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე), ყველგან: შიდა კუთხის ფეხის ბოლოს პირდაპირ (300-ზე 5, 150 / 90-ზე 2) და ვოლერზე 2 (ვოლერის შტირი - იგივე ნაწილია). ქანჩი + დისკო თითოზე"
         trail={
           <KindTrail
             groups={fullGroups}
-            on={on.fullHead}
+            on={on.fullHead || (on.walers && walers.walers > 0)}
             shown={fullShown}
             onEye={() => {
               if (!fullShown) setShowBolts(true);

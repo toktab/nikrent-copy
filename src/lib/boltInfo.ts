@@ -1,6 +1,6 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { boltKindOf, boltTotals } from './boltMarks';
-import { findCornerRods } from './bolts';
+import { fullHeadTotals } from './bolts';
 import type { KindsOn } from './boltKinds';
 import { soloPanels, walerTotals } from './walers';
 import { cornerConnectorSpots, cornerConnectorTotals, smallNutTotals } from './cornerConnectors';
@@ -89,7 +89,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
     example: 'შტირი × 2 + კონექტორები + ვოლერის შტირები + კუთხის კონექტორები',
     placing: 'ითვლება იმ ჭანჭიკებიდან, რომლებზეც დგება; ხელითაც შეიძლება დასმა.',
     needs: [],
-    usedBy: ['rods', 'connectors', 'walerRod', 'cornerConnectors', 'halfHead', 'fullHead'],
+    usedBy: ['rods', 'connectors', 'cornerConnectors', 'halfHead', 'fullHead'],
   },
   latches: {
     name: 'ჩამკეტი fix',
@@ -111,7 +111,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
     example: 'ცალმხრივი პანელი: |   (და არა | |)',
     placing: WORKED,
     needs: [
-      { id: 'walerRod', note: '2 თითო ვოლერზე' },
+      { id: 'fullHead', note: '2 თითო ვოლერზე - შტირი 40 სმ მთლიანი თავით, თავის სტრიქონში ითვლება' },
       { id: 'walerLock', note: '1 თითო ვოლერის შტირზე' },
       { id: 'nuts', note: '1 თითო ვოლერის შტირზე' },
     ],
@@ -140,7 +140,7 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
     example: 'ვოლერის შტირის თავი',
     placing: 'ითვლება ვოლერებიდან.',
     needs: [],
-    usedBy: ['walerRod', 'walers'],
+    usedBy: ['fullHead', 'walers'],
   },
   cornerConnectors: {
     name: 'კუთხის კონექტორი 25 სმ - გარე',
@@ -167,13 +167,16 @@ export const BOLT_INFO: Record<BoltInfoId, BoltInfo> = {
   fullHead: {
     name: 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)',
     what: '40 სმ შტირი მთლიანი (წაუჭრელი) თავით.',
-    use: 'შიდა კუთხეში: სადაც შიდა კუთხის ფეხის ბოლო გარე ფასადის შეერთების პირდაპირ დგას - გარე ფასადიდან კუთხის პროფილში გადის, ჩვეულებრივი შტირის ნაცვლად. ჩამკეტი fix არ სჭირდება.',
-    per300: '5 ც. ერთ ადგილზე',
-    per150: '2 ც. ერთ ადგილზე',
-    example: 'გარე: პანელი | პანელი ↔ შიდა: კუთხის ფეხი | პანელი',
+    use: 'ორ ადგილას, ერთი და იგივე ნაწილი: (1) შიდა კუთხეში - სადაც შიდა კუთხის ფეხის ბოლო გარე ფასადის შეერთების პირდაპირ დგას, გარე ფასადიდან კუთხის პროფილში, ჩვეულებრივი შტირის ნაცვლად (ჩამკეტი fix არ სჭირდება); (2) ვოლერზე - 2 თითოზე (ვოლერის შტირი). ორივე ერთ სტრიქონში ითვლება.',
+    per300: 'შიდა კუთხეში 5 ც. ადგილზე; ვოლერზე 3 ვოლერი × 2 = 6 ც. პანელზე',
+    per150: 'შიდა კუთხეში 2 ც. ადგილზე; ვოლერზე 2 ვოლერი × 2 = 4 ც. პანელზე',
+    example: 'გარე: პანელი | პანელი ↔ შიდა: კუთხის ფეხი | პანელი; ან ცალმხრივი პანელის ვოლერი',
     placing: WORKED,
-    needs: [{ id: 'nuts', note: '1 გარე ბოლოზე' }],
-    usedBy: [],
+    needs: [
+      { id: 'nuts', note: '1 თითოზე' },
+      { id: 'walerLock', note: 'ვოლერზე - 1 თითოს თავზე' },
+    ],
+    usedBy: ['walers'],
   },
   innerConnectors: {
     name: 'კუთხის კონექტორი 25 სმ - შიდა',
@@ -279,7 +282,7 @@ export function boltInfoCounts(
     walerLock: on.walers ? w.locks : 0,
     cornerConnectors: on.cornerConnectors ? cc.connectors : 0,
     halfHead: on.halfHead ? cc.halfHead : 0,
-    fullHead: on.fullHead ? findCornerRods(pieces, byId).reduce((n, r) => n + r.count, 0) : 0,
+    fullHead: fullHeadTotals(pieces, byId, on).total,
     innerConnectors: on.innerConnectors ? cc.innerConnectors : 0,
     smallNut: on.smallNuts ? smallNutTotals(cornerConnectorSpots(pieces, byId), pieces, byId).total : 0,
   };

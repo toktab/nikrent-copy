@@ -12,13 +12,13 @@ import { createSeedMaterials, SEED_IDS_IN_ORDER } from '../../data/seedCatalog';
 import { totalStock } from '../inventory';
 
 describe('seed catalog', () => {
-  it('has the 41 Du materials and the 5 ჭანჭიკი parts the count names', () => {
-    expect(createSeedMaterials()).toHaveLength(46);
+  it('has the 41 Du materials and the 4 ჭანჭიკი parts the count names', () => {
+    expect(createSeedMaterials()).toHaveLength(45);
   });
 
   it('gives every material a unique id', () => {
     const ids = createSeedMaterials().map((m) => m.id);
-    expect(new Set(ids).size).toBe(46);
+    expect(new Set(ids).size).toBe(45);
   });
 
   it('keeps the documented sizes', () => {

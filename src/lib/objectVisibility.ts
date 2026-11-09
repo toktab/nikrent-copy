@@ -47,7 +47,7 @@ export const DEFAULT_OBJECT_VISIBILITY: ObjectVisibility = {
  */
 const isNiangi = (m: Material) =>
   m.name.includes('ნიანგ') ||
-  ['rod-40-half-head', 'corner-connector-40', 'waler-rod-40', 'waler-rod-lock', 'acc-small-barashka'].includes(m.id) ||
+  ['rod-40-half-head', 'corner-connector-40', 'waler-rod-lock', 'acc-small-barashka'].includes(m.id) ||
   m.name.includes('თავით') ||
   m.name.includes('ბარაშკა') ||
   m.name.includes('ჩასაკეტი');

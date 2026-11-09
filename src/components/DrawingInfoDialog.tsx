@@ -4,7 +4,7 @@ import { buildBom } from '../lib/bom';
 import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
-import { findCornerRods } from '../lib/bolts';
+import { fullHeadTotals } from '../lib/bolts';
 import { smallNutTotals } from '../lib/cornerConnectors';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 import { isConfigured } from '../lib/supabase';
@@ -69,14 +69,14 @@ export function DrawingInfoDialog() {
   const boltRows = BOLT_NAMES.filter(([k]) => countOf(k) > 0);
   const walerRows: Array<[string, number]> = [];
   if (on.halfHead && cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
-  const full = findCornerRods(pieces, new Map(materials.map((m) => [m.id, m]))).reduce((n, r) => n + r.count, 0);
-  if (on.fullHead && full) walerRows.push([FULL_HEAD_NAME, full]);
+  // At inside corners and on the walers - one part (the user, 2026-11-08).
+  const full = fullHeadTotals(pieces, new Map(materials.map((m) => [m.id, m])), on).total;
+  if (full) walerRows.push([FULL_HEAD_NAME, full]);
   const small = smallNutTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))), pieces, new Map(materials.map((m) => [m.id, m])));
   if (on.smallNuts && small.total) walerRows.push([SMALL_NUT_NAME, small.total]);
   walerRows.push(...(on.walers && walers.walers
     ? [
         ['ვოლერი', walers.walers],
-        [WALER_ROD_NAME, walers.rods],
         [WALER_LOCK_NAME, walers.locks],
       ]
     : []) as Array<[string, number]>);

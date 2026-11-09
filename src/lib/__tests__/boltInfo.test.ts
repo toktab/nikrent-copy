@@ -29,7 +29,7 @@ describe('ჭანჭიკი cards', () => {
     expect(of('acc-latch-adjustable')).toBe('crocodiles');
     expect(of('acc-frog')).toBe('frogs');
     expect(of('acc-panel-concrete-anchor')).toBe('holders');
-    expect(of('waler-rod-40')).toBe('walerRod');
+    expect(of('waler-rod-lock')).toBe('walerLock');
     expect(of('waler-rod-lock')).toBe('walerLock');
     expect(of('rod-40-half-head')).toBe('halfHead');
     expect(of('acc-small-barashka')).toBe('smallNut');
@@ -64,5 +64,17 @@ describe('ბარაშკა პატარა - its own kind (the user, 202
     const inner = { dir: 'h' as const, at: 0, from: 0, to: 25, outer: { x: 0, y: 0 }, filler: 5, inner: true, count: 5, takeOff: [] };
     const outer = { ...inner, inner: false };
     expect(smallNutTotals([inner, outer], pieces, byId)).toEqual({ total: 10, groups: [{ places: 2, each: 5 }] });
+  });
+});
+
+describe('the waler rod is the შტირი 40 სმ მთლიანი თავით (the user, 2026-11-08)', () => {
+  it('counts in its row: two on every waler, with the corner ones', async () => {
+    const { fullHeadTotals } = await import('../bolts');
+    const byId = new Map(SEED_MATERIALS.map((m) => [m.id, m]));
+    // A lone 300: 3 walers, 6 rods.
+    const pieces = [{ id: 'p', materialId: 'panel-90x300', x: 0, y: 0, rot: 0 }];
+    expect(fullHeadTotals(pieces, byId, { fullHead: true, walers: true })).toMatchObject({ total: 6, walers: 6 });
+    expect(fullHeadTotals(pieces, byId, { fullHead: true, walers: false }).total).toBe(0);
+    expect(SEED_MATERIALS.some((m) => m.id === 'waler-rod-40')).toBe(false);
   });
 });

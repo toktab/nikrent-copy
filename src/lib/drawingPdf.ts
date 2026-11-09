@@ -21,7 +21,7 @@ import { CATEGORY_ORDER } from '../data/categories';
 import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
 import { cornerConnectorBars, walerBars, type CornerConnectorBar, type WalerBar } from './workedMarks';
 import { normalizeKindsOn } from './boltKinds';
-import { findCornerRods } from './bolts';
+import { findCornerRods, fullHeadTotals } from './bolts';
 import { frogsAtOuterCorners } from './clamps';
 import { smallNutTotals } from './cornerConnectors';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from './cornerConnectors';
@@ -508,7 +508,7 @@ function legendEntries(
     const on = normalizeKindsOn(doc.info?.bolts);
     if (on.walers && vis.walers && walers.walers > 0) {
       out.push({ sample: 'ვოლ.', label: 'ვოლერი', note: '300-ზე 3, 150 / 90-ზე 2 - ცალმხრივ პანელზე', count: pcs(walers.walers) });
-      out.push({ sample: '40', label: WALER_ROD_NAME, note: 'ვოლერზე 2', count: pcs(walers.rods) });
+
       out.push({ sample: 'ჩას.', label: WALER_LOCK_NAME, note: 'თითო შტირზე', count: pcs(walers.locks) });
     }
     // ...and the კუთხის კონექტორი 25 სმ at outside corners closed with a ჩ5.
@@ -518,9 +518,13 @@ function legendEntries(
     if (on.smallNuts && vis.smallNuts && small.total > 0) {
       out.push({ icon: { type: 'nut' }, label: SMALL_NUT_NAME, note: 'თითო შიდა კუთხის კონექტორზე - ქანჩი + დისკოს ნაცვლად', count: pcs(small.total) });
     }
-    const fullHead = findCornerRods(doc.pieces, byId).reduce((n, r) => n + r.count, 0);
-    if (on.fullHead && vis.fullHead && fullHead > 0) {
-      out.push({ icon: { type: 'connector', kind: 'tee', head: 'full' }, label: FULL_HEAD_NAME, note: 'შიდა კუთხის ფეხთან - 300-ზე 5, 150 / 90-ზე 2', count: pcs(fullHead) });
+    // At inside corners and on the walers - one part, one row (2026-11-08).
+    const fullHead = fullHeadTotals(doc.pieces, byId, {
+      fullHead: on.fullHead && vis.fullHead,
+      walers: on.walers && vis.walers,
+    }).total;
+    if (fullHead > 0) {
+      out.push({ icon: { type: 'connector', kind: 'tee', head: 'full' }, label: FULL_HEAD_NAME, note: 'შიდა კუთხის ფეხთან (300-ზე 5, 150 / 90-ზე 2) და ვოლერზე 2', count: pcs(fullHead) });
     }
     if (on.halfHead && vis.halfHead && cc.halfHead > 0) {
       out.push({ icon: { type: 'connector', kind: 'tee', head: 'half' }, label: HALF_HEAD_NAME, note: 'გარე კუთხე ჩ10-ით - 300-ზე 5, 150 / 90-ზე 2', count: pcs(cc.halfHead) });
