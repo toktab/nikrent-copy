@@ -161,30 +161,42 @@ const ROD_CM = 1.6;
  * (units per cm), but never smaller than a few of `px` (units per screen
  * pixel), so it stays readable zoomed out.
  */
+/** The ბარაშკა პატარა's colours: the default nut's, in bronze-brown (the user, 2026-11-08). */
+const SMALL = {
+  washer: { fill: '#b08257', stroke: '#5a3a1c' },
+  nut: { fill: '#7a5230', stroke: '#3d2610' },
+  wing: { fill: '#d1a77a', stroke: '#6b4523' },
+  wingHole: '#7a5230',
+};
+
 export function NutGlyph({
   x,
   y,
   rot,
   scale,
   px = 1,
+  brown = false,
 }: {
   x: number;
   y: number;
   rot: number;
   scale: number;
   px?: number;
+  /** the ბარაშკა პატარა, brown so it reads apart from the default ქანჩი + დისკო */
+  brown?: boolean;
 }) {
+  const col = brown ? SMALL : C;
   const wt = Math.max(WASHER_T_CM * scale, 2 * px);
   const ww = Math.max(WASHER_CM * scale, 9 * px);
   const nut = Math.max(NUT_CM * scale, 4 * px);
   const hub = Math.max(WING_HUB_CM * scale, 4 * px);
   const wings = Math.max(WING_SPAN_CM * scale, 11 * px);
   return (
-    <g className="nut-glyph" transform={`translate(${x} ${y}) rotate(${rot})`}>
-      <rect className="nut-washer" fill={C.washer.fill} stroke={C.washer.stroke} x={0} y={-ww / 2} width={wt} height={ww} rx={wt / 3} style={{ strokeWidth: px }} />
-      <rect className="nut-nut" fill={C.nut.fill} stroke={C.nut.stroke} x={wt} y={-nut / 2} width={nut} height={nut} rx={nut / 5} style={{ strokeWidth: px }} />
+    <g className={`nut-glyph${brown ? ' brown' : ''}`} transform={`translate(${x} ${y}) rotate(${rot})`}>
+      <rect className="nut-washer" fill={col.washer.fill} stroke={col.washer.stroke} x={0} y={-ww / 2} width={wt} height={ww} rx={wt / 3} style={{ strokeWidth: px }} />
+      <rect className="nut-nut" fill={col.nut.fill} stroke={col.nut.stroke} x={wt} y={-nut / 2} width={nut} height={nut} rx={nut / 5} style={{ strokeWidth: px }} />
       <g transform={`translate(${wt + nut + hub / 2} 0)`}>
-        <WingShape hub={hub} wings={wings} px={px} />
+        <WingShape hub={hub} wings={wings} px={px} brown={brown} />
       </g>
     </g>
   );
@@ -195,14 +207,15 @@ export function NutGlyph({
  * rounded hub and two lobes, in the hub's own units. The end of every
  * ქანჩი + დისკო.
  */
-export function WingShape({ hub, wings, px = 1 }: { hub: number; wings: number; px?: number }) {
+export function WingShape({ hub, wings, px = 1, brown = false }: { hub: number; wings: number; px?: number; brown?: boolean }) {
   const lobe = wings / 2 - hub / 2;
   const w = hub * 0.55;
+  const col = brown ? SMALL : C;
   return (
     <g className="wing-shape" style={{ strokeWidth: px }}>
-      <rect className="wing-lobe" fill={C.wing.fill} stroke={C.wing.stroke} x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
-      <rect className="wing-hub" fill={C.wing.fill} stroke={C.wing.stroke} x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
-      <circle className="wing-hole" fill={C.wingHole} r={Math.max(hub * 0.16, lobe * 0.05)} />
+      <rect className="wing-lobe" fill={col.wing.fill} stroke={col.wing.stroke} x={-w / 2} y={-wings / 2} width={w} height={wings} rx={w / 2} />
+      <rect className="wing-hub" fill={col.wing.fill} stroke={col.wing.stroke} x={-hub / 2} y={-hub / 2} width={hub} height={hub} rx={hub / 3} />
+      <circle className="wing-hole" fill={col.wingHole} r={Math.max(hub * 0.16, lobe * 0.05)} />
     </g>
   );
 }

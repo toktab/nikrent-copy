@@ -79,7 +79,7 @@ import {
 import { boltKindOf } from '../lib/boltMarks';
 import { isMaterialShown } from '../lib/objectVisibility';
 import { isPost, snapPost } from '../lib/posts';
-import { isCrocodile, isFrog, snapClamp } from '../lib/clamps';
+import { frogsAtOuterCorners, isCrocodile, isFrog, snapClamp } from '../lib/clamps';
 import { spanAt } from '../lib/span';
 import { WalerLayer } from './WalerLayer';
 import { CornerConnectorLayer } from './CornerConnectorLayer';
@@ -252,7 +252,11 @@ export function StageCanvas() {
     [showOverlaps, elevation, pieces, byId],
   );
   const atCorners = useMemo(
-    () => (elevation ? new Set<string>() : connectorsAtCorners(pieces, byId)),
+    // ...and the ბაყაყი on a გარე კუთხე 300, drawn red (the user, 2026-11-08).
+    () =>
+      elevation
+        ? new Set<string>()
+        : new Set([...connectorsAtCorners(pieces, byId), ...frogsAtOuterCorners(pieces, byId)]),
     [elevation, pieces, byId],
   );
   const ranks = useMemo(

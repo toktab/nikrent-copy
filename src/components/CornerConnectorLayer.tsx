@@ -128,6 +128,7 @@ export function CornerConnectorLayer() {
               y={y}
               rot={s.dir === 'h' ? (out < 0 ? 180 : 0) : out < 0 ? 270 : 90}
               scale={zoom * 0.6 * (scales['acc-small-barashka'] ?? 1)}
+              brown
             />
           </g>
         );

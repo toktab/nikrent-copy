@@ -302,7 +302,7 @@ export function BoltsButton() {
         <span className={`bolts-kind${on.smallNuts ? '' : ' off'}`}>
           <svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">
             <g transform="translate(-4 0)">
-              <NutGlyph x={0} y={0} rot={0} scale={0.9} px={0.4} />
+              <NutGlyph x={0} y={0} rot={0} scale={0.9} px={0.4} brown />
             </g>
           </svg>
           {SMALL_NUT_NAME}

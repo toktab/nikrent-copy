@@ -191,7 +191,15 @@ function Drawing({ d }: { d: SheetDrawing }) {
         if (kind && kind !== 'holders' && kind !== 'crocodiles' && kind !== 'frogs' && kind !== 'props') {
           return sized(<FixingBody key={piece.id} piece={piece} material={material} px={px} />);
         }
-        return sized(<PlacedShapeBody key={piece.id} piece={piece} material={material} strokeWidth={OUTLINE_MM * k} />);
+        return sized(
+          <PlacedShapeBody
+            key={piece.id}
+            piece={piece}
+            material={material}
+            strokeWidth={OUTLINE_MM * k}
+            red={kind === 'frogs' && d.atCorners.has(piece.id)}
+          />,
+        );
       })}
 
       {/* The worked-out ვოლერები behind the panels nothing faces, and the

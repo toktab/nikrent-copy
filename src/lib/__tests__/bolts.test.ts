@@ -79,21 +79,14 @@ describe('findBolts', () => {
     expect(findBolts([top, upright('panel-60x300', 40, 14)], byId)).toHaveLength(0);
   });
 
-  it('bolts an inner corner where its leg ends on a ჩაკერება 5', () => {
-    const corner = put('corner-inner-20x20x300', 0, 0); // foot ends at x 20, y 11..20
-    const filler = put('filler-5x300', 20, 11);
-    const bolts = findBolts([corner, filler], byId);
-    expect(bolts).toHaveLength(1);
-    expect(bolts[0]).toMatchObject({ kind: 'corner', x: 20, y: 15.5 });
-  });
-
-  it('and on a ჩაკერება 10 at the end of the other leg, turned', () => {
-    const corner = put('corner-inner-20x20x300', 0, 0, 90);
-    // Turned 90° the L's upright leg end moves to the right side, x 20, y 0..9.
-    const filler = put('filler-10x300', 20, 0);
-    expect(findBolts([corner, filler], byId)).toEqual([
-      expect.objectContaining({ kind: 'corner', x: 20, y: 4.5 }),
-    ]);
+  // The user, 2026-11-08: an inner corner's leg on a ჩ5 / ჩ10 takes its
+  // კუთხის კონექტორი 25 სმ - შიდა (cornerConnectors.ts), not a კონექტორი as
+  // well - that was the same connector twice.
+  it('no longer bolts an inner corner where its leg ends on a ჩაკერება 5 or 10', () => {
+    const corner = put('corner-inner-20x20x300', 0, 0);
+    expect(findBolts([corner, put('filler-5x300', 20, 11)], byId)).toHaveLength(0);
+    const turned = put('corner-inner-20x20x300', 0, 0, 90);
+    expect(findBolts([turned, put('filler-10x300', 20, 0)], byId)).toHaveLength(0);
   });
 
   it('does not bolt a filler that is beside the corner but not at a leg end', () => {
