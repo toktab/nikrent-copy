@@ -37,7 +37,7 @@ export function ShapeSvg({ material: m, width, height, strokeWidth = 1, opacity 
 }
 
 /** The shape itself, in the material's own cm space with its origin top-left. */
-function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWidth: number }) {
+function ShapeBody({ material: m, strokeWidth, red = false }: { material: Material; strokeWidth: number; red?: boolean }) {
   const stroke = 'rgba(0,0,0,.55)';
   // Plan view: a piece occupies w × depth on screen (h is its vertical height).
   const pw = planW(m);
@@ -69,7 +69,7 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
   if (isSmallNutPart(m)) {
     const sc = Math.min(pw, ph) / (Math.max(WASHER_CM, WING_SPAN_CM) + 1) * 0.8;
     const long = WASHER_T_CM + NUT_CM + WING_HUB_CM;
-    return <NutGlyph x={pw / 2 - (long * sc) / 2} y={ph / 2} rot={0} scale={sc} px={strokeWidth / 2} />;
+    return <NutGlyph x={pw / 2 - (long * sc) / 2} y={ph / 2} rot={0} scale={sc} px={strokeWidth / 2} brown />;
   }
   // ...the two 40 სმ heads as their discs...
   if (isHalfHeadPart(m) || isFullHeadPart(m)) {
@@ -86,7 +86,7 @@ function ShapeBody({ material: m, strokeWidth }: { material: Material; strokeWid
   }
   // ...the ნიანგი and ბაყაყი as the clamps they are...
   if (isCrocodile(m)) return <CrocodileShape w={pw} h={ph} px={strokeWidth} />;
-  if (isFrog(m)) return <FrogShape w={pw} h={ph} px={strokeWidth} />;
+  if (isFrog(m)) return <FrogShape w={pw} h={ph} px={strokeWidth} red={red} />;
 
   // ...and the პანელის ბეტონზე სამაგრი as the user drew it.
   if (isPanelHolder(m)) return <PanelHolderShape w={pw} h={ph} px={strokeWidth} />;
@@ -170,20 +170,23 @@ export function CrocodileShape({ w, h, px }: { w: number; h: number; px: number 
  * face: a round body over the joint, two legs splayed out to grip the frames
  * of the panels either side, and its eyes on the face.
  */
-export function FrogShape({ w, h, px }: { w: number; h: number; px: number }) {
+export function FrogShape({ w, h, px, red = false }: { w: number; h: number; px: number; red?: boolean }) {
   const sw = Math.max(px, Math.min(w, h) * 0.07);
   const cx = w / 2;
   const foot = Math.min(w, h) * 0.16;
+  // Red on a გარე კუთხე 300: it stands for the twelve that corner takes.
+  const skin = red ? '#e5484d' : '#8bc34a';
+  const line = red ? '#7a1a1a' : '#3d6b12';
   return (
     <g strokeLinecap="round" strokeLinejoin="round">
       <rect x={0} y={0} width={w} height={h} fill="rgba(0, 0, 0, 0)" stroke="none" />
-      <polyline points={`${cx - w * 0.16},${h * 0.7} ${w * 0.16},${h * 0.92} ${foot},${foot}`} fill="none" stroke="#3d6b12" strokeWidth={sw * 1.6} />
-      <polyline points={`${cx + w * 0.16},${h * 0.7} ${w * 0.84},${h * 0.92} ${w - foot},${foot}`} fill="none" stroke="#3d6b12" strokeWidth={sw * 1.6} />
-      <circle cx={foot} cy={foot} r={foot} fill="#8bc34a" stroke="#3d6b12" strokeWidth={sw} />
-      <circle cx={w - foot} cy={foot} r={foot} fill="#8bc34a" stroke="#3d6b12" strokeWidth={sw} />
-      <ellipse cx={cx} cy={h * 0.58} rx={w * 0.2} ry={h * 0.4} fill="#8bc34a" stroke="#3d6b12" strokeWidth={sw} />
-      <circle cx={cx - w * 0.08} cy={h * 0.3} r={h * 0.15} fill="#ffffff" stroke="#3d6b12" strokeWidth={sw * 0.6} />
-      <circle cx={cx + w * 0.08} cy={h * 0.3} r={h * 0.15} fill="#ffffff" stroke="#3d6b12" strokeWidth={sw * 0.6} />
+      <polyline points={`${cx - w * 0.16},${h * 0.7} ${w * 0.16},${h * 0.92} ${foot},${foot}`} fill="none" stroke={line} strokeWidth={sw * 1.6} />
+      <polyline points={`${cx + w * 0.16},${h * 0.7} ${w * 0.84},${h * 0.92} ${w - foot},${foot}`} fill="none" stroke={line} strokeWidth={sw * 1.6} />
+      <circle cx={foot} cy={foot} r={foot} fill={skin} stroke={line} strokeWidth={sw} />
+      <circle cx={w - foot} cy={foot} r={foot} fill={skin} stroke={line} strokeWidth={sw} />
+      <ellipse cx={cx} cy={h * 0.58} rx={w * 0.2} ry={h * 0.4} fill={skin} stroke={line} strokeWidth={sw} />
+      <circle cx={cx - w * 0.08} cy={h * 0.3} r={h * 0.15} fill="#ffffff" stroke={line} strokeWidth={sw * 0.6} />
+      <circle cx={cx + w * 0.08} cy={h * 0.3} r={h * 0.15} fill="#ffffff" stroke={line} strokeWidth={sw * 0.6} />
       <circle cx={cx - w * 0.08} cy={h * 0.28} r={h * 0.06} fill="#1b1b1b" stroke="none" />
       <circle cx={cx + w * 0.08} cy={h * 0.28} r={h * 0.06} fill="#1b1b1b" stroke="none" />
     </g>
@@ -246,11 +249,14 @@ export function PlacedShapeSvg({
   material: m,
   box,
   strokeWidth = 1,
+  red = false,
 }: {
   piece: Piece;
   material: Material;
   box: Rect;
   strokeWidth?: number;
+  /** a ბაყაყი on a გარე კუთხე 300 */
+  red?: boolean;
 }) {
   return (
     <svg
@@ -261,7 +267,7 @@ export function PlacedShapeSvg({
       style={{ display: 'block' }}
       aria-hidden="true"
     >
-      <PlacedShapeBody piece={piece} material={m} strokeWidth={strokeWidth} />
+      <PlacedShapeBody piece={piece} material={m} strokeWidth={strokeWidth} red={red} />
     </svg>
   );
 }
@@ -274,10 +280,12 @@ export function PlacedShapeBody({
   piece,
   material: m,
   strokeWidth = 1,
+  red = false,
 }: {
   piece: Piece;
   material: Material;
   strokeWidth?: number;
+  red?: boolean;
 }) {
   const pw = planW(m);
   const ph = planH(m);
@@ -285,7 +293,7 @@ export function PlacedShapeBody({
     <g
       transform={`translate(${piece.x + pw / 2} ${piece.y + ph / 2}) rotate(${piece.rot}) translate(${-pw / 2} ${-ph / 2})`}
     >
-      <ShapeBody material={m} strokeWidth={strokeWidth} />
+      <ShapeBody material={m} strokeWidth={strokeWidth} red={red} />
     </g>
   );
 }

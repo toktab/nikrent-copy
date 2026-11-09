@@ -198,19 +198,12 @@ export function findBolts(pieces: Piece[], byId: Map<string, Material>): Bolt[] 
     }
   }
 
-  // Inner corner legs ending on a ჩაკერება 5 / 10.
-  for (const c of corners) {
-    const ends = cornerLegEnds(c.p, c.m);
-    for (const fl of fillers) {
-      if (!sameCourse(c.p, fl.p)) continue;
-      for (const e of ends) {
-        for (const f of sides(fl.r)) {
-          const s = stretch(e, f);
-          if (s) add(s, 'corner', c.p, fl.p);
-        }
-      }
-    }
-  }
+  // No longer: an inner corner leg ending on a ჩაკერება 5 / 10. That place
+  // has its კუთხის კონექტორი 25 სმ - შიდა, worked out with its ბარაშკა
+  // პატარა (cornerConnectors.ts); a კონექტორი here as well was the same
+  // connector twice (the user, 2026-11-08).
+  void corners;
+  void fillers;
 
   return out;
 }

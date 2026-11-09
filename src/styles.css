@@ -6799,3 +6799,44 @@ kbd {
 .bolt-layer .cc-mark.pickable .cc-bar {
   pointer-events: none;
 }
+
+/* A picked ჭანჭიკი gets an × at its corner, to take it off there and then
+   (the user, 2026-11-08). Sized in world cm by the piece, so a screen size. */
+.piece .piece-x {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-style: solid;
+  border-color: #fff;
+  border-radius: 50%;
+  background: #e5484d;
+  color: #fff;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.piece .piece-x:hover {
+  background: #c62f35;
+}
+
+/* The ბარაშკა პატარა: the nut drawn brown, over the default nut colours. */
+.nut-glyph.brown .nut-washer {
+  fill: #b08257;
+  stroke: #5a3a1c;
+}
+.nut-glyph.brown .nut-nut {
+  fill: #7a5230;
+  stroke: #3d2610;
+}
+.nut-glyph.brown .wing-lobe,
+.nut-glyph.brown .wing-hub {
+  fill: #d1a77a;
+  stroke: #6b4523;
+}
+.nut-glyph.brown .wing-hole {
+  fill: #7a5230;
+}

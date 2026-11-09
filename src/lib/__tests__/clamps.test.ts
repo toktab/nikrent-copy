@@ -78,3 +78,16 @@ describe('ნიანგი and ბაყაყი - placed and counted', () =>
     expect(clampEach({ ...p, x: 500 }, frog, [...pieces, p], byId)).toBe(2);
   });
 });
+
+describe('ბაყაყი on a გარე კუთხე 300 (the user, 2026-11-08)', () => {
+  it('the reset puts one across the bend, red, counted 12', async () => {
+    const { frogsAtOuterCorners } = await import('../clamps');
+    const pieces = [put('corner-outer-300', 0, 0, 90)];
+    const out = materializeBolts(pieces, byId, SEED_MATERIALS, 'frogs', () => `n${n++}`).pieces;
+    const frogs = out.filter((p) => p.materialId === frog.id);
+    expect(frogs).toHaveLength(1);
+    expect(frogs[0].rot).toBe(135);
+    expect(frogsAtOuterCorners(out, byId).has(frogs[0].id)).toBe(true);
+    expect(boltTotals(out, byId, { ...normalizeKindsOn({}), frogs: true }).frogs).toBe(12);
+  });
+});

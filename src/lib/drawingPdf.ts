@@ -22,6 +22,7 @@ import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './wale
 import { cornerConnectorBars, walerBars, type CornerConnectorBar, type WalerBar } from './workedMarks';
 import { normalizeKindsOn } from './boltKinds';
 import { findCornerRods } from './bolts';
+import { frogsAtOuterCorners } from './clamps';
 import { smallNutTotals } from './cornerConnectors';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from './cornerConnectors';
 import { CONNECTOR_R_CM, SheetSvg, type LegendIcon, type PlacedIcon, type SheetDrawing } from '../components/PdfSheetSvg';
@@ -396,7 +397,11 @@ function sheetContent(
   return {
     pieces,
     formwork,
-    atCorners: vis.connectors ? connectorsAtCorners(doc.pieces, byId) : new Set(),
+    // ...and the ბაყაყი on a გარე კუთხე 300, drawn red.
+    atCorners: new Set([
+      ...(vis.connectors ? connectorsAtCorners(doc.pieces, byId) : []),
+      ...frogsAtOuterCorners(doc.pieces, byId),
+    ]),
     marks,
     markRects,
     markBounds,

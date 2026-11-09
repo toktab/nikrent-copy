@@ -32,6 +32,41 @@ export function isFrog(m: Material): boolean {
 
 export const isClampOf = (kind: ClampKind) => (kind === 'crocodiles' ? isCrocodile : isFrog);
 
+/**
+ * A გარე კუთხე 300 - the thin outside-corner angle. Each one takes 12 ბაყაყი
+ * (the user, 2026-11-08): one is drawn, across the inside of its bend, red,
+ * and counts 12.
+ */
+export function isOuterCorner300(m: Material): boolean {
+  return m.category === 'corner' && m.shape === 'L' && m.name.includes('გარე') && m.h >= 250;
+}
+
+/** ბაყაყი on one გარე კუთხე 300. */
+export const FROGS_PER_OUTER_CORNER = 12;
+
+/** The ბაყაყი standing on a გარე კუთხე 300 - drawn red. */
+export function frogsAtOuterCorners(pieces: Piece[], byId: Map<string, Material>): Set<string> {
+  const corners: Array<{ r: Rect; z: number }> = [];
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (m && isOuterCorner300(m)) corners.push({ r: pieceBounds(p, m), z: Math.round(p.z ?? 0) });
+  }
+  const out = new Set<string>();
+  if (!corners.length) return out;
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || !isFrog(m)) continue;
+    const r = pieceBounds(p, m);
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+    const z = Math.round(p.z ?? 0);
+    if (corners.some((c) => c.z === z && cx >= c.r.x - 1 && cx <= c.r.x + c.r.w + 1 && cy >= c.r.y - 1 && cy <= c.r.y + c.r.h + 1)) {
+      out.add(p.id);
+    }
+  }
+  return out;
+}
+
 /** How many up one place: 4 up a 300, 2 up a 150 or a 90. */
 export function clampsUpHeight(h: number): number {
   return h >= 250 ? 4 : 2;
@@ -159,13 +194,25 @@ export function clampSpots(
 ): ClampSpot[] {
   const panels: Part[] = [];
   const fillers: Part[] = [];
+  const out: ClampSpot[] = [];
   for (const p of pieces) {
     const pm = byId.get(p.materialId);
     if (!pm || !upright(p)) continue;
     if (pm.category === 'panel') panels.push(part(p, pm));
     else if (pm.category === 'filler') fillers.push(part(p, pm));
+    else if (kind === 'frogs' && isOuterCorner300(pm)) {
+      // Across the inside of the angle's bend, turned a half-quarter, its body
+      // towards the bend - 12 to a corner (the user, 2026-11-08).
+      const r = pieceBounds(p, pm);
+      out.push({
+        x: r.x + r.w / 2,
+        y: r.y + r.h / 2,
+        rot: normalizeRot(p.rot + 45),
+        z: Math.round(p.z ?? 0),
+        each: FROGS_PER_OUTER_CORNER,
+      });
+    }
   }
-  const out: ClampSpot[] = [];
   for (const a of panels) {
     for (const b of panels) {
       if (a === b || !inLine(a, b) || b.lo < a.hi - TOUCH) continue;
@@ -235,6 +282,10 @@ export function snapClamp(
  * on its course - the place it is on - and 2 where it touches none.
  */
 export function clampEach(p: Piece, m: Material, pieces: Piece[], byId: Map<string, Material>): number {
+  // On a გარე კუთხე 300: the twelve that corner takes.
+  if (isFrog(m) && frogsAtOuterCorners([p, ...pieces.filter((q) => q.id !== p.id)], byId).has(p.id)) {
+    return FROGS_PER_OUTER_CORNER;
+  }
   const r = pieceBounds(p, m);
   const z = Math.round(p.z ?? 0);
   let h = 0;

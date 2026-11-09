@@ -5,6 +5,7 @@ import { ClampGlyph, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
 import { isConnector, isPanelHolder, planH, planW, type Rect } from '../lib/geometry';
 import { useEditorStore } from '../store/useEditorStore';
 import { isCrocodile, isFrog } from '../lib/clamps';
+import { boltKindOf } from '../lib/boltMarks';
 import { isLatch, isNut, isRod, outward, pieceCentre } from '../lib/bolts';
 
 interface Props {
@@ -67,9 +68,26 @@ export const PieceView = memo(function PieceView({
         ) : rod || nut || latch ? (
           <FixingPieceSvg piece={piece} material={material} box={box} zoom={zoom} />
         ) : (
-          <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} />
+          <PlacedShapeSvg piece={piece} material={material} box={box} strokeWidth={1 / zoom} red={atCorner && isFrog(material)} />
         )}
       </div>
+      {/* A picked ჭანჭიკი gets an × to take it off right there (the user, 2026-11-08). */}
+      {selected && boltKindOf(material) && (
+        <button
+          type="button"
+          className="piece-x"
+          title="წაშლა"
+          aria-label="წაშლა"
+          style={{ width: 16 / zoom, height: 16 / zoom, top: -9 / zoom, right: -9 / zoom, fontSize: 12 / zoom, borderWidth: 1 / zoom }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            useEditorStore.getState().deleteSelected();
+          }}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 });
