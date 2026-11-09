@@ -30,7 +30,8 @@ const MIN_COVER = 1 / 3;
 export const WALER_RODS_EACH = 2;
 /** The `Piece.boltsOff` entry on a panel whose waler was taken off by hand. */
 export const WALER_OFF = 'waler';
-export const WALER_ROD_NAME = 'ვოლერის შტირი 40 სმ (მთლიანი თავით)';
+/** The waler's rod is the შტირი 40 სმ მთლიანი თავით - one part (the user, 2026-11-08). */
+export const WALER_ROD_NAME = 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
 export const WALER_LOCK_NAME = 'ვოლერის შტირის თავის ჩასაკეტი';
 
 /** Walers up one panel: three up a 300, two up anything shorter (150, 90). */

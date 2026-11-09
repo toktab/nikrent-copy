@@ -26,7 +26,7 @@ describe('built-ins', () => {
     const ids = useEditorStore.getState().materials.map((m) => m.id);
     expect(ids).toContain('mine');
     expect(ids).toContain('corner-outer-300');
-    expect(ids).toContain('waler-rod-40');
+    expect(ids).toContain('waler-rod-lock');
   });
 
   it('come back from the server for someone who may save the catalog', () => {

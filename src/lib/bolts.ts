@@ -659,6 +659,36 @@ export function findCornerRods(pieces: Piece[], byId: Map<string, Material>, all
   return [...allRods(pieces, byId, all).filter((r) => r.corner), ...placed];
 }
 
+/**
+ * Every შტირი 40 სმ მთლიანი თავით the drawing needs, wherever it goes (the
+ * user, 2026-11-08: the ვოლერის შტირი 40 სმ is the same part): at inside
+ * corner leg ends (`findCornerRods`, with the fullHead kind on) and two on
+ * every ვოლერი (with the walers on). One total, so nothing is counted twice;
+ * `walers` is how many of it are the walers'.
+ */
+export function fullHeadTotals(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  on: { fullHead: boolean; walers: boolean },
+): { total: number; walers: number; groups: Array<{ places: number; each: number }> } {
+  const each: number[] = [];
+  if (on.fullHead) for (const r of findCornerRods(pieces, byId)) each.push(r.count);
+  let fromWalers = 0;
+  if (on.walers) {
+    for (const s of soloPanels(pieces, byId)) {
+      each.push(s.walers * 2);
+      fromWalers += s.walers * 2;
+    }
+  }
+  const by = new Map<number, number>();
+  for (const n of each) by.set(n, (by.get(n) ?? 0) + 1);
+  return {
+    total: each.reduce((a, b) => a + b, 0),
+    walers: fromWalers,
+    groups: [...by].map(([e, places]) => ({ places, each: e })).sort((a, b) => b.each - a.each),
+  };
+}
+
 function allRods(pieces: Piece[], byId: Map<string, Material>, all: boolean): Rod[] {
   const joints = inlineJoints(pieces, byId);
   const reach = longestRod(byId) - ROD_OVERHANG_CM * 2;

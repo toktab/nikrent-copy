@@ -6713,6 +6713,11 @@ kbd {
 .walers-mark circle {
   fill: #f3e3c3;
 }
+/* A share already counted in another row - shown, not added again. */
+.bolts-sub .bolts-included {
+  opacity: 0.6;
+  font-weight: 400;
+}
 /* What each waler is bolted with, under its row. */
 .bolts-sub {
   display: grid;

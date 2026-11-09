@@ -274,6 +274,8 @@ const RETIRED_BUILTINS: Record<string, string> = {
   // The whole-head 40 სმ added for an hour; the catalog's own
   // "კუთხის კონექტორი 40სმ" is that part (the user, 2026-11-07).
   'rod-40-full-head': 'corner-connector-40',
+  // The waler's own 40 სმ rod is that same part (the user, 2026-11-08).
+  'waler-rod-40': 'corner-connector-40',
 };
 
 /**
