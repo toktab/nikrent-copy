@@ -6916,3 +6916,9 @@ kbd {
   margin-top: 4px;
   font-weight: 700;
 }
+
+/* The saved template the selection is a copy of. */
+.users-table tr.template-same td {
+  background: rgba(245, 217, 10, 0.12);
+  font-weight: 600;
+}

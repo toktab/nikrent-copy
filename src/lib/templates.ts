@@ -266,3 +266,27 @@ export function freshTemplateInstances(pieces: Piece[]): Piece[] {
     return { ...p, tplInst: next };
   });
 }
+
+/**
+ * A template's shape as a key: every piece by part, place, turn and height,
+ * relative to the whole - so the same column saved twice, wherever it stood,
+ * reads the same (the user, 2026-11-16: "show that it already exists").
+ */
+export function templateKey(pieces: Piece[], byId: Map<string, Material>): string {
+  const n = normalize(pieces, byId).pieces;
+  return n
+    .map((p) => `${p.materialId}@${Math.round(p.x)},${Math.round(p.y)},${Math.round(((p.rot % 360) + 360) % 360)},${Math.round(p.z ?? 0)}`)
+    .sort()
+    .join('|');
+}
+
+/** The saved template with exactly this layout, if there is one. */
+export function sameTemplate(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  templates: Template[],
+): Template | null {
+  if (!pieces.length) return null;
+  const key = templateKey(pieces, byId);
+  return templates.find((t) => t.pieces.length === pieces.length && templateKey(t.pieces, byId) === key) ?? null;
+}
