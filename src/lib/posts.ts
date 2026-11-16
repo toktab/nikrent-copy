@@ -58,6 +58,8 @@ export function propPieces(
   const out: Piece[] = [];
   for (const s of soloPanels(pieces, byId, sketch)) {
     if (Math.round(s.piece.z ?? 0) !== 0) continue;
+    // A prop only behind a panel with nothing facing it - one facing a niche is tied.
+    if (s.reason === 'jog') continue;
     const m = propMaterial(materials, s.material.h);
     if (!m) continue;
     const r = s.box;

@@ -84,7 +84,7 @@ import {
   nutMaterial,
   pieceCentre,
   resetBolts,
-  rodMaterialFor,
+  rodMaterialForRod,
   rodSpot,
   rodStack,
   rodStackOf,
@@ -1435,6 +1435,11 @@ export const useEditorStore = create<EditorState>()(
           if (m && isPanelHolder(m) && !s.boltsShown.holders) {
             set({ boltsShown: { ...s.boltsShown, holders: true }, showBolts: true });
           }
+          // A ვოლერი put down by hand is counted with the worked-out ones: their kind comes on.
+          if (m && m.category === 'waler') {
+            const doc = s.documents.find((d) => d.id === s.activeDocId);
+            if (!normalizeKindsOn(doc?.info?.bolts).walers) s.setKindOn('walers', true);
+          }
           // A 40 სმ head put down by hand brings its kind onto the drawing, so it counts.
           if (m && (isHalfHeadPart(m) || isFullHeadPart(m))) {
             const kind = isHalfHeadPart(m) ? 'halfHead' : 'fullHead';
@@ -2659,7 +2664,7 @@ export const useEditorStore = create<EditorState>()(
           }),
         takeRod: (rod, add) =>
           commit((s) => {
-            const m = rodMaterialFor(s.materials, rod.to - rod.from);
+            const m = rodMaterialForRod(s.materials, rod);
             if (!m) return {};
             const stack = rodStack(m, rodSpot(rod), [], uid);
             const ids = stack.map((p) => p.id);

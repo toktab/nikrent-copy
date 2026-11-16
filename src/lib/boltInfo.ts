@@ -2,7 +2,7 @@ import type { Material, Piece, SketchPath } from '../types';
 import { boltKindOf, boltTotals } from './boltMarks';
 import { fullHeadTotals } from './bolts';
 import type { KindsOn } from './boltKinds';
-import { soloPanels, walerTotals } from './walers';
+import { soloPanels, placedWalers, walerTotals } from './walers';
 import { cornerConnectorSpots, cornerConnectorTotals, smallNutTotals } from './cornerConnectors';
 
 /**
@@ -408,6 +408,8 @@ export function boltInfoOf(m: Material): BoltInfoId | null {
   if (m.id === 'rod-40-half-head' || m.name.includes('ნახევარი თავით')) return 'halfHead';
   if (m.id === 'corner-connector-40' || (m.name.includes('მთლიანი თავით') && !m.name.includes('ვოლერ'))) return 'fullHead';
   if (m.id === 'acc-small-barashka' || m.name.includes('ბარაშკა')) return 'smallNut';
+  // A ვოლერი put down by hand opens the ვოლერი card, with its size.
+  if (m.category === 'waler') return 'walers';
   return null;
 }
 
@@ -433,7 +435,7 @@ export function boltInfoCounts(
   sketch: SketchPath[] = [],
 ): Partial<Record<BoltInfoId, number>> {
   const t = boltTotals(pieces, byId, on);
-  const w = walerTotals(soloPanels(pieces, byId, sketch));
+  const w = walerTotals(soloPanels(pieces, byId, sketch), placedWalers(pieces, byId));
   const cc = cornerConnectorTotals(cornerConnectorSpots(pieces, byId));
   return {
     connectors: t.connectors,

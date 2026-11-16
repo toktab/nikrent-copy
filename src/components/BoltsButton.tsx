@@ -6,9 +6,9 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, ConnectorGlyph, NutGlyph, RING, WingShape } from './BoltLayer';
 import { smallNutTotals } from '../lib/cornerConnectors';
-import { fullHeadTotals } from '../lib/bolts';
+import { fullHeadTotals, rodSizes } from '../lib/bolts';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
-import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
+import { soloPanels, placedWalers, WALER_LOCK_NAME, WALER_ROD_NAME, walerSizes, walerTotals } from '../lib/walers';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 
 /**
@@ -74,8 +74,14 @@ export function BoltsButton() {
   const on = useKindsOn();
   const setKindOn = useEditorStore((s) => s.setKindOn);
   const groups = useMemo(() => boltGroups(pieces, byId, on), [pieces, byId, on]);
-  const walers = useMemo(() => walerTotals(soloPanels(pieces, byId)), [pieces, byId]);
+  const walers = useMemo(() => walerTotals(soloPanels(pieces, byId), placedWalers(pieces, byId)), [pieces, byId]);
   const walersShown = useEditorStore((s) => s.walersShown);
+  const rodSizeList = useMemo(() => rodSizes(pieces, byId, materials), [pieces, byId, materials]);
+  // Which catalog walers those are, by size (the user, 2026-11-16).
+  const sizes = useMemo(
+    () => walerSizes(soloPanels(pieces, byId), placedWalers(pieces, byId), materials),
+    [pieces, byId, materials],
+  );
   const cc = useMemo(() => cornerConnectorTotals(cornerConnectorSpots(pieces, byId)), [pieces, byId]);
   const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
   const setCcShown = useEditorStore((s) => s.setCornerConnectorsShown);
@@ -167,6 +173,19 @@ export function BoltsButton() {
           შტირები
         </span>
       </MenuItem>
+      {/* Which lengths: by the wall's thickness - up to 20 cm a 60, up to 40 a 90,
+          more a 100 (the user, 2026-11-16). */}
+      {on.rods && rodSizeList.length > 0 && (
+        <div className="bolts-sub">
+          {rodSizeList.map((s) => (
+            <span key={s.material.id} style={{ display: 'contents' }}>
+              <span>{s.material.name}</span>
+              <span className="bolts-calc">{Math.max(s.material.w, s.material.h)} სმ</span>
+              <b>{s.count} ც.</b>
+            </span>
+          ))}
+        </div>
+      )}
       <MenuItem
         title="შტირი × 2 (თითო ბოლოზე) + კონექტორები + ვოლერის შტირები + კუთხის კონექტორები 25 სმ + შტირები 40 სმ ნახევარი თავით - თითო თითოზე"
         trail={<KindTrail groups={groups.nuts} on={on.nuts} shown={shown.nuts} onEye={() => toggleBoltKind('nuts')} />}
@@ -227,6 +246,13 @@ export function BoltsButton() {
           only here. */}
       {on.walers && walers.walers > 0 && (
         <div className="bolts-sub">
+          {sizes.map((s) => (
+            <span key={s.material.id} style={{ display: 'contents' }}>
+              <span>{s.material.name}</span>
+              <span className="bolts-calc">{s.material.w} სმ</span>
+              <b>{s.count} ც.</b>
+            </span>
+          ))}
           <span>{WALER_LOCK_NAME}</span>
           <span className="bolts-calc">{walers.rods} × 1 =</span>
           <b>{walers.locks} ც.</b>

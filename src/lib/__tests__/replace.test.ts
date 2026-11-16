@@ -22,7 +22,7 @@ const wall = () => [
 describe('what a piece can be replaced with', () => {
   it('is the same ჭანჭიკი kind, or the same catalog category', () => {
     const rods = replacementsFor([mat('rod-60')], SEED_MATERIALS);
-    expect(rods.map((m) => m.id)).toEqual(['rod-60', 'rod-80', 'rod-100', 'rod-150']);
+    expect(rods.map((m) => m.id)).toEqual(['rod-60', 'rod-80', 'rod-100', 'rod-150', 'rod-90']);
     expect(replacementsFor([mat('panel-90x300')], SEED_MATERIALS).every((m) => m.category === 'panel')).toBe(true);
     expect(replaceKindOf(mat('corner-inner-20x20x300'))).toBe('corner:inner');
   });
@@ -61,8 +61,8 @@ describe('replacing', () => {
     expect(rods.every((p) => p.materialId === 'rod-80')).toBe(true);
     const was = pieces.find((p) => p.id === added[0])!;
     const now = rods.find((p) => p.id === added[0])!;
-    expect(pieceCentre(now, mat('rod-80'))).toEqual(pieceCentre(was, mat('rod-60')));
-    expect((now.z ?? 0) + mat('rod-80').h / 2).toBe((was.z ?? 0) + mat('rod-60').h / 2);
+    expect(pieceCentre(now, mat('rod-80'))).toEqual(pieceCentre(was, mat(was.materialId)));
+    expect((now.z ?? 0) + mat('rod-80').h / 2).toBe((was.z ?? 0) + mat(was.materialId).h / 2);
     // Still on its spot, so no worked-out rod comes back beside it.
     expect(rodCount(out, byId)).toBe(5);
   });

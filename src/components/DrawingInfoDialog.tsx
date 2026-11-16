@@ -3,7 +3,7 @@ import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { boltKindOf, boltTotals } from '../lib/boltMarks';
 import { infoSaveUnsupported } from '../lib/repo';
-import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
+import { soloPanels, placedWalers, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
 import { fullHeadTotals } from '../lib/bolts';
 import { smallNutTotals } from '../lib/cornerConnectors';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
@@ -54,7 +54,7 @@ export function DrawingInfoDialog() {
     g.rows.filter((r) => r.used > 0 && !boltKindOf(r.material)).map((r) => ({ group: g.label, row: r })),
   );
   const walers = useMemo(
-    () => walerTotals(soloPanels(pieces, new Map(materials.map((m) => [m.id, m])))),
+    () => walerTotals(soloPanels(pieces, new Map(materials.map((m) => [m.id, m]))), placedWalers(pieces, new Map(materials.map((m) => [m.id, m])))),
     [pieces, materials],
   );
   const cc = useMemo(

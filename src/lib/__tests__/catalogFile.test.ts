@@ -13,12 +13,12 @@ import { totalStock } from '../inventory';
 
 describe('seed catalog', () => {
   it('has the 41 Du materials and the 4 ჭანჭიკი parts the count names', () => {
-    expect(createSeedMaterials()).toHaveLength(45);
+    expect(createSeedMaterials()).toHaveLength(46);
   });
 
   it('gives every material a unique id', () => {
     const ids = createSeedMaterials().map((m) => m.id);
-    expect(new Set(ids).size).toBe(45);
+    expect(new Set(ids).size).toBe(46);
   });
 
   it('keeps the documented sizes', () => {

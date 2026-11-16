@@ -6872,3 +6872,19 @@ kbd {
   stroke-width: 2;
   stroke-dasharray: 3 2;
 }
+
+/* The picked part itself on its info card: its size and what it stands for. */
+.bolt-info-this {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(245, 217, 10, 0.08);
+  border: 1px solid rgba(245, 217, 10, 0.35);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.bolt-info-this-head {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-bottom: 2px;
+}

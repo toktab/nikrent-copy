@@ -13,7 +13,7 @@ import {
   openRods,
   outward,
   pieceCentre,
-  rodMaterialFor,
+  rodMaterialForRod,
   rodSpot,
   rodStack,
   withBoltOff,
@@ -108,7 +108,7 @@ export function materializeBolts(
     }
   } else if (kind === 'rods') {
     for (const r of openRods(pieces, byId)) {
-      const m = rodMaterialFor(materials, r.to - r.from);
+      const m = rodMaterialForRod(materials, r);
       if (!m) continue;
       out = withRodOff(out, r);
       made.push(...rodStack(m, rodSpot(r), [], newId));

@@ -1,6 +1,65 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { BOLT_INFO, boltInfoCounts, infoCardOf, type BoltInfoId } from '../lib/boltInfo';
+import { isRod, rodLengthForWall, rodSpotOf } from '../lib/bolts';
+import { placedWalers, soloPanels, walerMaterialFor } from '../lib/walers';
+import type { Material, Piece } from '../types';
+
+/**
+ * What exactly the picked one is (the user, 2026-11-16: a ვოლერი or a შტირი
+ * picked showed what the kind is, never its size): the catalog part and its
+ * size, how many it stands for, and for a შტირი the wall it goes through.
+ */
+function thisOneLines(
+  mark: { kind: string; targets: Array<{ id: string; tag: string }> } | null,
+  picked: Piece[],
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  materials: Material[],
+  sketch: Parameters<typeof soloPanels>[2],
+): string[] {
+  const out: string[] = [];
+  if (mark?.kind === 'waler') {
+    const ids = new Set(mark.targets.map((t) => t.id));
+    const solo = soloPanels(pieces, byId, sketch).filter((s) => ids.has(s.piece.id));
+    for (const s of solo) {
+      const span = s.across ? s.box.w : s.box.h;
+      const m = walerMaterialFor(materials, span);
+      out.push(
+        `${m ? m.name : 'ვოლერი'} - ${m ? `${m.w} × ${m.h} სმ` : `${Math.round(span)} სმ`}, პანელზე ${s.material.name}`,
+      );
+      out.push(`სიმაღლეზე ${s.walers} ცალი (${s.material.h >= 250 ? '300-იანზე 3' : '150 / 90-იანზე 2'})`);
+      out.push(s.reason === 'jog' ? 'რატომ: მეორე მხარე აქ შეწეულია / გამოწეულია - შტირი ვერ იჭერს' : 'რატომ: პირისპირ პანელი არ აქვს');
+    }
+    return out;
+  }
+  if (!picked.length) return out;
+  const by = new Map<string, { m: Material; n: number; first: Piece }>();
+  for (const p of picked) {
+    const m = byId.get(p.materialId);
+    if (!m) continue;
+    const had = by.get(m.id) ?? { m, n: 0, first: p };
+    had.n++;
+    by.set(m.id, had);
+  }
+  const placed = placedWalers(pieces, byId);
+  for (const { m, n, first } of by.values()) {
+    const size = m.category === 'rod' || isRod(m) ? `${Math.max(m.w, m.h)} სმ` : `${m.w} × ${m.h} სმ`;
+    out.push(`${m.name} - ${size}${n > 1 ? `, მონიშნულია ${n}` : ''}`);
+    if (isRod(m)) {
+      const spot = rodSpotOf(first, m, pieces, byId);
+      if (spot?.wall !== undefined) {
+        const want = rodLengthForWall(spot.wall);
+        out.push(`კედლის სისქე ${Math.round(spot.wall)} სმ - საჭიროა ${want} სმ-იანი${Math.abs(Math.max(m.w, m.h) - want) > 0.5 ? ' (ეს სხვა ზომისაა)' : ''}`);
+      }
+    }
+    if (m.category === 'waler') {
+      const w = placed.find((x) => x.piece.id === first.id);
+      if (w) out.push(`სიმაღლეზე ${w.each} ცალი`);
+    }
+  }
+  return out;
+}
 import { ClampShape, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 
@@ -116,6 +175,16 @@ export function BoltInfoPanel() {
     </button>
   );
   const count = counts[id];
+  const thisOne = trail.length
+    ? []
+    : thisOneLines(
+        mark ?? null,
+        pieces.filter((p) => selectedIds.includes(p.id)),
+        pieces,
+        byId,
+        materials,
+        sketch,
+      );
 
   return (
     <section className="section bolt-info">
@@ -135,6 +204,14 @@ export function BoltInfoPanel() {
         <p className="bolt-info-count">
           ამ ნახაზზე: <b>{count} ც.</b>
         </p>
+      )}
+      {thisOne.length > 0 && (
+        <div className="bolt-info-this">
+          <div className="bolt-info-this-head">მონიშნული</div>
+          {thisOne.map((t, i) => (
+            <div key={i}>{t}</div>
+          ))}
+        </div>
       )}
       <dl className="bolt-info-list">
         <dt>რა არის</dt>

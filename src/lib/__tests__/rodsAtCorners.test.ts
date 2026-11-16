@@ -26,7 +26,7 @@ const INNER: SketchPath = {
 };
 const apply = (pieces: Piece[], v: LayoutVariant) => [...pieces.filter((p) => !v.remove.includes(p.id)), ...v.add];
 
-describe('the 40 სმ whole-head შტირი where an inside corner leg ends (not a tie rod)', () => {
+describe('a შტირი where an inside corner leg ends (the user, 2026-11-16 - not a 40 სმ head)', () => {
   it('ties the leg end to the outer joint across from it, at all four corners', () => {
     const side = panelSide(INNER, [INNER], [], materials);
     const outer = offsetFace(INNER, offsetSide(INNER, side, 'outer'), [20], 'outer')!;
@@ -40,15 +40,16 @@ describe('the 40 სმ whole-head შტირი where an inside corner leg en
       filters: { keepPlaced: true },
     }).variants[0];
     const pieces = apply([], v);
-    const rods = findCornerRods(pieces, byId);
-    // ...all four, and they are not tie rods (2026-11-07: the user's 40 სმ გაიკა).
+    // No 40 სმ head worked out there any more...
+    expect(findCornerRods(pieces, byId)).toHaveLength(0);
+    // ...a tie rod instead, 5 up the 300, next to each corner on the long walls.
+    const rods = findRods(pieces, byId).filter((r) => r.corner);
     expect(rods).toHaveLength(4);
     expect(rods.every((r) => r.count === 5)).toBe(true);
-    expect(findRods(pieces, byId).some((r) => r.x === 540 && r.y === 310)).toBe(false);
-    // Next to each corner, on the long walls: x 540 and 1020, top and bottom.
     const at = (x: number, y: number) => rods.some((r) => r.dir === 'v' && r.x === x && r.y === y);
     expect([at(540, 310), at(1020, 310), at(540, 620), at(1020, 620)]).toEqual([true, true, true, true]);
-    // ...and every rod still goes through one wall only.
+    // ...and every rod still goes through one wall only, a 20 cm wall: a 60.
     expect(rods.every((r) => r.to - r.from < 40)).toBe(true);
+    expect(rods.every((r) => (r.wall ?? 0) <= 20)).toBe(true);
   });
 });
