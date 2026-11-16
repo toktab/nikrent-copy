@@ -202,6 +202,7 @@ const PREF_KEYS = [
   'showNames',
   'forceLabels',
   'showOverlaps',
+  'showContacts',
   'showGaps',
   'showBolts',
   'boltsShown',
@@ -432,6 +433,8 @@ export interface EditorState {
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
   showOverlaps: boolean;
+  /** mark where pieces (and drawn line ends) touch, green, and nearly touch, red */
+  showContacts: boolean;
   /** 2D plan editor, or the read-only 3D visualisation */
   viewMode: '2d' | '3d';
   /** Which orthographic view the 2D surface is showing. */
@@ -770,6 +773,7 @@ export interface EditorState {
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
+  setShowContacts: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
   setShowBolts: (on: boolean) => void;
   toggleBoltKind: (kind: keyof BoltKinds) => void;
@@ -1175,6 +1179,7 @@ export const useEditorStore = create<EditorState>()(
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
+        showContacts: true,
         viewMode: '2d',
         surfaceView: 'plan',
         hiddenLines: 'hide',
@@ -2530,6 +2535,7 @@ export const useEditorStore = create<EditorState>()(
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
+        setShowContacts: (on) => set({ showContacts: on }),
         setShowGaps: (on) => set({ showGaps: on }),
         setShowBolts: (on) => set({ showBolts: on }),
         setObjectShown: (target, shown) =>

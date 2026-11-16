@@ -99,6 +99,8 @@ export function Header() {
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
+  const showContacts = useEditorStore((s) => s.showContacts);
+  const setShowContacts = useEditorStore((s) => s.setShowContacts);
   const setShowGaps = useEditorStore((s) => s.setShowGaps);
   const setTool = useEditorStore((s) => s.setTool);
   const penPerimeter = useEditorStore((s) => s.penPerimeter);
@@ -670,6 +672,13 @@ export function Header() {
                   title="გადაფარებული ელემენტების მონიშვნა"
                 >
                   გადაფარება
+                </MenuItem>
+                <MenuItem
+                  on={showContacts}
+                  onClick={() => setShowContacts(!showContacts)}
+                  title="მწვანე ხაზი - ელემენტები ერთმანეთს ეხება; წითელი - ცოტა აკლია (1-4 სმ ღრიჭო). ხაზვის ბოლოებზეც."
+                >
+                  შეხება
                 </MenuItem>
                 <MenuItem
                   on={showGaps}

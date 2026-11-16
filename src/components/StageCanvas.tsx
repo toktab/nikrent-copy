@@ -104,6 +104,7 @@ import {
 import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
 import { GapMark } from './GapMark';
+import { ContactLayer } from './ContactLayer';
 import { SketchLayer } from './SketchLayer';
 import { UnderlayLayer } from './UnderlayLayer';
 
@@ -1743,6 +1744,8 @@ export function StageCanvas() {
       )}
 
       {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
+      {/* Where pieces touch (green) or stop just short (red) - see contacts.ts. */}
+      {!elevation && <ContactLayer />}
       {/* The worked-out ვოლერები, behind panels nothing faces - see walers.ts. */}
       {!elevation && showBolts && <WalerLayer />}
       {!elevation && showBolts && <CornerConnectorLayer />}

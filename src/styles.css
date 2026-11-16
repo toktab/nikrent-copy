@@ -6845,3 +6845,30 @@ kbd {
 .nut-glyph.brown .wing-hole {
   fill: #7a5230;
 }
+
+/* Where pieces touch and where they nearly do (ContactLayer). Never takes a
+   click: the joint belongs to the pieces either side of it. */
+.contact-layer {
+  pointer-events: none;
+}
+.contact-touch {
+  stroke: #22c55e;
+  stroke-linecap: round;
+  opacity: 0.9;
+}
+.contact-near {
+  stroke: #ef4444;
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+}
+.contact-end-touch {
+  fill: none;
+  stroke: #22c55e;
+  stroke-width: 2;
+}
+.contact-end-near {
+  fill: none;
+  stroke: #ef4444;
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
