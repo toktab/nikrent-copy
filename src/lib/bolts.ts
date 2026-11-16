@@ -660,7 +660,7 @@ export function findCornerRods(pieces: Piece[], byId: Map<string, Material>, all
 }
 
 /**
- * Every შტირი 40 სმ მთლიანი თავით the drawing needs, wherever it goes (the
+ * Every კონექტორი 40 სმ მთლიანი თავით the drawing needs, wherever it goes (the
  * user, 2026-11-08: the ვოლერის შტირი 40 სმ is the same part): at inside
  * corner leg ends (`findCornerRods`, with the fullHead kind on) and two on
  * every ვოლერი (with the walers on). One total, so nothing is counted twice;

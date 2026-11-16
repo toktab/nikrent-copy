@@ -447,7 +447,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(worked.walers ?? 0)}
               />
               <Check
-                label="შტირი 40 სმ ნახევარი თავით"
+                label="კონექტორი 40 სმ ნახევარი თავით"
                 note="გარე კუთხე ჩ10-ით"
                 count={worked.halfHead ?? 0}
                 checked={vis.halfHead}
@@ -455,7 +455,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(worked.halfHead ?? 0)}
               />
               <Check
-                label="შტირი 40 სმ მთლიანი თავით"
+                label="კონექტორი 40 სმ მთლიანი თავით"
                 note="შიდა კუთხის ფეხთან"
                 count={worked.fullHead ?? 0}
                 checked={vis.fullHead}

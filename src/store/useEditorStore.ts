@@ -317,13 +317,24 @@ const BUILTIN_RENAMES: Array<{ id: string; from: string; to: string }> = [
   { id: 'post-100', from: 'დგარი 100', to: 'დგარი და თავი - პატარა (150 / 90)' },
   { id: 'post-200', from: 'დგარი 200', to: 'დგარი და თავი - დიდი (300)' },
   { id: 'acc-latch-adjustable', from: 'ჩამკეტი რეგულირებადი', to: 'ნიანგი (ჩამკეტი რეგულირებადი)' },
+  // Not შტირი at all - კონექტორები (the user, 2026-11-16).
+  {
+    id: 'corner-connector-40',
+    from: 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)',
+    to: 'კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე)',
+  },
+  {
+    id: 'rod-40-half-head',
+    from: 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)',
+    to: 'კონექტორი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)',
+  },
 ];
 
 /** ...and the one that changed what it is: the 40 სმ corner connector, the whole-head შტირი 40 სმ. */
 function fixFullHead40(materials: Material[]): void {
   const m = materials.find((x) => x.id === 'corner-connector-40');
   if (!m || !m.builtin || m.name !== 'კუთხის კონექტორი 40სმ') return;
-  m.name = 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
+  m.name = 'კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
   m.category = 'acc';
   m.w = 8;
   m.h = 8;

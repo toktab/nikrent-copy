@@ -269,7 +269,7 @@ function FullHeadSwitch() {
         }}
       />
       <span>
-        შტირი 40 სმ მთლიანი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხის ფეხთან</span>
+        კონექტორი 40 სმ მთლიანი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხის ფეხთან</span>
       </span>
     </label>
   );
@@ -291,7 +291,7 @@ function HalfHeadSwitch() {
         }}
       />
       <span>
-        შტირი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
+        კონექტორი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
       </span>
     </label>
   );

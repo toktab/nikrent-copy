@@ -48,8 +48,8 @@ const KIND_NAMES: Array<[KindKey, string]> = [
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
   ['walers', 'ვოლერები'],
-  ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
-  ['fullHead', 'შტირი 40 სმ მთლიანი თავით'],
+  ['halfHead', 'კონექტორი 40 სმ ნახევარი თავით'],
+  ['fullHead', 'კონექტორი 40 სმ მთლიანი თავით'],
   ['smallNuts', 'ბარაშკა პატარა (შიდა კუთხე)'],
   ['crocodiles', 'ნიანგი'],
   ['frogs', 'ბაყაყი'],
@@ -198,7 +198,7 @@ export function BoltsButton() {
       {/* ვოლერები: worked out behind every panel with nothing facing it -
           3 up a 300, 2 up a 150 / 90 - and what each one is bolted with. */}
       <MenuItem
-        title="პანელი, რომელსაც კედლის მეორე მხარეს პირისპირ პანელი არ აქვს: 300-ზე 3 ვოლერი, 150 / 90-ზე 2. თითო ვოლერზე 2 შტირი 40 სმ, 2 ჩასაკეტი, 2 ქანჩი + დისკო"
+        title="პანელი, რომელსაც კედლის მეორე მხარეს პირისპირ პანელი არ აქვს: 300-ზე 3 ვოლერი, 150 / 90-ზე 2. თითო ვოლერზე 2 კონექტორი 40 სმ, 2 ჩასაკეტი, 2 ქანჩი + დისკო"
         trail={
           <KindTrail
             groups={walers.groups}
@@ -230,7 +230,7 @@ export function BoltsButton() {
           <span>{WALER_LOCK_NAME}</span>
           <span className="bolts-calc">{walers.rods} × 1 =</span>
           <b>{walers.locks} ც.</b>
-          <span className="bolts-included">შტირი 40 სმ მთლიანი თავით - შედის თავის სტრიქონში</span>
+          <span className="bolts-included">კონექტორი 40 სმ მთლიანი თავით - შედის თავის სტრიქონში</span>
           <span className="bolts-calc">{walers.walers} × 2 =</span>
           <b className="bolts-included">{walers.rods} ც.</b>
           <span className="bolts-included">ქანჩი + დისკო - შედის ზედა ქანჩი + დისკოში</span>
@@ -241,7 +241,7 @@ export function BoltsButton() {
       {/* ...and where the corner is closed with a ჩ10, the half-head
           შტირი 40 სმ (წაჭრილი გაიკა) instead. */}
       <MenuItem
-        title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ10 დგას: შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა, არა სრული თავით), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
+        title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ10 დგას: კონექტორი 40 სმ ნახევარი თავით (წაჭრილი გაიკა, არა სრული თავით), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
         trail={
           <KindTrail
             groups={cc.halfGroups}
@@ -265,7 +265,7 @@ export function BoltsButton() {
       {/* ...and where an inside corner's leg end faces an outer joint, the
           whole-head შტირი 40 სმ (წაჭრის გარეშე). */}
       <MenuItem
-        title="შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე), ყველგან: შიდა კუთხის ფეხის ბოლოს პირდაპირ (300-ზე 5, 150 / 90-ზე 2) და ვოლერზე 2 (ვოლერის შტირი - იგივე ნაწილია). ქანჩი + დისკო თითოზე"
+        title="კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე), ყველგან: შიდა კუთხის ფეხის ბოლოს პირდაპირ (300-ზე 5, 150 / 90-ზე 2) და ვოლერზე 2 (ვოლერის შტირი - იგივე ნაწილია). ქანჩი + დისკო თითოზე"
         trail={
           <KindTrail
             groups={fullGroups}

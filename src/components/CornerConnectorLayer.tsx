@@ -99,7 +99,7 @@ export function CornerConnectorLayer() {
                 ? `კუთხის კონექტორი 25 სმ × ${s.count} - შიდა კუთხე, პატარა ბარაშკა თითოზე`
                 : fits
                 ? `კუთხის კონექტორი 25 სმ × ${s.count} - ქანჩი + დისკო თითოზე`
-                : `შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა) × ${s.count} - გარე კუთხე ჩ10-ით, ქანჩი + დისკო თითოზე`}
+                : `კონექტორი 40 სმ ნახევარი თავით (წაჭრილი გაიკა) × ${s.count} - გარე კუთხე ჩ10-ით, ქანჩი + დისკო თითოზე`}
             </title>
             {/* A disc, as the user drew it (2026-11-07): 25 for a connector, 40 with
                 a cut-open head for the half-head შტირი. Its nut is only counted. */}
@@ -149,7 +149,7 @@ export function CornerConnectorLayer() {
               selectMark({ kind: 'cc', key, targets: [{ id: r.a, tag: `rod:${r.b}` }], info: 'fullHead' });
             }}
           >
-            <title>{`შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე) × ${r.count} - შიდა კუთხის ფეხთან, ქანჩი + დისკო თითოზე`}</title>
+            <title>{`კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე) × ${r.count} - შიდა კუთხის ფეხთან, ქანჩი + დისკო თითოზე`}</title>
             <ConnectorGlyph cx={x} cy={y} r={discPx('corner-connector-40')} kind="tee" label="40" head="full" />
           </g>
         );

@@ -36,7 +36,13 @@ export function Palette() {
       .map((category) => ({
         category,
         items: materials.filter(
-          (m) => m.category === category && (!f || m.name.toLowerCase().includes(f)),
+          (m) =>
+            m.category === category &&
+            // Once only (the user, 2026-11-16 - the 40 სმ ones under both
+            // ჭანჭიკები and აქსესუარები confused the architect): a ჭანჭიკი
+            // lives in the ჭანჭიკები group at the top, not in its category too.
+            !(boltInfoOf(m) !== null || m.category === 'waler') &&
+            (!f || m.name.toLowerCase().includes(f)),
         ),
       }))
       .filter((g) => g.items.length > 0);
@@ -47,7 +53,7 @@ export function Palette() {
    * ჭანჭიკები menu counts can be dragged onto the drawing from here by hand -
    * კონექტორი, შტირი, ქანჩი + დისკო, ჩამკეტი, the 40 სმ heads, სამაგრი,
    * ნიანგი, ბაყაყი, დგარი და თავი, the walers and their parts. Built-ins, so every
-   * start of the app has them. They stay in their own groups too.
+   * start of the app has them - and only there, never twice.
    */
   const bolts = useMemo(() => {
     const f = query.trim().toLowerCase();
