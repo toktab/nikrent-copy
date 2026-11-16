@@ -58,7 +58,8 @@ const EPS = 0.01;
 const WEIGHT = {
   piece: 1000,
   extraFiller: 700, // R4
-  adjacentFillers: 3000, // R4
+  // R4, made a hard rule (the user, 2026-11-16): one ჩაკერება never against another.
+  adjacentFillers: 1_000_000,
   distinct: 200, // P5
   // R2 outranks P4: the architect lays 90s until they stop fitting and takes
   // what is left, so 8×90 + 45 beats 6×90 + 3×75 even with the narrow 45.

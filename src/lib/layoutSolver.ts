@@ -652,7 +652,8 @@ const WEIGHT = {
   groupBreak: 20, // P1
   inversion: 1, // R2, finest
   extraFiller: 700, // R4
-  adjacentFillers: 3000, // R4
+  // R4, made a hard rule (the user, 2026-11-16): one ჩაკერება never against another.
+  adjacentFillers: 1_000_000,
   // A2: cheap enough that a panel sticking out beats a filler, dear enough
   // that it never sticks out for nothing.
   overhangCm: 4,

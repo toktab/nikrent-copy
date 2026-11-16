@@ -178,7 +178,35 @@ export function coverFace(
       remainder = 0;
     }
   }
-  return { used, remainder };
+  return { used: spreadFillers(used), remainder };
+}
+
+/**
+ * Never one ჩაკერება against another (the user, 2026-11-16): with two, one
+ * goes at each end of the run - where a ჩ5 belongs anyway - and any more go
+ * between panels, a panel either side. Only fillers and no panel cannot be
+ * helped and are left as they are.
+ */
+export function spreadFillers(used: PanelOption[]): PanelOption[] {
+  const isFiller = (o: PanelOption) => o.material.category === 'filler';
+  const fill = used.filter(isFiller);
+  const panels = used.filter((o) => !isFiller(o));
+  if (fill.length < 2 || !panels.length) return used;
+  // Narrowest at the ends: a ჩ5 between two panels needs a ნიანგი, a ჩ10 does not.
+  const sorted = [...fill].sort((a, b) => a.w - b.w);
+  const out: PanelOption[] = [sorted[0]];
+  const middle = sorted.slice(2);
+  const gaps = panels.length - 1;
+  panels.forEach((p, i) => {
+    out.push(p);
+    // Spread the middle ones over the joints, one per joint at most.
+    if (i < gaps && middle.length && i % Math.max(1, Math.floor(gaps / (middle.length + 0))) === 0) {
+      out.push(middle.shift()!);
+    }
+  });
+  // Joints ran out (more fillers than panels can separate): the rest at the end.
+  out.push(...middle, sorted[1]);
+  return out;
 }
 
 /**
