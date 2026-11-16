@@ -48,6 +48,8 @@ export const COMPANY_WEIGHTS: Readonly<Record<string, number>> = {
   'rod-80': 1.3,
   'rod-100': 1.63,
   'rod-150': 2,
+  // Not in the workbook: between its 80 (1.3) and 100 (1.63), by length.
+  'rod-90': 1.47,
 
   'acc-crane-hook': 6.6,
   'acc-panel-clamp-set': 2.73,

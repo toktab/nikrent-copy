@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { DetailsPanel } from './DetailsPanel';
 import { BomPanel } from './BomPanel';
@@ -18,9 +18,11 @@ export function SidePanel() {
   const selected = useEditorStore((s) => s.selectedIds.length + s.selectedSketchIds.length);
   const documents = useEditorStore((s) => s.documents);
   const activeDocId = useEditorStore((s) => s.activeDocId);
+  // Real quantities of every ჭანჭიკი, not marks - quantities.ts.
+  const bomKinds = useKindsOn();
   const shortages = useMemo(
-    () => buildBom(materials, pieces, documents, activeDocId).shortageCount,
-    [materials, pieces, documents, activeDocId],
+    () => buildBom(materials, pieces, documents, activeDocId, bomKinds).shortageCount,
+    [materials, pieces, documents, activeDocId, bomKinds],
   );
 
   const setInspectorOpen = useEditorStore((s) => s.setInspectorOpen);

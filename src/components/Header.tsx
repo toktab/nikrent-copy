@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import {
   exportCatalogFile,
@@ -120,9 +120,13 @@ export function Header() {
   const setToast = useEditorStore((s) => s.setToast);
   const canManage = useCanManageCatalog();
 
+  // Real quantities of every ჭანჭიკი, not marks - quantities.ts.
+
+  const bomKinds = useKindsOn();
+
   const shortages = useMemo(
-    () => buildBom(materials, pieces, documents, activeDocId).shortageCount,
-    [materials, pieces, documents, activeDocId],
+    () => buildBom(materials, pieces, documents, activeDocId, bomKinds).shortageCount,
+    [materials, pieces, documents, activeDocId, bomKinds],
   );
   const hasSelection = selectedIds.length > 0;
   const activeDoc = documents.find((d) => d.id === activeDocId);

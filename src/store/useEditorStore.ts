@@ -21,7 +21,7 @@ import type {
   Warehouse,
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
-import { withCompanyWeights } from '../data/companyWeights';
+import { COMPANY_WEIGHTS, withCompanyWeights } from '../data/companyWeights';
 import { findWallMate, flipWall } from '../lib/wallPen';
 import type { LineSpan } from '../lib/span';
 import { alignPieces } from '../lib/gridAlign';
@@ -344,6 +344,14 @@ function fixFullHead40(materials: Material[]): void {
 /** Applies `BUILTIN_SIZE_FIXES` and `BUILTIN_RENAMES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
   fixFullHead40(materials);
+  // The company's own unit weights (its workbook, COMPANY_WEIGHTS) into every
+  // blank one, on every load: the PDF said "სულ წონა 0 კგ" because they were
+  // only filled in by a button nobody pressed (the user, 2026-11-16). Never
+  // over a weight somebody typed.
+  for (const m of materials) {
+    const w = COMPANY_WEIGHTS[m.id];
+    if (!(m.weight > 0) && w) m.weight = w;
+  }
   for (const r of BUILTIN_RENAMES) {
     const m = materials.find((x) => x.id === r.id);
     if (m && m.builtin && m.name === r.from) m.name = r.to;
@@ -1161,7 +1169,7 @@ export const useEditorStore = create<EditorState>()(
       const firstDoc = newDoc('ნახაზი 1');
 
       return {
-        materials: SEED_MATERIALS,
+        materials: withCompanyWeights(SEED_MATERIALS).materials,
         pieces: [],
         sketch: [],
         measures: [],
@@ -2968,7 +2976,7 @@ export const useEditorStore = create<EditorState>()(
 
         resetCatalog: () =>
           commit(() => ({
-            materials: createSeedMaterials(),
+            materials: withCompanyWeights(createSeedMaterials()).materials,
             removedBuiltins: [],
             dialog: null,
           })),
@@ -3497,7 +3505,11 @@ export function mergeCatalog(
   stored: Material[] | undefined,
   removedBuiltins: string[] | undefined,
 ): Material[] {
-  if (!Array.isArray(stored) || stored.length === 0) return createSeedMaterials();
+  if (!Array.isArray(stored) || stored.length === 0) {
+    const seeds = createSeedMaterials();
+    applySizeFixes(seeds);
+    return seeds;
+  }
 
   const taken = new Set<string>();
   const materials: Material[] = [];

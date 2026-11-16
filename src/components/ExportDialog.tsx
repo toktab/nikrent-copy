@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DrawingDoc, LayoutFile } from '../types';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { boltTotals } from '../lib/boltMarks';
 import { normalizeKindsOn } from '../lib/boltKinds';
@@ -39,6 +39,8 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [busy, setBusy] = useState(false);
 
+  // Real quantities of every ჭანჭიკი in the list, not marks - quantities.ts.
+  const bomKinds = useKindsOn();
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const setToast = useEditorStore((s) => s.setToast);
   const materials = useEditorStore((s) => s.materials);
@@ -88,7 +90,7 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
         scale: pdfScale,
         visibility: vis,
         scales: useEditorStore.getState().materialScale,
-        bom: bomOn ? buildBom(materials, pieces, documents, activeDocId) : null,
+        bom: bomOn ? buildBom(materials, pieces, documents, activeDocId, bomKinds) : null,
       });
       if (!result) {
         setToast('PDF-ზე არაფერი დარჩა - ჩართე ერთი ნაწილი მაინც.');

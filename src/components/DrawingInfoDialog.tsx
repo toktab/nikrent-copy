@@ -38,9 +38,13 @@ export function DrawingInfoDialog() {
   const setDrawingInfo = useEditorStore((s) => s.setDrawingInfo);
   const [productsOpen, setProductsOpen] = useState(true);
 
+  // Real quantities of every ჭანჭიკი, not marks - quantities.ts.
+
+  const bomKinds = useKindsOn();
+
   const bom = useMemo(
-    () => buildBom(materials, pieces, documents, activeDocId),
-    [pieces, materials, documents, activeDocId],
+    () => buildBom(materials, pieces, documents, activeDocId, bomKinds),
+    [pieces, materials, documents, activeDocId, bomKinds],
   );
   // Only the ჭანჭიკი kinds the drawing has on.
   const on = useKindsOn();

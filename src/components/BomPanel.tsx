@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom, fmtNum, sizeLabel } from '../lib/bom';
 import { Icon } from './Icon';
 
@@ -14,9 +14,13 @@ export function BomPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Real quantities of every ჭანჭიკი, not marks - quantities.ts.
+
+  const bomKinds = useKindsOn();
+
   const bom = useMemo(
-    () => buildBom(materials, pieces, documents, activeDocId),
-    [materials, pieces, documents, activeDocId],
+    () => buildBom(materials, pieces, documents, activeDocId, bomKinds),
+    [materials, pieces, documents, activeDocId, bomKinds],
   );
 
   /**
