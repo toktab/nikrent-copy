@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
-import { BOLT_INFO, boltInfoCounts, boltInfoOf, type BoltInfoId } from '../lib/boltInfo';
+import { BOLT_INFO, boltInfoCounts, infoCardOf, type BoltInfoId } from '../lib/boltInfo';
 import { ClampShape, ConnectorGlyph, NutGlyph, RodGlyph } from './BoltLayer';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
 
@@ -91,7 +91,7 @@ export function BoltInfoPanel() {
     for (const p of pieces) {
       if (!selectedIds.includes(p.id)) continue;
       const m = byId.get(p.materialId);
-      ids.add(m ? boltInfoOf(m) : null);
+      ids.add(m ? infoCardOf(m) : null);
       if (ids.size > 1) return null;
     }
     const [only] = [...ids];
@@ -119,7 +119,9 @@ export function BoltInfoPanel() {
 
   return (
     <section className="section bolt-info">
-      <h3 className="section-title">ჭანჭიკი - ინფორმაცია</h3>
+      <h3 className="section-title">
+        {['panel', 'filler', 'innerCorner', 'outerCorner'].includes(id) ? 'ინფორმაცია' : 'ჭანჭიკი - ინფორმაცია'}
+      </h3>
       {trail.length > 0 && (
         <button type="button" className="bolt-info-back" onClick={() => setTrail((t) => t.slice(0, -1))}>
           ← {BOLT_INFO[trail.length > 1 ? trail[trail.length - 2] : picked].name}
@@ -143,6 +145,12 @@ export function BoltInfoPanel() {
         <dd>{info.per300}</dd>
         <dt>150 / 90-იან პანელზე</dt>
         <dd>{info.per150}</dd>
+        {info.count && (
+          <>
+            <dt>როგორ ითვლება</dt>
+            <dd>{info.count}</dd>
+          </>
+        )}
         <dt>მაგალითი</dt>
         <dd className="bolt-info-example">{info.example}</dd>
         <dt>როგორ ჩნდება ნახაზზე</dt>
@@ -153,6 +161,32 @@ export function BoltInfoPanel() {
             <dd>
               <ul>
                 {info.needs.map((n) => (
+                  <li key={n.id}>
+                    {link(n.id)} - {n.note}
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        )}
+        {info.tips && info.tips.length > 0 && (
+          <>
+            <dt>რჩევები</dt>
+            <dd>
+              <ul>
+                {info.tips.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        )}
+        {info.notConfuse && info.notConfuse.length > 0 && (
+          <>
+            <dt>არ აგერიოს</dt>
+            <dd>
+              <ul>
+                {info.notConfuse.map((n) => (
                   <li key={n.id}>
                     {link(n.id)} - {n.note}
                   </li>
