@@ -66,6 +66,15 @@ export function DetailsPanel() {
       </button>
       <button className="btn small" onClick={() => openDialog({ kind: 'array' })}><Icon name="array" /> მასივი
       </button>
+      {selectedPieces.length > 1 && (
+        <button
+          className="btn small"
+          onClick={() => openDialog({ kind: 'templates' })}
+          title="მონიშნული ელემენტები (და მონიშნული ხაზები) შაბლონად - შემდეგ ნებისმიერ ნახაზში ჩაისმება"
+        >
+          <Icon name="copy" /> შაბლონად შენახვა
+        </button>
+      )}
       <button className="btn small danger" onClick={deleteSelected}><Icon name="trash" /> წაშლა
       </button>
     </div>

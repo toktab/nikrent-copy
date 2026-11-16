@@ -27,6 +27,7 @@ import type { LineSpan } from '../lib/span';
 import { alignPieces } from '../lib/gridAlign';
 import { EVERY_KIND, KIND_KEYS, normalizeKindsOn, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
+import { freshTemplateInstances } from '../lib/templates';
 import {
   clampZoom,
   computeEdgeSnap,
@@ -683,7 +684,7 @@ export interface EditorState {
    */
   generateWallRun: (spec: WallRunSpec) => { added: number; warnings: string[] };
   /** Drop a saved assembly's pieces onto the surface, already positioned. */
-  insertPieces: (pieces: Piece[]) => void;
+  insertPieces: (pieces: Piece[], sketch?: SketchPath[]) => void;
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
   /**
@@ -2002,12 +2003,12 @@ export const useEditorStore = create<EditorState>()(
             const selected = s.pieces.filter((p) => s.selectedIds.includes(p.id));
             if (!selected.length) return {};
             const offset = s.snap ? s.snapStep * 2 : 10;
-            const copies = selected.map((p) => ({
+            const copies = freshTemplateInstances(selected.map((p) => ({
               ...p,
               id: uid(),
               x: p.x + offset,
               y: p.y + offset,
-            }));
+            })));
             return {
               pieces: [...s.pieces, ...copies],
               selectedIds: copies.map((p) => p.id),
@@ -2023,12 +2024,12 @@ export const useEditorStore = create<EditorState>()(
           commit((s) => {
             if (!s.clipboard.length) return {};
             const offset = s.snap ? s.snapStep * 2 : 10;
-            const copies = s.clipboard.map((p) => ({
+            const copies = freshTemplateInstances(s.clipboard.map((p) => ({
               ...p,
               id: uid(),
               x: p.x + offset,
               y: p.y + offset,
-            }));
+            })));
             return {
               pieces: [...s.pieces, ...copies],
               selectedIds: copies.map((p) => p.id),
@@ -2044,7 +2045,8 @@ export const useEditorStore = create<EditorState>()(
             if (!selected.length || count < 1) return {};
             const copies: Piece[] = [];
             for (let i = 1; i <= count; i++) {
-              for (const p of selected) {
+              // Each copy of a template column is one more column of the set.
+              for (const p of freshTemplateInstances(selected)) {
                 copies.push({
                   ...p,
                   id: uid(),
@@ -2099,11 +2101,14 @@ export const useEditorStore = create<EditorState>()(
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
 
-        insertPieces: (incoming) => {
-          if (!incoming.length) return;
+        insertPieces: (incoming, lines = []) => {
+          if (!incoming.length && !lines.length) return;
+          // Pieces and the lines that came with them (a template) in one step.
           commit((s) => ({
             pieces: [...s.pieces, ...incoming],
+            ...(lines.length ? { sketch: [...s.sketch, ...lines] } : {}),
             selectedIds: incoming.map((p) => p.id),
+            selectedSketchIds: lines.map((k) => k.id),
           }));
         },
 

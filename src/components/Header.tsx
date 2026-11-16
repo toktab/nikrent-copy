@@ -838,7 +838,7 @@ export function Header() {
               onClick={() => openDialog({ kind: 'templates' })}
               title="შენახული შაბლონები - მონიშნულის შენახვა და ჩასმა"
             >
-              <Icon name="copy" /> <span className="btn-label">შაბლონი</span>
+              <Icon name="copy" /> <span className="btn-label">შაბლონები</span>
             </button>
           </>
         )}

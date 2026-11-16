@@ -99,6 +99,14 @@ export interface Piece {
    * there. The inspector switches a piece between the two.
    */
   auto?: true;
+  /**
+   * Dropped in from a შაბლონი (the user, 2026-11-16): the template's id, and
+   * one id shared by every piece of that one drop. A drawing with a column
+   * template put down four times has four instances - what the კომპლექტის
+   * ფასი in the export counts, at the template's price each.
+   */
+  tpl?: string;
+  tplInst?: string;
 }
 
 /** Everything a material needs except its identity flags. */

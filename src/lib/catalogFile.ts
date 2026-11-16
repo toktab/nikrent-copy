@@ -319,6 +319,8 @@ export function parseLayoutFile(text: string): ParsedLayout {
       // elevation is optional; files written before it existed sit on the ground
       z: Math.max(0, num(r.z, 0)),
       ...(r.auto === true ? { auto: true as const } : {}),
+      // Which template drop it came from - priced as a set in the export.
+      ...(typeof r.tpl === 'string' && typeof r.tplInst === 'string' ? { tpl: r.tpl, tplInst: r.tplInst } : {}),
     });
   }
 
