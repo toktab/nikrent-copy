@@ -198,11 +198,26 @@ export function findBolts(pieces: Piece[], byId: Map<string, Material>): Bolt[] 
     }
   }
 
+  // ...and a შიდა კუთხე's leg ending on the long face of a panel set square
+  // to it: a T as well, a კონექტორი's place (the user's seventh picture,
+  // 2026-11-16, the bottom case). A panel carrying straight on from the leg
+  // end is a ბაყაყი's place instead - clamps.ts.
+  for (const c of corners) {
+    for (const face of panels) {
+      if (!sameCourse(c.p, face.p)) continue;
+      for (const e of cornerLegEnds(c.p, c.m)) {
+        for (const f of panelFaces(face.r)) {
+          const s = stretch(e, f);
+          if (s) add(s, 'tee', c.p, face.p);
+        }
+      }
+    }
+  }
+
   // No longer: an inner corner leg ending on a ჩაკერება 5 / 10. That place
   // has its კუთხის კონექტორი 25 სმ - შიდა, worked out with its ბარაშკა
   // პატარა (cornerConnectors.ts); a კონექტორი here as well was the same
   // connector twice (the user, 2026-11-08).
-  void corners;
   void fillers;
 
   return out;
