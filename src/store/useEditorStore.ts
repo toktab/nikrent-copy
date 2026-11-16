@@ -134,6 +134,7 @@ import {
 } from '../lib/dimensions';
 import {
   DEFAULT_MEASURE_STYLE,
+  freeAnchor,
   normalizeMeasureStyle,
   type MeasureAnchor,
   type MeasureStyle,
@@ -531,6 +532,11 @@ export interface EditorState {
   tool: 'select' | 'pen' | 'measure';
   /** the measure tool's first click, while the second is being placed */
   measureFirst: MeasureAnchor | null;
+  /**
+   * A saved line taken up again to be changed (double click on it): put back
+   * as it was if the change is abandoned with Escape.
+   */
+  measureReopened: MeasureLine | null;
   /** a measured line picked out on its own - kept apart from pieces and runs */
   selectedMeasureId: string | null;
   /**
@@ -865,6 +871,13 @@ export interface EditorState {
   measureFinish: (b: Point) => void;
   /** Drop a half-placed line, keeping the tool out. */
   measureCancel: () => void;
+  /**
+   * Take a saved line up again (the user, 2026-11-16): the end nearest `at`
+   * comes loose and follows the pointer with every snap the tool has, exactly
+   * as before it was first fixed - longer, shorter, another angle; the next
+   * click fixes it again, Escape puts the old line back.
+   */
+  reopenMeasure: (id: string, at: Point) => void;
   selectMeasure: (id: string | null) => void;
   deleteMeasure: (id: string) => void;
   setMeasureStyle: (patch: Partial<MeasureStyle>) => void;
@@ -1146,6 +1159,7 @@ export const useEditorStore = create<EditorState>()(
         selectedSpan: null,
         tool: 'select',
         measureFirst: null,
+        measureReopened: null,
         selectedMeasureId: null,
         selectedMark: null,
         penPerimeter: 'free',
@@ -2247,10 +2261,35 @@ export const useEditorStore = create<EditorState>()(
               { id: uid('ms'), a: { x: first.point.x, y: first.point.y }, b: { x: b.x, y: b.y } },
             ],
             measureFirst: null,
+            measureReopened: null,
           }));
         },
 
-        measureCancel: () => set({ measureFirst: null }),
+        measureCancel: () => {
+          const back = get().measureReopened;
+          if (back) {
+            // Abandoned: the line it was goes back, as one undo step with the take-up.
+            set((s) => ({ measures: [...s.measures, back], measureFirst: null, measureReopened: null, selectedMeasureId: back.id }));
+            return;
+          }
+          set({ measureFirst: null });
+        },
+
+        reopenMeasure: (id, at) => {
+          const m = get().measures.find((x) => x.id === id);
+          if (!m) return;
+          const da = Math.hypot(at.x - m.a.x, at.y - m.a.y);
+          const db = Math.hypot(at.x - m.b.x, at.y - m.b.y);
+          // The end clicked comes loose; the other stays where it is.
+          const fixed = da <= db ? m.b : m.a;
+          commit((s) => ({
+            measures: s.measures.filter((x) => x.id !== id),
+            tool: 'measure' as const,
+            measureFirst: freeAnchor({ x: fixed.x, y: fixed.y }),
+            measureReopened: m,
+            selectedMeasureId: null,
+          }));
+        },
 
         selectMeasure: (id) =>
           set(
@@ -2954,6 +2993,10 @@ export const useEditorStore = create<EditorState>()(
             penPoints: tool === 'pen' ? s.penPoints : [],
             penRedo: tool === 'pen' ? s.penRedo : [],
             measureFirst: tool === 'measure' ? s.measureFirst : null,
+            // A saved line taken up to change, and left: it goes back as it was.
+            ...(tool !== 'measure' && s.measureReopened
+              ? { measures: [...s.measures, s.measureReopened], measureReopened: null }
+              : {}),
           })),
 
         setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),

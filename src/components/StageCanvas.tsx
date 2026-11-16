@@ -1554,6 +1554,32 @@ export function StageCanvas() {
         setHoverPieceId(null);
       }}
       onDoubleClick={(e) => {
+        // A double click on a saved check line (გაზომვა), on an end above all:
+        // that end comes loose and is placed again with the tool's snaps -
+        // longer, shorter, another angle (the user, 2026-11-16).
+        if (tool === 'select' || tool === 'measure') {
+          const s = useEditorStore.getState();
+          const world = worldAt(e.clientX, e.clientY);
+          if (world && !isElevation(s.surfaceView) && s.measures.length) {
+            const reachCm = 9 / s.zoom;
+            const nearEnd = s.measures.find(
+              (m) =>
+                Math.hypot(world.x - m.a.x, world.y - m.a.y) <= reachCm ||
+                Math.hypot(world.x - m.b.x, world.y - m.b.y) <= reachCm,
+            );
+            // With the measure tool out only an end will do - the line itself
+            // is where new lines start from.
+            const id = nearEnd?.id ?? (tool === 'select' ? measureAt(s.measures, world, 7 / s.zoom) : null);
+            if (id) {
+              e.preventDefault();
+              // The first click of the pair started a new line there: not wanted.
+              if (s.measureFirst && !s.measureReopened) s.measureCancel();
+              s.reopenMeasure(id, world);
+              setMeasurePreview(measureTarget(e.clientX, e.clientY, e.shiftKey, overrideHeld(e)));
+              return;
+            }
+          }
+        }
         // A double click on a leg of a drawn line: straight into its length,
         // to be typed rather than dragged to (the user, 2026-10-30). The first
         // click of the pair has already picked the leg.

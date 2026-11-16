@@ -105,6 +105,20 @@ export function MeasureLayer({ worldW, worldH, preview, hoverMeasureId, edges }:
               strokeDasharray={focused ? undefined : dash}
             />
             <EndTicks a={m.a} b={m.b} hair={hair} color={focused ? style.focusColor : style.color} opacity={focused ? 1 : style.opacity} />
+            {/* Picked: its two ends as handles - a double click on one takes
+                it up again to move (see reopenMeasure). */}
+            {m.id === selectedMeasureId &&
+              [m.a, m.b].map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={hair * 4}
+                  fill="#fff"
+                  stroke={style.focusColor}
+                  strokeWidth={hair * 1.5}
+                />
+              ))}
           </g>
         );
       })}
