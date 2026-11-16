@@ -468,3 +468,20 @@ export function dropOrigin(
     y: Math.round(centreY - (Number.isFinite(sizeY) ? sizeY : 0) / 2),
   };
 }
+
+/** How a piece moves - onto the squares, or by a step from where it stands. */
+export type MoveMode = 'grid' | 'step';
+
+/**
+ * The next grid line from `pos` in the direction of `delta`, the square being
+ * `|delta|` cm: 7 → 10 and 10 → 15 to the right, 7 → 5 and 10 → 5 to the left.
+ * A piece between the squares goes onto the nearest one that way, never past it.
+ */
+export function nextGridLine(pos: number, delta: number): number {
+  const step = Math.abs(delta);
+  if (!step) return pos;
+  const eps = 1e-6;
+  return delta > 0
+    ? Math.floor(pos / step + eps) * step + step
+    : Math.ceil(pos / step - eps) * step - step;
+}

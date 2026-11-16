@@ -694,7 +694,8 @@ export function StageCanvas() {
         e.preventDefault();
         return;
       }
-      // Arrow keys nudge: one grid step, or 1 cm with Shift for fine work.
+      // Arrow keys nudge: onto the next grid line (or one step, the old way -
+      // პარამეტრები), or 1 cm with Shift for fine work.
       // Arrows move by the move step from პარამეტრები whether or not the grid
       // snap is on - it is how far a piece moves, not where it lands. Shift: 1 cm.
       const step = e.shiftKey ? 1 : s.snapStep;
@@ -707,7 +708,7 @@ export function StageCanvas() {
       if (nudge[e.key]) {
         if (s.selectedIds.length) {
           e.preventDefault();
-          s.nudgeSelection(...nudge[e.key]);
+          s.nudgeSelection(...nudge[e.key], e.shiftKey);
         }
         return;
       }

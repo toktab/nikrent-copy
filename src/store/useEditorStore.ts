@@ -36,6 +36,8 @@ import {
   isPanelHolder,
   MAX_ZOOM,
   MIN_ZOOM,
+  type MoveMode,
+  nextGridLine,
   normalizeRot,
   planH,
   planW,
@@ -187,6 +189,7 @@ const PREF_KEYS = [
   'panY',
   'snap',
   'snapStep',
+  'moveMode',
   'orthoLock',
   'edgeSnap',
   'showLengths',
@@ -391,6 +394,13 @@ export interface EditorState {
   // ── editor settings ──
   snap: boolean;
   snapStep: number;
+  /**
+   * How a piece moves (the user, 2026-11-16): 'grid' - onto the squares, every
+   * arrow press lands its edge on the next grid line and a drag drops it on
+   * one; 'step' - the old way, the step counted from wherever it stood, so a
+   * piece that started between the squares stayed between them.
+   */
+  moveMode: MoveMode;
   /** snap dragged pieces to the edges of nearby pieces, not just the grid */
   edgeSnap: boolean;
   /**
@@ -632,7 +642,7 @@ export interface EditorState {
     freehand?: boolean,
   ) => void;
   /** Arrow-key nudge, also in surface centimetres. */
-  nudgeSelection: (duCm: number, dvCm: number) => void;
+  nudgeSelection: (duCm: number, dvCm: number, fine?: boolean) => void;
   /** Live drag from the 3D view, which can also move a piece up and down. */
   moveSelectionSpatially: (
     dxCm: number,
@@ -731,6 +741,7 @@ export interface EditorState {
   // ── actions: settings ──
   setSnap: (on: boolean) => void;
   setSnapStep: (step: number) => void;
+  setMoveMode: (mode: MoveMode) => void;
   /** show or hide a whole category, or one material, on the plan */
   setObjectShown: (target: { category: Category } | { materialId: string }, shown: boolean) => void;
   resetObjectVisibility: () => void;
@@ -1151,6 +1162,7 @@ export const useEditorStore = create<EditorState>()(
 
         snap: true,
         snapStep: DRAW_STEP_CM,
+        moveMode: 'grid',
         edgeSnap: true,
         orthoLock: true,
         showLengths: true,
@@ -1370,6 +1382,11 @@ export const useEditorStore = create<EditorState>()(
             return {
               pieces: [...s.pieces, piece],
               selectedIds: [piece.id],
+              // The new piece alone: a line left picked from before was
+              // dragged along with it, and the wall moved by accident.
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedSpan: null,
               ...(hidden
                 ? {
                     objectVisibility: {
@@ -1740,7 +1757,12 @@ export const useEditorStore = create<EditorState>()(
                 // near it. Plan only — the lines are a plan, and in an
                 // elevation their coordinates mean something else entirely.
                 if (view === 'plan' && s.showSketch) {
-                  targets.push(...sketchSnapTargets(s.sketch));
+                  // Never the lines travelling WITH the selection: they are a
+                  // frame behind it, so a panel whose face is on one caught it
+                  // every frame and could only slide along it - the "it only
+                  // moves up and down" drag (the user, 2026-11-16).
+                  const carriedIds = new Set((sketchBaseline ?? []).map((k) => k.id));
+                  targets.push(...sketchSnapTargets(s.sketch.filter((k) => !carriedIds.has(k.id))));
                 }
 
                 // In cm, but held at a constant number of screen pixels so the
@@ -1866,10 +1888,29 @@ export const useEditorStore = create<EditorState>()(
           }),
 
         /** Arrow keys, in surface centimetres — so they follow the view too. */
-        nudgeSelection: (duCm, dvCm) =>
+        nudgeSelection: (duCm, dvCm, fine = false) =>
           commit((s) => {
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
+            // On the squares: the selection's edge goes to the NEXT grid line
+            // that way, not one step on from where it stands - so a piece put
+            // down between the squares is on them after one press, and every
+            // press after is exactly one square (the user, 2026-11-16).
+            if (s.moveMode === 'grid' && !fine) {
+              const byId = new Map(s.materials.map((m) => [m.id, m]));
+              let u0 = Infinity;
+              let v0 = Infinity;
+              for (const p of s.pieces) {
+                if (!selected.has(p.id)) continue;
+                const m = byId.get(p.materialId);
+                if (!m) continue;
+                const b = projectPiece(p, m, s.surfaceView);
+                u0 = Math.min(u0, b.x);
+                v0 = Math.min(v0, b.y);
+              }
+              if (Number.isFinite(u0)) duCm = nextGridLine(u0, duCm) - u0;
+              if (Number.isFinite(v0)) dvCm = nextGridLine(v0, dvCm) - v0;
+            }
             const move = unprojectDelta(duCm, dvCm, s.surfaceView);
             return {
               pieces: s.pieces.map((p) =>
@@ -2459,6 +2500,7 @@ export const useEditorStore = create<EditorState>()(
         // ── settings ──────────────────────────────────────────────────────
         setSnap: (on) => set({ snap: on }),
         setSnapStep: (step) => set({ snapStep: step }),
+        setMoveMode: (mode) => set({ moveMode: mode }),
         setEdgeSnap: (on) => set({ edgeSnap: on }),
         setOrthoLock: (on) => set({ orthoLock: on }),
         setShowLengths: (on) => set({ showLengths: on }),
