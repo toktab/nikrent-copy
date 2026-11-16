@@ -32,3 +32,16 @@ describe('templates - one drop is one unit of the set', () => {
     expect(templateCounts([one[0], ...two]).get('tpl_a')).toBe(2);
   });
 });
+
+import { sameTemplate } from '../templates';
+import { SEED_MATERIALS } from '../../data/seedCatalog';
+
+describe('the same template twice', () => {
+  const byId = new Map(SEED_MATERIALS.map((m) => [m.id, m]));
+  it('is found wherever the copy stands; a different layout is not', () => {
+    const copy = instantiate(tpl, 500, 120).pieces;
+    expect(sameTemplate(copy, byId, [tpl])?.name).toBe('კოლონა 60×60');
+    const moved = copy.map((p, i) => (i === 1 ? { ...p, x: p.x + 5 } : p));
+    expect(sameTemplate(moved, byId, [tpl])).toBeNull();
+  });
+});

@@ -4,6 +4,7 @@ import {
   instantiate,
   listTemplates,
   missingMaterials,
+  sameTemplate,
   saveTemplate,
   templateCounts,
   templatePricesSaved,
@@ -73,6 +74,8 @@ export function TemplatesDialog() {
   const selection = wholeDrawing ? pieces : picked;
   const selectionLines = wholeDrawing ? sketch : pickedLines;
   const onDrawing = useMemo(() => templateCounts(pieces), [pieces]);
+  // The same layout already saved: said before saving, and saving refused.
+  const existing = useMemo(() => sameTemplate(selection, byId, rows), [selection, byId, rows]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -92,6 +95,10 @@ export function TemplatesDialog() {
 
   async function onSave() {
     if (!name.trim() || (!selection.length && !selectionLines.length)) return;
+    if (existing) {
+      setError(`ეს შაბლონი უკვე არსებობს - ჰქვია „${existing.name}“. ნახე შაბლონების სიაში ზემოთ.`);
+      return;
+    }
     const p = parsePrice(price);
     if (p === undefined) {
       setError('ფასი უნდა იყოს რიცხვი (ან ცარიელი).');
@@ -212,7 +219,7 @@ export function TemplatesDialog() {
           </thead>
           <tbody>
             {rows.map((t) => (
-              <tr key={t.id}>
+              <tr key={t.id} className={existing?.id === t.id ? 'template-same' : undefined}>
                 <td>{t.name}</td>
                 <td className="num">{t.pieces.length}</td>
                 <td className="num">
@@ -276,6 +283,11 @@ export function TemplatesDialog() {
         <p className="field-hint">ნახაზზე ელემენტი ჯერ არ არის.</p>
       ) : (
         <div className="user-add">
+          {existing && (
+            <p className="login-error" role="status" style={{ width: '100%' }}>
+              ასეთი შაბლონი უკვე არსებობს - „{existing.name}“ (მონიშნულია სიაში ზემოთ). ახლის შენახვა არ არის საჭირო.
+            </p>
+          )}
           <label className="field">
             <span>დასახელება</span>
             <input
@@ -298,7 +310,7 @@ export function TemplatesDialog() {
           </label>
           <button
             className="btn primary"
-            disabled={busy || !name.trim() || !canEdit}
+            disabled={busy || !name.trim() || !canEdit || !!existing}
             onClick={() => void onSave()}
             title={`${selection.length} ელემენტი${selectionLines.length ? ` + ${selectionLines.length} ხაზი` : ''}`}
           >
