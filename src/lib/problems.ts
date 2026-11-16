@@ -3,6 +3,7 @@ import type { Point } from './sketch';
 import { checkPath, type FaceCheck } from './lengthCheck';
 import { cornersOnly } from './sketchFill';
 import { pieceBounds, rectsOverlap, type Rect } from './geometry';
+import { contactBetween } from './contacts';
 import { allGaps, componentThatFits, faceBands, isFace, type GapRect } from './gap';
 import { hiddenSpan } from './projection';
 import { remainingRows } from './remaining';
@@ -20,7 +21,7 @@ import type { StockView } from './inventory';
  * the ნაშთი shortfall. Each finding says where it is, so a click can go there.
  */
 
-export type ProblemKind = 'length' | 'overlap' | 'empty' | 'gap' | 'shortage';
+export type ProblemKind = 'length' | 'overlap' | 'fillers' | 'empty' | 'gap' | 'shortage';
 
 export interface Problem {
   /** stable while the drawing is unchanged, for list keys */
@@ -59,7 +60,7 @@ const NEAR_LINE_CM = 12;
  */
 const MAX_GAP_CM = 100;
 
-const KIND_ORDER: ProblemKind[] = ['length', 'overlap', 'empty', 'gap', 'shortage'];
+const KIND_ORDER: ProblemKind[] = ['length', 'overlap', 'fillers', 'empty', 'gap', 'shortage'];
 
 interface Input {
   materials: Material[];
@@ -141,6 +142,19 @@ export function findProblems({ materials, pieces, sketch, view }: Input): Proble
       detail: `${cluster.ids.length} ელემენტი ერთ ადგილას`,
       at: { x: cluster.box.x + cluster.box.w / 2, y: cluster.box.y + cluster.box.h / 2 },
       pieceIds: cluster.ids,
+    });
+  }
+
+  // ── one ჩაკერება against another (the user, 2026-11-16: never) ──
+  for (const pair of touchingFillers(pieces, byId)) {
+    problems.push({
+      id: `fillers:${pair.ids.join(':')}`,
+      kind: 'fillers',
+      severity: 'error',
+      title: 'ჩაკერება ჩაკერების გვერდით',
+      detail: 'ორი ჩაკერება ერთმანეთზე არ უნდა იდგეს - ერთი პანელის მეორე მხარეს გადაიტანე',
+      at: pair.at,
+      pieceIds: pair.ids,
     });
   }
 
@@ -275,4 +289,31 @@ function overlapClusters(pieces: Piece[], byId: Map<string, Material>): Array<{ 
       const y1 = Math.max(...members.map((i) => boxes[i].box.y + boxes[i].box.h));
       return { ids: members.map((i) => boxes[i].id), box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } };
     });
+}
+
+/**
+ * Pairs of ჩაკერება standing against each other on the plan - side by side in
+ * one run, the same course. A rule (the user, 2026-11-16), so the fill never
+ * lays them so; this catches the ones put down by hand.
+ */
+export function touchingFillers(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+): Array<{ ids: [string, string]; at: Point }> {
+  const fillers = pieces.flatMap((p) => {
+    const m = byId.get(p.materialId);
+    return m?.category === 'filler' ? [{ p, r: pieceBounds(p, m) }] : [];
+  });
+  const out: Array<{ ids: [string, string]; at: Point }> = [];
+  for (let i = 0; i < fillers.length; i++) {
+    for (let j = i + 1; j < fillers.length; j++) {
+      const a = fillers[i];
+      const b = fillers[j];
+      if (Math.round(a.p.z ?? 0) !== Math.round(b.p.z ?? 0)) continue;
+      const c = contactBetween(a.r, b.r);
+      if (!c || c.kind !== 'touch') continue;
+      out.push({ ids: [a.p.id, b.p.id], at: { x: (c.x1 + c.x2) / 2, y: (c.y1 + c.y2) / 2 } });
+    }
+  }
+  return out;
 }

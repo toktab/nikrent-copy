@@ -1,5 +1,5 @@
 import type { Material, Piece } from '../types';
-import { soloPanels, walerTotals } from './walers';
+import { soloPanels, placedWalers, walerTotals } from './walers';
 import { cornerConnectorSpots, cornerConnectorTotals } from './cornerConnectors';
 import { isConnector, isLatch, isLinear, isNut, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
 import { isCrocodile, isFrog } from './clamps';
@@ -198,11 +198,26 @@ export function findBolts(pieces: Piece[], byId: Map<string, Material>): Bolt[] 
     }
   }
 
+  // ...and a შიდა კუთხე's leg ending on the long face of a panel set square
+  // to it: a T as well, a კონექტორი's place (the user's seventh picture,
+  // 2026-11-16, the bottom case). A panel carrying straight on from the leg
+  // end is a ბაყაყი's place instead - clamps.ts.
+  for (const c of corners) {
+    for (const face of panels) {
+      if (!sameCourse(c.p, face.p)) continue;
+      for (const e of cornerLegEnds(c.p, c.m)) {
+        for (const f of panelFaces(face.r)) {
+          const s = stretch(e, f);
+          if (s) add(s, 'tee', c.p, face.p);
+        }
+      }
+    }
+  }
+
   // No longer: an inner corner leg ending on a ჩაკერება 5 / 10. That place
   // has its კუთხის კონექტორი 25 სმ - შიდა, worked out with its ბარაშკა
   // პატარა (cornerConnectors.ts); a კონექტორი here as well was the same
   // connector twice (the user, 2026-11-08).
-  void corners;
   void fillers;
 
   return out;
@@ -515,6 +530,8 @@ export interface Rod {
   corner?: boolean;
   /** a whole-head 40 სმ put down by hand - the piece is drawn, not a mark */
   placed?: boolean;
+  /** the concrete between the two faces, cm - what decides the rod's length */
+  wall?: number;
   /** the two panels on one face whose joint it goes through - its key */
   a: string;
   b: string;
@@ -620,7 +637,10 @@ const rodTakenOff = (byPiece: Map<string, Piece>, j: Joint) =>
  * ones taken off by hand: they are still where a rod can be put back.
  */
 export function findRods(pieces: Piece[], byId: Map<string, Material>, all = false): Rod[] {
-  return allRods(pieces, byId, all).filter((r) => !r.corner);
+  // At an inside corner's leg end too: a შტირი like any other (the user,
+  // 2026-11-16 - the 40 სმ head put there instead was wrong, a შტირი was
+  // expected). `corner` only says where it is.
+  return allRods(pieces, byId, all);
 }
 
 /**
@@ -656,11 +676,13 @@ export function findCornerRods(pieces: Piece[], byId: Map<string, Material>, all
       b: p.id,
     });
   }
-  return [...allRods(pieces, byId, all).filter((r) => r.corner), ...placed];
+  // Never worked out any more - at a corner leg end goes a შტირი (findRods).
+  void all;
+  return placed;
 }
 
 /**
- * Every შტირი 40 სმ მთლიანი თავით the drawing needs, wherever it goes (the
+ * Every კონექტორი 40 სმ მთლიანი თავით the drawing needs, wherever it goes (the
  * user, 2026-11-08: the ვოლერის შტირი 40 სმ is the same part): at inside
  * corner leg ends (`findCornerRods`, with the fullHead kind on) and two on
  * every ვოლერი (with the walers on). One total, so nothing is counted twice;
@@ -678,6 +700,11 @@ export function fullHeadTotals(
     for (const s of soloPanels(pieces, byId)) {
       each.push(s.walers * 2);
       fromWalers += s.walers * 2;
+    }
+    // ...and the walers put down by hand, two on each of them too.
+    for (const p of placedWalers(pieces, byId)) {
+      each.push(p.each * 2);
+      fromWalers += p.each * 2;
     }
   }
   const by = new Map<number, number>();
@@ -764,6 +791,7 @@ function allRods(pieces: Piece[], byId: Map<string, Material>, all: boolean): Ro
       z: j.z,
       h,
       count: rodsUpHeight(h),
+      wall: gapBetween(j, k),
       corner: [j.a, j.b, k.a, k.b].some((id) => {
         const p = byPiece.get(id);
         const m = p && byId.get(p.materialId);
@@ -818,6 +846,30 @@ export function openRods(pieces: Piece[], byId: Map<string, Material>, anyCourse
 export function rodCount(pieces: Piece[], byId: Map<string, Material>): number {
   const open = openRods(pieces, byId).reduce((n, r) => n + r.count, 0);
   return open + placedRods(pieces, byId).length;
+}
+
+/**
+ * How long a შტირი a wall takes, by its thickness - the concrete between the
+ * two faces (the user, 2026-11-16): up to 20 cm a 60, up to 40 a 90, thicker
+ * a 1 m one.
+ */
+export function rodLengthForWall(wall: number): number {
+  if (wall <= 20 + 0.5) return 60;
+  if (wall <= 40 + 0.5) return 90;
+  return 100;
+}
+
+const rodLen = (m: Material) => Math.max(m.w, m.h);
+
+/** The catalog rod a worked-out spot takes: by the wall's thickness, else by its span. */
+export function rodMaterialForRod(
+  materials: Material[],
+  rod: Pick<Rod, 'from' | 'to' | 'wall'>,
+): Material | undefined {
+  if (rod.wall === undefined) return rodMaterialFor(materials, rod.to - rod.from);
+  const want = rodLengthForWall(rod.wall);
+  const rods = materials.filter(isRod).sort((a, b) => rodLen(a) - rodLen(b));
+  return rods.find((m) => Math.abs(rodLen(m) - want) < 0.5) ?? rods.find((m) => rodLen(m) >= want) ?? rods[rods.length - 1];
 }
 
 /** The catalog rod for a span: the shortest that sticks out past both faces. */
@@ -1088,7 +1140,7 @@ export function fittingCount(pieces: Piece[], byId: Map<string, Material>, fit: 
 export const nutCount = (pieces: Piece[], byId: Map<string, Material>) =>
   rodCount(pieces, byId) * 2 +
   connectorCount(pieces, byId) +
-  walerTotals(soloPanels(pieces, byId)).nuts +
+  walerTotals(soloPanels(pieces, byId), placedWalers(pieces, byId)).nuts +
   cornerConnectorTotals(cornerConnectorSpots(pieces, byId)).nuts;
 
 /** The fittings for one rod end, one per rod up it, facing out. `ids` as in `rodStack`. */
@@ -1346,4 +1398,44 @@ export function latchParts(p: Piece, m: Material): Array<{ piece: Piece; materia
     box('clamp', LATCH_DEPTH_CM, LATCH_LEN_CM, LATCH_TALL_CM, LATCH_DEPTH_CM / 2, '#3f72d6'),
     box('wedge', 1.2, 1.6, LATCH_TALL_CM * 2, LATCH_DEPTH_CM * 0.6, '#24489a'),
   ];
+}
+
+/**
+ * Every შტირი by catalog length (the user, 2026-11-16: the size of the rods put
+ * down was not clear anywhere) - the worked-out ones sized by their wall's
+ * thickness, up every spot, and the ones placed as they are.
+ */
+export function rodSizes(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  materials: Material[],
+): Array<{ material: Material; count: number }> {
+  const by = new Map<string, { material: Material; count: number }>();
+  const add = (m: Material | undefined, n: number) => {
+    if (!m) return;
+    const had = by.get(m.id) ?? { material: m, count: 0 };
+    had.count += n;
+    by.set(m.id, had);
+  };
+  for (const r of openRods(pieces, byId)) add(rodMaterialForRod(materials, r), r.count);
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (m && isRod(m)) add(m, 1);
+  }
+  return [...by.values()].sort((a, b) => rodLen(a.material) - rodLen(b.material));
+}
+
+/** The worked-out rod spot a placed rod stands in, if any - for its wall thickness. */
+export function rodSpotOf(p: Piece, m: Material, pieces: Piece[], byId: Map<string, Material>): Rod | null {
+  const c = pieceCentre(p, m);
+  let best: Rod | null = null;
+  let bestD = ON_ROD_CM;
+  for (const r of findRods(pieces, byId, true)) {
+    const d = Math.hypot(c.x - r.x, c.y - r.y);
+    if (d <= bestD) {
+      bestD = d;
+      best = r;
+    }
+  }
+  return best;
 }

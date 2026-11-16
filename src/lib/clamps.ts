@@ -1,5 +1,6 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { isLinear, normalizeRot, pieceBounds, planH, planW, type Rect } from './geometry';
+import { faceBands } from './gap';
 
 /**
  * ნიანგი and ბაყაყი - the two clamps that hold a face's pieces together along
@@ -24,6 +25,11 @@ export type ClampKind = 'crocodiles' | 'frogs';
 
 export function isCrocodile(m: Material): boolean {
   return m.name.includes('ნიანგ') && !isLinear(m);
+}
+
+/** A შიდა კუთხე profile. */
+function isInnerCornerPiece(m: Material): boolean {
+  return m.category === 'corner' && m.shape === 'L' && m.name.includes('შიდა');
 }
 
 export function isFrog(m: Material): boolean {
@@ -211,6 +217,41 @@ export function clampSpots(
         z: Math.round(p.z ?? 0),
         each: FROGS_PER_OUTER_CORNER,
       });
+    }
+  }
+  /**
+   * A შიდა კუთხე's leg running straight on into a panel - the leg end against
+   * the panel's end, one straight face (the user's seventh picture,
+   * 2026-11-16: "აქ ბაყაყი გვჭირდება"). The two are clamped like two panels.
+   * A panel set square against the leg end instead is a T - a კონექტორი's
+   * place, not this.
+   */
+  if (kind === 'frogs') {
+    for (const p of pieces) {
+      const pm = byId.get(p.materialId);
+      if (!pm || !upright(p) || !isInnerCornerPiece(pm)) continue;
+      const r = pieceBounds(p, pm);
+      for (const b of faceBands(r, pm, p.rot, false) ?? []) {
+        const across = b.axis === 'u';
+        const leg = part(p, pm, across);
+        const legPart: Part = {
+          ...leg,
+          near: b.from,
+          far: b.to,
+        };
+        for (const q of panels) {
+          if (q.across !== across || q.z !== legPart.z) continue;
+          // One straight face: flush on one side at least (the leg can be
+          // thinner than the panel is deep).
+          const flush = Math.abs(q.near - legPart.near) <= TOUCH || Math.abs(q.far - legPart.far) <= TOUCH;
+          if (!flush) continue;
+          // End to end, touching: the leg's free end on the panel's end.
+          const at =
+            Math.abs(q.lo - legPart.hi) <= TOUCH ? legPart.hi : Math.abs(legPart.lo - q.hi) <= TOUCH ? legPart.lo : null;
+          if (at === null) continue;
+          out.push(spotAt(q, at, backOf(q, panels, sketch), m, clampsUpHeight(Math.max(q.m.h, pm.h))));
+        }
+      }
     }
   }
   for (const a of panels) {

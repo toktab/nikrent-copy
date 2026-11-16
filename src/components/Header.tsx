@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import {
   exportCatalogFile,
@@ -99,6 +99,8 @@ export function Header() {
   const setForceLabels = useEditorStore((s) => s.setForceLabels);
   const setEdgeSnap = useEditorStore((s) => s.setEdgeSnap);
   const setShowOverlaps = useEditorStore((s) => s.setShowOverlaps);
+  const showContacts = useEditorStore((s) => s.showContacts);
+  const setShowContacts = useEditorStore((s) => s.setShowContacts);
   const setShowGaps = useEditorStore((s) => s.setShowGaps);
   const setTool = useEditorStore((s) => s.setTool);
   const penPerimeter = useEditorStore((s) => s.penPerimeter);
@@ -118,9 +120,13 @@ export function Header() {
   const setToast = useEditorStore((s) => s.setToast);
   const canManage = useCanManageCatalog();
 
+  // Real quantities of every ჭანჭიკი, not marks - quantities.ts.
+
+  const bomKinds = useKindsOn();
+
   const shortages = useMemo(
-    () => buildBom(materials, pieces, documents, activeDocId).shortageCount,
-    [materials, pieces, documents, activeDocId],
+    () => buildBom(materials, pieces, documents, activeDocId, bomKinds).shortageCount,
+    [materials, pieces, documents, activeDocId, bomKinds],
   );
   const hasSelection = selectedIds.length > 0;
   const activeDoc = documents.find((d) => d.id === activeDocId);
@@ -672,6 +678,13 @@ export function Header() {
                   გადაფარება
                 </MenuItem>
                 <MenuItem
+                  on={showContacts}
+                  onClick={() => setShowContacts(!showContacts)}
+                  title="მწვანე ხაზი - ელემენტები ერთმანეთს ეხება; წითელი - ცოტა აკლია (1-4 სმ ღრიჭო). ხაზვის ბოლოებზეც."
+                >
+                  შეხება
+                </MenuItem>
+                <MenuItem
                   on={showGaps}
                   onClick={() => setShowGaps(!showGaps)}
                   title="ყველა ღია ნაპრალი ნახაზზე - შეკვეთამდე შესამოწმებლად"
@@ -838,7 +851,7 @@ export function Header() {
               onClick={() => openDialog({ kind: 'templates' })}
               title="შენახული შაბლონები - მონიშნულის შენახვა და ჩასმა"
             >
-              <Icon name="copy" /> <span className="btn-label">შაბლონი</span>
+              <Icon name="copy" /> <span className="btn-label">შაბლონები</span>
             </button>
           </>
         )}

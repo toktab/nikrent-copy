@@ -44,7 +44,7 @@ import {
   nutStack,
   openRodEnds,
   openRods,
-  rodMaterialFor,
+  rodMaterialForRod,
   rodSpot,
   rodStack,
 } from '../lib/bolts';
@@ -177,7 +177,7 @@ export function View3D() {
   const autoRods = useMemo(() => {
     if (!showBolts) return [];
     const rods = openRods(pieces, byId).flatMap((r) => {
-      const m = rodMaterialFor(materials, r.to - r.from);
+      const m = rodMaterialForRod(materials, r);
       return m ? rodStack(m, rodSpot(r), [], () => '') : [];
     });
     // ...and the ქანჩი + დისკო, wing piece and all, on both ends of every rod.

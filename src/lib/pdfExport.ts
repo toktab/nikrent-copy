@@ -2,6 +2,7 @@ import html2canvas from 'html2canvas';
 import type { jsPDF } from 'jspdf';
 import type { Bom } from './bom';
 import { fmtNum, sizeLabel } from './bom';
+import { fmtGel, type PriceSummary } from './prices';
 
 /**
  * The BOM *text* is rendered as ordinary HTML and rasterised with html2canvas
@@ -13,8 +14,41 @@ import { fmtNum, sizeLabel } from './bom';
  * took many seconds to re-rasterise a multi-megapixel image.
  */
 export interface PdfOptions {
-  bom: Bom;
+  /** null: no list, only the ფასი block */
+  bom: Bom | null;
   title?: string;
+  /** the drawn lines' total length, m - the პერიმეტრი card */
+  perimeterM?: number;
+  /** the ფასი block (the user, 2026-11-16) - only when asked for */
+  prices?: PriceSummary | null;
+}
+
+/** The ფასი block: each price on its own line, then what they come to. */
+function pricesHtml(p: PriceSummary): string {
+  const rows: string[] = [];
+  if (p.manual !== null) rows.push(`<tr><td>ფასი</td><td class="num"></td><td class="num">${fmtGel(p.manual)}</td></tr>`);
+  if (p.perM2 !== null && p.areaSum !== null) {
+    rows.push(
+      `<tr><td>კვადრატულობა × ფასი 1 მ²-ზე</td><td class="num">${fmtNum(p.areaM2)} მ² × ${fmtGel(p.perM2)}</td><td class="num">${fmtGel(p.areaSum)}</td></tr>`,
+    );
+  }
+  for (const s of p.sets) {
+    rows.push(
+      `<tr><td>${esc(s.name)}</td><td class="num">${s.count} ც. × ${fmtGel(s.unit)}</td><td class="num">${s.unit === null ? '-' : fmtGel(s.sum)}</td></tr>`,
+    );
+  }
+  if (p.sets.length) {
+    rows.push(`<tr class="sub"><td>კომპლექტის ფასი</td><td class="num"></td><td class="num">${fmtGel(p.setSum)}</td></tr>`);
+  }
+  if (!rows.length) return '';
+  return `
+    <h2 class="price-head">ფასი</h2>
+    <table class="prices">
+      <tbody>
+        ${rows.join('')}
+        <tr class="total"><td>სულ</td><td class="num"></td><td class="num">${fmtGel(p.total)}</td></tr>
+      </tbody>
+    </table>`;
 }
 
 function esc(value: unknown): string {
@@ -25,8 +59,19 @@ function esc(value: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
-function buildPrintableHtml({ bom, title }: PdfOptions): string {
+function buildPrintableHtml({ bom, title, perimeterM, prices }: PdfOptions): string {
   const date = new Date().toLocaleDateString('ka-GE');
+  const priceBlock = prices ? pricesHtml(prices) : '';
+  if (!bom) {
+    return `
+  <div class="doc">
+    <header>
+      <h1>${esc(title ?? 'კუბი - ფასი')}</h1>
+      <div class="meta">თარიღი: ${esc(date)}</div>
+    </header>
+    ${priceBlock}
+  </div>`;
+  }
 
   // A blank rather than "0" where the quantity does not apply: accessories have
   // no length, linear members have no face area.
@@ -76,7 +121,7 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
 
     <section class="cards">
       <div class="card"><span>სულ ელემენტი</span><b>${bom.totalPieces}</b></div>
-      <div class="card"><span>სულ სიგრძე</span><b>${fmtNum(bom.totalLengthM)} მ</b></div>
+      <div class="card"><span>პერიმეტრი</span><b>${perimeterM !== undefined && perimeterM > 0 ? `${fmtNum(perimeterM)} მ` : '-'}</b></div>
       <div class="card"><span>სულ ფართობი</span><b>${fmtNum(bom.totalAreaM2)} მ²</b></div>
       <div class="card"><span>სულ წონა${bom.unweighedRows > 0 ? ' *' : ''}</span><b>${fmtNum(bom.totalWeightKg)} კგ</b></div>
     </section>
@@ -100,6 +145,7 @@ function buildPrintableHtml({ bom, title }: PdfOptions): string {
       </tbody>
     </table>
     ${weightNote}
+    ${priceBlock}
   </div>`;
 }
 
@@ -124,6 +170,9 @@ const PRINT_CSS = `
   .doc tr.total td{font-weight:700;border-top:2px solid #1b1f24;background:#eef1f5;}
   .doc .empty{color:#7a8492;text-align:center;padding:22px;}
   .doc .note{font-size:11px;color:#7a8492;margin:9px 0 0;}
+  .doc .price-head{font-size:16px;margin:22px 0 8px;border-bottom:2px solid #1b1f24;padding-bottom:6px;}
+  .doc table.prices td:first-child{width:50%;}
+  .doc table.prices tr.total td{font-size:14px;}
 `;
 
 /**

@@ -99,6 +99,14 @@ export interface Piece {
    * there. The inspector switches a piece between the two.
    */
   auto?: true;
+  /**
+   * Dropped in from a შაბლონი (the user, 2026-11-16): the template's id, and
+   * one id shared by every piece of that one drop. A drawing with a column
+   * template put down four times has four instances - what the კომპლექტის
+   * ფასი in the export counts, at the template's price each.
+   */
+  tpl?: string;
+  tplInst?: string;
 }
 
 /** Everything a material needs except its identity flags. */
@@ -201,8 +209,24 @@ export interface DrawingDoc {
  * who it is for, so far. Kept as one object so the fields still to come land
  * in the same column without another migration.
  */
+/**
+ * The prices the export prints (the user, 2026-11-16), all set by hand in the
+ * export window and kept with the drawing.
+ */
+export interface DrawingPrices {
+  /** print the ფასი block at all */
+  show?: boolean;
+  /** one price typed in, ₾ */
+  manual?: number | null;
+  /** price of one m² of formwork, ₾ - times the კვადრატულობა */
+  perM2?: number | null;
+  /** per-unit price of each template (column) on the drawing, by template id - over its own */
+  templates?: Record<string, number | null>;
+}
+
 export interface DrawingInfo {
   clientName?: string;
+  prices?: DrawingPrices;
   /** which ჭანჭიკი kinds this drawing has on - see lib/boltKinds.ts; absent, none */
   bolts?: Partial<Record<string, boolean>>;
 }

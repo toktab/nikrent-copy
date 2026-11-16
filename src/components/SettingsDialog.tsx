@@ -32,6 +32,7 @@ export function SettingsDialog() {
 
   const reset = () => {
     setSnapStep(DRAW_STEP_CM);
+    useEditorStore.getState().setMoveMode('grid');
     setPanelDepth(DEFAULT_PANEL_DEPTH_CM);
     resetObjectVisibility();
   };
@@ -78,6 +79,7 @@ export function SettingsDialog() {
         />
       </div>
 
+      <MoveModeSetting />
       <AlignToGrid />
 
       <h4 className="vis-section">ხილვადობა ნახაზზე</h4>
@@ -151,6 +153,39 @@ function NumberSetting({
  * thick sit half a centimetre off the squares at 10 - back onto them, as one
  * undo step. See `alignPieces`.
  */
+/**
+ * How the arrows move a piece (the user, 2026-11-16): onto the squares by
+ * default, with the old "a step from wherever it stands" kept as a named
+ * choice to go back to.
+ */
+function MoveModeSetting() {
+  const mode = useEditorStore((s) => s.moveMode);
+  const setMoveMode = useEditorStore((s) => s.setMoveMode);
+  const snapStep = useEditorStore((s) => s.snapStep);
+  return (
+    <div className="vis-extra" style={{ marginTop: 10 }}>
+      <div className="hint-note" style={{ marginTop: 0, marginBottom: 4 }}>
+        გადაადგილების წესი (ისრები)
+      </div>
+      <label className="vis-check">
+        <input type="radio" name="move-mode" checked={mode === 'grid'} onChange={() => setMoveMode('grid')} />
+        <span>
+          ბადის უჯრებზე ({snapStep} სმ){' '}
+          <span className="menu-note">- ყოველი დაჭერა ელემენტს შემდეგ უჯრის ხაზზე სვამს (ნაგულისხმევი)</span>
+        </span>
+      </label>
+      <label className="vis-check">
+        <input type="radio" name="move-mode" checked={mode === 'step'} onChange={() => setMoveMode('step')} />
+        <span>
+          ძველი - ბიჯით იქიდან, სადაც დგას{' '}
+          <span className="menu-note">- უჯრებს შორის მდგარი ელემენტი უჯრებს შორის რჩება</span>
+        </span>
+      </label>
+      <div className="hint-note">Shift + ისარი - 1 სმ, ორივე რეჟიმში.</div>
+    </div>
+  );
+}
+
 function AlignToGrid() {
   const alignToGrid = useEditorStore((s) => s.alignToGrid);
   const setToast = useEditorStore((s) => s.setToast);
@@ -234,7 +269,7 @@ function FullHeadSwitch() {
         }}
       />
       <span>
-        შტირი 40 სმ მთლიანი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხის ფეხთან</span>
+        კონექტორი 40 სმ მთლიანი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: შიდა კუთხის ფეხთან</span>
       </span>
     </label>
   );
@@ -256,7 +291,7 @@ function HalfHeadSwitch() {
         }}
       />
       <span>
-        შტირი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
+        კონექტორი 40 სმ ნახევარი თავით ნახაზზე <span className="menu-note">- გამოთვლილი: გარე კუთხე ჩ10-ით</span>
       </span>
     </label>
   );

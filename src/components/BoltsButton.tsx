@@ -6,9 +6,9 @@ import { Menu, MenuItem, MenuLabel, MenuSep } from './Menu';
 import { Icon } from './Icon';
 import { ClampShape, ConnectorGlyph, NutGlyph, RING, WingShape } from './BoltLayer';
 import { smallNutTotals } from '../lib/cornerConnectors';
-import { fullHeadTotals } from '../lib/bolts';
+import { fullHeadTotals, rodSizes } from '../lib/bolts';
 import { CrocodileShape, FrogShape, PanelHolderShape } from './ShapeSvg';
-import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
+import { soloPanels, placedWalers, WALER_LOCK_NAME, WALER_ROD_NAME, walerSizes, walerTotals } from '../lib/walers';
 import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 
 /**
@@ -48,8 +48,8 @@ const KIND_NAMES: Array<[KindKey, string]> = [
   ['nuts', 'ქანჩი + დისკო'],
   ['latches', 'ჩამკეტი fix'],
   ['walers', 'ვოლერები'],
-  ['halfHead', 'შტირი 40 სმ ნახევარი თავით'],
-  ['fullHead', 'შტირი 40 სმ მთლიანი თავით'],
+  ['halfHead', 'კონექტორი 40 სმ ნახევარი თავით'],
+  ['fullHead', 'კონექტორი 40 სმ მთლიანი თავით'],
   ['smallNuts', 'ბარაშკა პატარა (შიდა კუთხე)'],
   ['crocodiles', 'ნიანგი'],
   ['frogs', 'ბაყაყი'],
@@ -74,8 +74,14 @@ export function BoltsButton() {
   const on = useKindsOn();
   const setKindOn = useEditorStore((s) => s.setKindOn);
   const groups = useMemo(() => boltGroups(pieces, byId, on), [pieces, byId, on]);
-  const walers = useMemo(() => walerTotals(soloPanels(pieces, byId)), [pieces, byId]);
+  const walers = useMemo(() => walerTotals(soloPanels(pieces, byId), placedWalers(pieces, byId)), [pieces, byId]);
   const walersShown = useEditorStore((s) => s.walersShown);
+  const rodSizeList = useMemo(() => rodSizes(pieces, byId, materials), [pieces, byId, materials]);
+  // Which catalog walers those are, by size (the user, 2026-11-16).
+  const sizes = useMemo(
+    () => walerSizes(soloPanels(pieces, byId), placedWalers(pieces, byId), materials),
+    [pieces, byId, materials],
+  );
   const cc = useMemo(() => cornerConnectorTotals(cornerConnectorSpots(pieces, byId)), [pieces, byId]);
   const ccShown = useEditorStore((s) => s.cornerConnectorsShown);
   const setCcShown = useEditorStore((s) => s.setCornerConnectorsShown);
@@ -167,6 +173,19 @@ export function BoltsButton() {
           შტირები
         </span>
       </MenuItem>
+      {/* Which lengths: by the wall's thickness - up to 20 cm a 60, up to 40 a 90,
+          more a 100 (the user, 2026-11-16). */}
+      {on.rods && rodSizeList.length > 0 && (
+        <div className="bolts-sub">
+          {rodSizeList.map((s) => (
+            <span key={s.material.id} style={{ display: 'contents' }}>
+              <span>{s.material.name}</span>
+              <span className="bolts-calc">{Math.max(s.material.w, s.material.h)} სმ</span>
+              <b>{s.count} ც.</b>
+            </span>
+          ))}
+        </div>
+      )}
       <MenuItem
         title="შტირი × 2 (თითო ბოლოზე) + კონექტორები + ვოლერის შტირები + კუთხის კონექტორები 25 სმ + შტირები 40 სმ ნახევარი თავით - თითო თითოზე"
         trail={<KindTrail groups={groups.nuts} on={on.nuts} shown={shown.nuts} onEye={() => toggleBoltKind('nuts')} />}
@@ -198,7 +217,7 @@ export function BoltsButton() {
       {/* ვოლერები: worked out behind every panel with nothing facing it -
           3 up a 300, 2 up a 150 / 90 - and what each one is bolted with. */}
       <MenuItem
-        title="პანელი, რომელსაც კედლის მეორე მხარეს პირისპირ პანელი არ აქვს: 300-ზე 3 ვოლერი, 150 / 90-ზე 2. თითო ვოლერზე 2 შტირი 40 სმ, 2 ჩასაკეტი, 2 ქანჩი + დისკო"
+        title="პანელი, რომელსაც კედლის მეორე მხარეს პირისპირ პანელი არ აქვს: 300-ზე 3 ვოლერი, 150 / 90-ზე 2. თითო ვოლერზე 2 კონექტორი 40 სმ, 2 ჩასაკეტი, 2 ქანჩი + დისკო"
         trail={
           <KindTrail
             groups={walers.groups}
@@ -227,10 +246,17 @@ export function BoltsButton() {
           only here. */}
       {on.walers && walers.walers > 0 && (
         <div className="bolts-sub">
+          {sizes.map((s) => (
+            <span key={s.material.id} style={{ display: 'contents' }}>
+              <span>{s.material.name}</span>
+              <span className="bolts-calc">{s.material.w} სმ</span>
+              <b>{s.count} ც.</b>
+            </span>
+          ))}
           <span>{WALER_LOCK_NAME}</span>
           <span className="bolts-calc">{walers.rods} × 1 =</span>
           <b>{walers.locks} ც.</b>
-          <span className="bolts-included">შტირი 40 სმ მთლიანი თავით - შედის თავის სტრიქონში</span>
+          <span className="bolts-included">კონექტორი 40 სმ მთლიანი თავით - შედის თავის სტრიქონში</span>
           <span className="bolts-calc">{walers.walers} × 2 =</span>
           <b className="bolts-included">{walers.rods} ც.</b>
           <span className="bolts-included">ქანჩი + დისკო - შედის ზედა ქანჩი + დისკოში</span>
@@ -241,7 +267,7 @@ export function BoltsButton() {
       {/* ...and where the corner is closed with a ჩ10, the half-head
           შტირი 40 სმ (წაჭრილი გაიკა) instead. */}
       <MenuItem
-        title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ10 დგას: შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა, არა სრული თავით), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
+        title="გარე კუთხეში, სადაც გამავალ პანელსა და მომდევნო პანელს შორის ჩ10 დგას: კონექტორი 40 სმ ნახევარი თავით (წაჭრილი გაიკა, არა სრული თავით), გარედან ქანჩი + დისკო. 300-ზე 5, 150 / 90-ზე 2"
         trail={
           <KindTrail
             groups={cc.halfGroups}
@@ -265,7 +291,7 @@ export function BoltsButton() {
       {/* ...and where an inside corner's leg end faces an outer joint, the
           whole-head შტირი 40 სმ (წაჭრის გარეშე). */}
       <MenuItem
-        title="შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე), ყველგან: შიდა კუთხის ფეხის ბოლოს პირდაპირ (300-ზე 5, 150 / 90-ზე 2) და ვოლერზე 2 (ვოლერის შტირი - იგივე ნაწილია). ქანჩი + დისკო თითოზე"
+        title="კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე), ყველგან: შიდა კუთხის ფეხის ბოლოს პირდაპირ (300-ზე 5, 150 / 90-ზე 2) და ვოლერზე 2 (ვოლერის შტირი - იგივე ნაწილია). ქანჩი + დისკო თითოზე"
         trail={
           <KindTrail
             groups={fullGroups}

@@ -45,7 +45,7 @@ const SEEDS: Seed[] = [
   ['corner-connector', 'კუთხის კონექტორი', 'corner', 8, 8, 'rect'],
   // Was "კუთხის კონექტორი 40სმ": it is the whole-head შტირი 40 სმ, drawn as
   // its disc (the user, 2026-11-07). Kept at its place - old files count by it.
-  ['corner-connector-40', 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)', 'acc', 8, 8, 'rect'],
+  ['corner-connector-40', 'კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე)', 'acc', 8, 8, 'rect'],
 
   // ---- Posts ---------------------------------------------------------------
   // დგარი და თავი - a ჭანჭიკი kind since 2026-11-07: the small one for a 150
@@ -88,8 +88,12 @@ const SEEDS: Seed[] = [
 
   ['waler-rod-lock', 'ვოლერის შტირის თავის ჩასაკეტი', 'acc', 6, 6, 'rect'],
   // The two 40 სმ heads, drawn as their discs (the user, 2026-11-07).
-  ['rod-40-half-head', 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 8, 8, 'rect'],
+  ['rod-40-half-head', 'კონექტორი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)', 'acc', 8, 8, 'rect'],
   ['acc-small-barashka', 'ბარაშკა პატარა (გილზა + გაიკა)', 'acc', 6, 6, 'rect'],
+  // The middle შტირი of the wall-thickness rule (the user, 2026-11-16: up to
+  // 20 cm a 60, up to 40 a 90, thicker a 100). At the end, like every new one,
+  // so the order old files count by is kept.
+  ['rod-90', 'ჭანჭიკი (შტირი 0,90 სმ)', 'rod', 90, 3, 'line'],
 ];
 
 /** Du panels are always 9 cm thick. */

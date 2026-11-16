@@ -273,7 +273,8 @@ const reach = (px: number, minCm: number, zoom: number) => Math.max(px / zoom, m
 const EDGE_REACH = { px: 40, cm: 60 };
 const END_SNAP = { px: 12, cm: 3 };
 const SUGGESTION = { px: 24, cm: 10 };
-const VERTEX = { px: 10, cm: 2 };
+// An exact corner - the end of a panel or a corner leg - is worth reaching for.
+const VERTEX = { px: 14, cm: 3 };
 const PARALLEL = { px: 14, cm: 5 };
 // Two check lines meant to meet should meet: the magnet reaches a little
 // further than the other snaps.
@@ -613,7 +614,37 @@ export function secondPoint(
     const ry = at.y - first.y;
     const across = Math.abs(rx * u.y - ry * u.x);
     if (across <= reach(PARALLEL.px, PARALLEL.cm, zoom)) {
-      const t = roundTo(rx * u.x + ry * u.y, step);
+      const raw = rx * u.x + ry * u.y;
+      // Passing the end of a panel, a filler or a corner leg on the way along:
+      // stop exactly level with it (the user, 2026-11-16 - the end of the
+      // panel or the corner has to be found, not stepped past on the grid).
+      const lineUp = reach(TRACK.px, TRACK.cm, zoom);
+      let hit: { t: number; p: Point; edge: RefEdge; d: number } | null = null;
+      for (const e of edges) {
+        if (e.key.startsWith('ms:')) continue;
+        for (const p of [e.a, e.b]) {
+          const t = (p.x - first.x) * u.x + (p.y - first.y) * u.y;
+          const d = Math.abs(t - raw);
+          if (d <= lineUp && Math.abs(t) > 0.5 && (!hit || d < hit.d)) hit = { t, p, edge: e, d };
+        }
+      }
+      if (hit) {
+        const point = { x: first.x + u.x * hit.t, y: first.y + u.y * hit.t };
+        const n = { x: -u.y, y: u.x };
+        return {
+          point,
+          via: 'track',
+          helper: {
+            point,
+            foot: { ...hit.p },
+            offsetCm: (point.x - hit.p.x) * n.x + (point.y - hit.p.y) * n.y,
+            atEnd: null,
+            edgeKey: hit.edge.key,
+            edge: { a: hit.edge.a, b: hit.edge.b },
+          },
+        };
+      }
+      const t = roundTo(raw, step);
       return { point: { x: first.x + u.x * t, y: first.y + u.y * t }, via: 'parallel', helper: null };
     }
   }

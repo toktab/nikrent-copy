@@ -1,34 +1,60 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   deleteTemplate,
   instantiate,
   listTemplates,
   missingMaterials,
   saveTemplate,
+  templateCounts,
+  templatePricesSaved,
+  updateTemplate,
   type Template,
 } from '../lib/templates';
 import { isConfigured } from '../lib/supabase';
+import { keepWheelOffNumber } from '../lib/numberField';
 import { useCanEditDrawings } from '../store/useAuthStore';
 import { useEditorStore } from '../store/useEditorStore';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 
+/** "1 250" style ₾ text, or a dash when there is no price. */
+export function fmtPrice(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return '-';
+  return `${n.toLocaleString('en-US', { maximumFractionDigits: 2 }).replace(/,/g, ' ')} ₾`;
+}
+
+/** A price typed by hand: blank is "no price", anything else a number >= 0. */
+export function parsePrice(text: string): number | null | undefined {
+  const t = text.trim().replace(',', '.').replace(/\s/g, '');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 /**
- * Saved assemblies: keep a finished column or wall and drop it into any
+ * შაბლონები: keep a finished column (or anything) and drop it into any
  * drawing later, instead of re-running a wizard and re-applying the same
  * corrections every time.
+ *
+ * Each template has a price of its own - one of that column, delivered (the
+ * user, 2026-11-16). The list says how many times each one is on this
+ * drawing, and the export multiplies the two into the კომპლექტის ფასი.
  */
 export function TemplatesDialog() {
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const setToast = useEditorStore((s) => s.setToast);
   const openDialog = useEditorStore((s) => s.openDialog);
   const pieces = useEditorStore((s) => s.pieces);
+  const sketch = useEditorStore((s) => s.sketch);
   const materials = useEditorStore((s) => s.materials);
   const selectedIds = useEditorStore((s) => s.selectedIds);
+  const selectedSketchIds = useEditorStore((s) => s.selectedSketchIds);
   const insertPieces = useEditorStore((s) => s.insertPieces);
   const panX = useEditorStore((s) => s.panX);
   const panY = useEditorStore((s) => s.panY);
   const zoom = useEditorStore((s) => s.zoom);
+  const stageW = useEditorStore((s) => s.stageW);
+  const stageH = useEditorStore((s) => s.stageH);
   const canEdit = useCanEditDrawings();
 
   const [rows, setRows] = useState<Template[]>([]);
@@ -36,22 +62,19 @@ export function TemplatesDialog() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
 
-  const byId = new Map(materials.map((m) => [m.id, m]));
+  const byId = useMemo(() => new Map(materials.map((m) => [m.id, m])), [materials]);
   // With nothing selected, the whole drawing: a finished job is the template
   // most worth keeping for the next building like it.
   const picked = pieces.filter((p) => selectedIds.includes(p.id));
-  const wholeDrawing = picked.length === 0;
+  const pickedLines = sketch.filter((k) => selectedSketchIds.includes(k.id));
+  const wholeDrawing = picked.length === 0 && pickedLines.length === 0;
   const selection = wholeDrawing ? pieces : picked;
+  const selectionLines = wholeDrawing ? sketch : pickedLines;
+  const onDrawing = useMemo(() => templateCounts(pieces), [pieces]);
 
   const refresh = useCallback(async () => {
-    // Templates are shared company-wide, so they only exist with a server.
-    // Without one, say so rather than surfacing a raw configuration error.
-    if (!isConfigured) {
-      setError('შაბლონები საჭიროებს სერვერთან კავშირს.');
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       setRows(await listTemplates());
@@ -68,18 +91,35 @@ export function TemplatesDialog() {
   }, [refresh]);
 
   async function onSave() {
-    if (!name.trim() || !selection.length) return;
+    if (!name.trim() || (!selection.length && !selectionLines.length)) return;
+    const p = parsePrice(price);
+    if (p === undefined) {
+      setError('ფასი უნდა იყოს რიცხვი (ან ცარიელი).');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await saveTemplate(name, selection, byId);
+      await saveTemplate(name, selection, byId, { sketch: selectionLines, price: p });
       setName('');
+      setPrice('');
       setToast(`შაბლონი "${name.trim()}" შეინახა`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function onPrice(t: Template, text: string) {
+    const p = parsePrice(text);
+    if (p === undefined || p === t.price) return;
+    try {
+      await updateTemplate(t.id, { price: p });
+      setRows((r) => r.map((x) => (x.id === t.id ? { ...x, price: p } : x)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -93,11 +133,14 @@ export function TemplatesDialog() {
       );
       return;
     }
-    // Drop near the top-left of what the user is looking at, like the wizards.
-    const atX = Math.round((0 - panX) / zoom + 40);
-    const atY = Math.round((0 - panY) / zoom + 40);
-    insertPieces(instantiate(template, atX, atY));
-    setToast(`ჩაისვა ${template.pieces.length} ელემენტი`);
+    // In the middle of what is on screen, on the 5 cm squares.
+    const cx = (stageW / 2 - panX) / zoom - template.width / 2;
+    const cy = (stageH / 2 - panY) / zoom - template.height / 2;
+    const atX = Math.round(cx / 5) * 5;
+    const atY = Math.round(cy / 5) * 5;
+    const made = instantiate(template, atX, atY);
+    insertPieces(made.pieces, made.sketch);
+    setToast(`ჩაისვა "${template.name}" - ${template.pieces.length} ელემენტი`);
     closeDialog();
   }
 
@@ -121,6 +164,8 @@ export function TemplatesDialog() {
     });
   }
 
+  const total = rows.reduce((sum, t) => sum + (t.price ?? 0) * (onDrawing.get(t.id) ?? 0), 0);
+
   return (
     <Modal
       title="შაბლონები"
@@ -137,12 +182,21 @@ export function TemplatesDialog() {
           {error}
         </p>
       )}
+      {!isConfigured && (
+        <p className="field-hint">სერვერის გარეშე შაბლონები ამ ბრაუზერში ინახება.</p>
+      )}
+      {isConfigured && !loading && !templatePricesSaved() && (
+        <p className="field-hint">
+          ფასი და ხაზები სერვერზე ჯერ არ ინახება - Supabase-ში გაუშვი migration 0015_template_price.sql.
+        </p>
+      )}
 
       {loading ? (
         <p className="field-hint">იტვირთება…</p>
       ) : rows.length === 0 ? (
         <p className="field-hint">
-          შაბლონი ჯერ არ არის. მონიშნე აწყობილი კოლონა ან კედელი და შეინახე ქვემოთ.
+          შაბლონი ჯერ არ არის. მონიშნე აწყობილი კოლონა (ელემენტები და, თუ გინდა, ხაზები) და შეინახე
+          ქვემოთ.
         </p>
       ) : (
         <table className="users-table">
@@ -151,6 +205,8 @@ export function TemplatesDialog() {
               <th>დასახელება</th>
               <th className="num">ელემენტი</th>
               <th className="num">ზომა (სმ)</th>
+              <th className="num">ერთეულის ფასი (₾)</th>
+              <th className="num">ნახაზზე</th>
               <th />
             </tr>
           </thead>
@@ -162,6 +218,24 @@ export function TemplatesDialog() {
                 <td className="num">
                   {t.width} × {t.height}
                 </td>
+                <td className="num">
+                  <input
+                    key={`${t.id}-${t.price}`}
+                    className="price-input"
+                    type="text"
+                    inputMode="decimal"
+                    defaultValue={t.price ?? ''}
+                    placeholder="-"
+                    disabled={!canEdit}
+                    onWheel={keepWheelOffNumber}
+                    onBlur={(e) => void onPrice(t, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    }}
+                    style={{ width: 90, textAlign: 'right' }}
+                  />
+                </td>
+                <td className="num">{onDrawing.get(t.id) ?? 0}</td>
                 <td className="row-actions">
                   <button
                     className="btn small primary"
@@ -174,6 +248,7 @@ export function TemplatesDialog() {
                     className="btn small danger"
                     disabled={busy || !canEdit}
                     onClick={() => askDelete(t)}
+                    aria-label="წაშლა"
                   >
                     <Icon name="trash" />
                   </button>
@@ -181,11 +256,23 @@ export function TemplatesDialog() {
               </tr>
             ))}
           </tbody>
+          {total > 0 && (
+            <tfoot>
+              <tr>
+                <td colSpan={4}>კომპლექტის ფასი ამ ნახაზზე (რაოდენობა × ერთეულის ფასი)</td>
+                <td className="num" colSpan={2}>
+                  <b>{fmtPrice(total)}</b>
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       )}
 
-      <h4 className="section-title">{wholeDrawing ? 'მთლიანი ნახაზის შენახვა' : 'მონიშნულის შენახვა'}</h4>
-      {selection.length === 0 ? (
+      <h4 className="section-title">
+        {wholeDrawing ? 'მთლიანი ნახაზის შენახვა შაბლონად' : 'მონიშნულის შენახვა შაბლონად'}
+      </h4>
+      {selection.length === 0 && selectionLines.length === 0 ? (
         <p className="field-hint">ნახაზზე ელემენტი ჯერ არ არის.</p>
       ) : (
         <div className="user-add">
@@ -198,12 +285,24 @@ export function TemplatesDialog() {
               placeholder="მაგ. კოლონა 60×60"
             />
           </label>
+          <label className="field">
+            <span>ერთეულის ფასი (₾)</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="არასავალდებულო"
+              style={{ width: 120 }}
+            />
+          </label>
           <button
             className="btn primary"
             disabled={busy || !name.trim() || !canEdit}
             onClick={() => void onSave()}
+            title={`${selection.length} ელემენტი${selectionLines.length ? ` + ${selectionLines.length} ხაზი` : ''}`}
           >
-            {busy ? '…' : `შენახვა (${selection.length})`}
+            {busy ? '…' : `შენახვა (${selection.length}${selectionLines.length ? ` + ${selectionLines.length} ხაზი` : ''})`}
           </button>
         </div>
       )}

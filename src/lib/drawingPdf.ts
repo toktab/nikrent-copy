@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import type { DrawingDoc, Material, MeasureLine, Piece, SketchPath } from '../types';
 import { contentBounds, isConnector, pieceBounds, planH, planW, type Rect } from './geometry';
 import { drawingSizeLabel, type Bom } from './bom';
+import type { PriceSummary } from './prices';
 import { legLength, segments } from './sketch';
 import {
   DEFAULT_PDF_VISIBILITY,
@@ -18,7 +19,7 @@ import { stampedName } from './files';
 import { CONNECTORS_PER_JOINT, connectorsAtCorners, LATCH_LEN_CM, pieceCentre } from './bolts';
 import { boltKindOf, boltTotals, markedRodLength, planMarks, type BoltKindName } from './boltMarks';
 import { CATEGORY_ORDER } from '../data/categories';
-import { soloPanels, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
+import { soloPanels, placedWalers, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from './walers';
 import { cornerConnectorBars, walerBars, type CornerConnectorBar, type WalerBar } from './workedMarks';
 import { normalizeKindsOn } from './boltKinds';
 import { findCornerRods, fullHeadTotals } from './bolts';
@@ -504,7 +505,7 @@ function legendEntries(
       });
     }
     // The worked-out ვოლერები - behind every panel with nothing facing it.
-    const walers = walerTotals(soloPanels(doc.pieces, byId));
+    const walers = walerTotals(soloPanels(doc.pieces, byId), placedWalers(doc.pieces, byId));
     const on = normalizeKindsOn(doc.info?.bolts);
     if (on.walers && vis.walers && walers.walers > 0) {
       out.push({ sample: 'ვოლ.', label: 'ვოლერი', note: '300-ზე 3, 150 / 90-ზე 2 - ცალმხრივ პანელზე', count: pcs(walers.walers) });
@@ -1143,6 +1144,15 @@ async function fontsReady(): Promise<void> {
 export interface DrawingExportOptions extends DrawingSheetOptions {
   /** the bill of materials to add on its own pages after the sheet; null for none */
   bom?: Bom | null;
+  /** the ფასი block, printed after the list (or alone) - null for none */
+  prices?: PriceSummary | null;
+}
+
+/** Every drawn line end to end, m - the პერიმეტრი on the list (the user, 2026-11-16). */
+export function sketchPerimeterM(sketch: SketchPath[]): number {
+  let cm = 0;
+  for (const path of sketch) for (const [a, b] of segments(path)) cm += legLength(a, b);
+  return Math.round(cm) / 100;
 }
 
 export interface DrawingExportResult {
@@ -1160,7 +1170,8 @@ export async function exportDrawingToPdf(
 ): Promise<DrawingExportResult | null> {
   const sheet = await renderDrawingSheet(options);
   const bom = options.bom && options.bom.totalPieces > 0 ? options.bom : null;
-  if (!sheet && !bom) return null;
+  const prices = options.prices && options.prices.total > 0 ? options.prices : null;
+  if (!sheet && !bom && !prices) return null;
 
   let pdf: jsPDF;
   if (sheet) {
@@ -1171,10 +1182,19 @@ export async function exportDrawingToPdf(
     pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   }
 
-  if (bom) {
+  if (bom || prices) {
     // html2canvas is only needed for the list, so it loads only when one is asked for.
     const { appendBomPages } = await import('./pdfExport');
-    await appendBomPages(pdf, { bom, title: `${options.doc.name} - მასალების უწყისი` }, Boolean(sheet));
+    await appendBomPages(
+      pdf,
+      {
+        bom,
+        title: `${options.doc.name} - ${bom ? 'მასალების უწყისი' : 'ფასი'}`,
+        perimeterM: sketchPerimeterM(options.doc.sketch ?? []),
+        prices,
+      },
+      Boolean(sheet),
+    );
   }
 
   pdf.save(stampedName('du-drawing', 'pdf'));

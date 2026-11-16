@@ -22,7 +22,7 @@ import {
   rodCount,
   rodEnds,
   ROD_OVERHANG_CM,
-  rodMaterialFor,
+  rodMaterialForRod,
   type Bolt,
   type BoltKinds,
   type LatchSpot,
@@ -76,7 +76,7 @@ export function planMarks(pieces: Piece[], byId: Map<string, Material>, on: Kind
 /** How long a worked-out rod is drawn: the catalog rod that would go there, tip to tip. */
 export function markedRodLength(materials: Material[], rod: Rod): number {
   const span = rod.to - rod.from;
-  const m = rodMaterialFor(materials, span);
+  const m = rodMaterialForRod(materials, rod);
   return m ? Math.max(m.w, m.h) : span + ROD_OVERHANG_CM * 2;
 }
 

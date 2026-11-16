@@ -1,4 +1,6 @@
 import type { Category, DrawingDoc, Material, Piece } from '../types';
+import { boltQuantities, isCountedPart } from './quantities';
+import type { KindsOn } from './boltKinds';
 import { CATEGORIES, CATEGORY_ORDER } from '../data/categories';
 import { isLinear, lengthCm } from './geometry';
 import {
@@ -98,8 +100,15 @@ export function buildBom(
   pieces: Piece[],
   documents: DrawingDoc[] = [],
   activeDocId = '',
+  /**
+   * The ჭანჭიკი kinds the drawing has on. Given, every ჭანჭიკი, ვოლერი and
+   * შტირი is listed at its real quantity - five კონექტორები for one mark up a
+   * 300, worked-out ones too - not as the number of marks (see quantities.ts).
+   */
+  kinds?: KindsOn,
 ): Bom {
   const byId = new Map(materials.map((m) => [m.id, m]));
+  const real = kinds ? boltQuantities(pieces, byId, materials, kinds) : null;
   const commitments: Map<string, Commitment> = documents.length
     ? commitmentsByMaterial(documents, activeDocId)
     : new Map();
@@ -133,7 +142,7 @@ export function buildBom(
 
     for (const m of materials) {
       if (m.category !== category) continue;
-      const count = used.get(m.id) ?? 0;
+      const count = real && isCountedPart(m) ? (real.get(m.id) ?? 0) : (used.get(m.id) ?? 0);
       if (count === 0) continue; // BOM only lists what is actually used
 
       const rowLength = count * unitLengthM(m);

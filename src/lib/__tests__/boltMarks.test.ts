@@ -42,9 +42,11 @@ describe('planMarks - what the plan and the printed sheet draw', () => {
     expect(rodCount(pieces, byId)).toBeGreaterThan(5);
   });
 
-  it('draws a worked-out rod as long as the catalog rod that would go there', () => {
+  it('draws a worked-out rod as long as the catalog rod that would go there - by the wall thickness', () => {
     const [rod] = planMarks(wall(), byId).rods;
-    expect(markedRodLength(SEED_MATERIALS, rod)).toBe(60);
+    // 0-20 cm of concrete a 60, 20-40 a 90, more a 100 (the user, 2026-11-16).
+    const want = rod.wall! <= 20 ? 60 : rod.wall! <= 40 ? 90 : 100;
+    expect(markedRodLength(SEED_MATERIALS, rod)).toBe(want);
   });
 });
 

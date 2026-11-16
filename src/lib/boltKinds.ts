@@ -19,7 +19,7 @@ export type KindKey =
   | 'walers'
   | 'cornerConnectors'
   | 'halfHead'
-  /** შტირი 40 სმ მთლიანი თავით - at an inside corner's leg end, worked out */
+  /** კონექტორი 40 სმ მთლიანი თავით - at an inside corner's leg end, worked out */
   | 'fullHead'
   | 'innerConnectors'
   /** ბარაშკა პატარა (გილზა + გაიკა) on each inside-corner 25 სმ connector - worked out */

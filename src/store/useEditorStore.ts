@@ -21,12 +21,13 @@ import type {
   Warehouse,
 } from '../types';
 import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedCatalog';
-import { withCompanyWeights } from '../data/companyWeights';
+import { COMPANY_WEIGHTS, withCompanyWeights } from '../data/companyWeights';
 import { findWallMate, flipWall } from '../lib/wallPen';
 import type { LineSpan } from '../lib/span';
 import { alignPieces } from '../lib/gridAlign';
 import { EVERY_KIND, KIND_KEYS, normalizeKindsOn, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
+import { freshTemplateInstances } from '../lib/templates';
 import {
   clampZoom,
   computeEdgeSnap,
@@ -36,6 +37,8 @@ import {
   isPanelHolder,
   MAX_ZOOM,
   MIN_ZOOM,
+  type MoveMode,
+  nextGridLine,
   normalizeRot,
   planH,
   planW,
@@ -81,7 +84,7 @@ import {
   nutMaterial,
   pieceCentre,
   resetBolts,
-  rodMaterialFor,
+  rodMaterialForRod,
   rodSpot,
   rodStack,
   rodStackOf,
@@ -131,6 +134,7 @@ import {
 } from '../lib/dimensions';
 import {
   DEFAULT_MEASURE_STYLE,
+  freeAnchor,
   normalizeMeasureStyle,
   type MeasureAnchor,
   type MeasureStyle,
@@ -187,6 +191,7 @@ const PREF_KEYS = [
   'panY',
   'snap',
   'snapStep',
+  'moveMode',
   'orthoLock',
   'edgeSnap',
   'showLengths',
@@ -198,6 +203,7 @@ const PREF_KEYS = [
   'showNames',
   'forceLabels',
   'showOverlaps',
+  'showContacts',
   'showGaps',
   'showBolts',
   'boltsShown',
@@ -311,13 +317,24 @@ const BUILTIN_RENAMES: Array<{ id: string; from: string; to: string }> = [
   { id: 'post-100', from: 'დგარი 100', to: 'დგარი და თავი - პატარა (150 / 90)' },
   { id: 'post-200', from: 'დგარი 200', to: 'დგარი და თავი - დიდი (300)' },
   { id: 'acc-latch-adjustable', from: 'ჩამკეტი რეგულირებადი', to: 'ნიანგი (ჩამკეტი რეგულირებადი)' },
+  // Not შტირი at all - კონექტორები (the user, 2026-11-16).
+  {
+    id: 'corner-connector-40',
+    from: 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)',
+    to: 'კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე)',
+  },
+  {
+    id: 'rod-40-half-head',
+    from: 'შტირი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)',
+    to: 'კონექტორი 40 სმ ნახევარი თავით (წაჭრილი გაიკა)',
+  },
 ];
 
 /** ...and the one that changed what it is: the 40 სმ corner connector, the whole-head შტირი 40 სმ. */
 function fixFullHead40(materials: Material[]): void {
   const m = materials.find((x) => x.id === 'corner-connector-40');
   if (!m || !m.builtin || m.name !== 'კუთხის კონექტორი 40სმ') return;
-  m.name = 'შტირი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
+  m.name = 'კონექტორი 40 სმ მთლიანი თავით (წაჭრის გარეშე)';
   m.category = 'acc';
   m.w = 8;
   m.h = 8;
@@ -327,6 +344,14 @@ function fixFullHead40(materials: Material[]): void {
 /** Applies `BUILTIN_SIZE_FIXES` and `BUILTIN_RENAMES` in place. Exported for testing. */
 export function applySizeFixes(materials: Material[]): void {
   fixFullHead40(materials);
+  // The company's own unit weights (its workbook, COMPANY_WEIGHTS) into every
+  // blank one, on every load: the PDF said "სულ წონა 0 კგ" because they were
+  // only filled in by a button nobody pressed (the user, 2026-11-16). Never
+  // over a weight somebody typed.
+  for (const m of materials) {
+    const w = COMPANY_WEIGHTS[m.id];
+    if (!(m.weight > 0) && w) m.weight = w;
+  }
   for (const r of BUILTIN_RENAMES) {
     const m = materials.find((x) => x.id === r.id);
     if (m && m.builtin && m.name === r.from) m.name = r.to;
@@ -391,6 +416,13 @@ export interface EditorState {
   // ── editor settings ──
   snap: boolean;
   snapStep: number;
+  /**
+   * How a piece moves (the user, 2026-11-16): 'grid' - onto the squares, every
+   * arrow press lands its edge on the next grid line and a drag drops it on
+   * one; 'step' - the old way, the step counted from wherever it stood, so a
+   * piece that started between the squares stayed between them.
+   */
+  moveMode: MoveMode;
   /** snap dragged pieces to the edges of nearby pieces, not just the grid */
   edgeSnap: boolean;
   /**
@@ -421,6 +453,8 @@ export interface EditorState {
   forceLabels: boolean;
   /** highlight pieces whose footprints intersect */
   showOverlaps: boolean;
+  /** mark where pieces (and drawn line ends) touch, green, and nearly touch, red */
+  showContacts: boolean;
   /** 2D plan editor, or the read-only 3D visualisation */
   viewMode: '2d' | '3d';
   /** Which orthographic view the 2D surface is showing. */
@@ -517,6 +551,11 @@ export interface EditorState {
   tool: 'select' | 'pen' | 'measure';
   /** the measure tool's first click, while the second is being placed */
   measureFirst: MeasureAnchor | null;
+  /**
+   * A saved line taken up again to be changed (double click on it): put back
+   * as it was if the change is abandoned with Escape.
+   */
+  measureReopened: MeasureLine | null;
   /** a measured line picked out on its own - kept apart from pieces and runs */
   selectedMeasureId: string | null;
   /**
@@ -632,7 +671,7 @@ export interface EditorState {
     freehand?: boolean,
   ) => void;
   /** Arrow-key nudge, also in surface centimetres. */
-  nudgeSelection: (duCm: number, dvCm: number) => void;
+  nudgeSelection: (duCm: number, dvCm: number, fine?: boolean) => void;
   /** Live drag from the 3D view, which can also move a piece up and down. */
   moveSelectionSpatially: (
     dxCm: number,
@@ -673,7 +712,7 @@ export interface EditorState {
    */
   generateWallRun: (spec: WallRunSpec) => { added: number; warnings: string[] };
   /** Drop a saved assembly's pieces onto the surface, already positioned. */
-  insertPieces: (pieces: Piece[]) => void;
+  insertPieces: (pieces: Piece[], sketch?: SketchPath[]) => void;
   clearPieces: () => void;
   replaceLayout: (pieces: Piece[]) => void;
   /**
@@ -731,6 +770,7 @@ export interface EditorState {
   // ── actions: settings ──
   setSnap: (on: boolean) => void;
   setSnapStep: (step: number) => void;
+  setMoveMode: (mode: MoveMode) => void;
   /** show or hide a whole category, or one material, on the plan */
   setObjectShown: (target: { category: Category } | { materialId: string }, shown: boolean) => void;
   resetObjectVisibility: () => void;
@@ -758,6 +798,7 @@ export interface EditorState {
   setShowNames: (on: boolean) => void;
   setForceLabels: (on: boolean) => void;
   setShowOverlaps: (on: boolean) => void;
+  setShowContacts: (on: boolean) => void;
   setShowGaps: (on: boolean) => void;
   setShowBolts: (on: boolean) => void;
   toggleBoltKind: (kind: keyof BoltKinds) => void;
@@ -814,6 +855,8 @@ export interface EditorState {
   // ── actions: catalog ──
   addMaterial: (draft: MaterialDraft) => Material;
   updateMaterial: (id: string, draft: MaterialDraft) => void;
+  /** Set one part's weight, kg - open to editors as well as admins (migration 0016). */
+  setMaterialWeight: (id: string, kg: number) => void;
   deleteMaterial: (id: string, cascade: boolean) => void;
   setStock: (id: string, warehouseId: string, quantity: number) => void;
   /** one quantity for every material in one warehouse - the admin's test "500 each" */
@@ -849,6 +892,13 @@ export interface EditorState {
   measureFinish: (b: Point) => void;
   /** Drop a half-placed line, keeping the tool out. */
   measureCancel: () => void;
+  /**
+   * Take a saved line up again (the user, 2026-11-16): the end nearest `at`
+   * comes loose and follows the pointer with every snap the tool has, exactly
+   * as before it was first fixed - longer, shorter, another angle; the next
+   * click fixes it again, Escape puts the old line back.
+   */
+  reopenMeasure: (id: string, at: Point) => void;
   selectMeasure: (id: string | null) => void;
   deleteMeasure: (id: string) => void;
   setMeasureStyle: (patch: Partial<MeasureStyle>) => void;
@@ -1121,7 +1171,7 @@ export const useEditorStore = create<EditorState>()(
       const firstDoc = newDoc('ნახაზი 1');
 
       return {
-        materials: SEED_MATERIALS,
+        materials: withCompanyWeights(SEED_MATERIALS).materials,
         pieces: [],
         sketch: [],
         measures: [],
@@ -1130,6 +1180,7 @@ export const useEditorStore = create<EditorState>()(
         selectedSpan: null,
         tool: 'select',
         measureFirst: null,
+        measureReopened: null,
         selectedMeasureId: null,
         selectedMark: null,
         penPerimeter: 'free',
@@ -1151,6 +1202,7 @@ export const useEditorStore = create<EditorState>()(
 
         snap: true,
         snapStep: DRAW_STEP_CM,
+        moveMode: 'grid',
         edgeSnap: true,
         orthoLock: true,
         showLengths: true,
@@ -1162,6 +1214,7 @@ export const useEditorStore = create<EditorState>()(
         showNames: true,
         forceLabels: false,
         showOverlaps: true,
+        showContacts: true,
         viewMode: '2d',
         surfaceView: 'plan',
         hiddenLines: 'hide',
@@ -1370,6 +1423,11 @@ export const useEditorStore = create<EditorState>()(
             return {
               pieces: [...s.pieces, piece],
               selectedIds: [piece.id],
+              // The new piece alone: a line left picked from before was
+              // dragged along with it, and the wall moved by accident.
+              selectedSketchIds: [],
+              selectedSketchPart: null,
+              selectedSpan: null,
               ...(hidden
                 ? {
                     objectVisibility: {
@@ -1386,6 +1444,11 @@ export const useEditorStore = create<EditorState>()(
           const m = s.materials.find((mm) => mm.id === materialId);
           if (m && isPanelHolder(m) && !s.boltsShown.holders) {
             set({ boltsShown: { ...s.boltsShown, holders: true }, showBolts: true });
+          }
+          // A ვოლერი put down by hand is counted with the worked-out ones: their kind comes on.
+          if (m && m.category === 'waler') {
+            const doc = s.documents.find((d) => d.id === s.activeDocId);
+            if (!normalizeKindsOn(doc?.info?.bolts).walers) s.setKindOn('walers', true);
           }
           // A 40 სმ head put down by hand brings its kind onto the drawing, so it counts.
           if (m && (isHalfHeadPart(m) || isFullHeadPart(m))) {
@@ -1740,7 +1803,12 @@ export const useEditorStore = create<EditorState>()(
                 // near it. Plan only — the lines are a plan, and in an
                 // elevation their coordinates mean something else entirely.
                 if (view === 'plan' && s.showSketch) {
-                  targets.push(...sketchSnapTargets(s.sketch));
+                  // Never the lines travelling WITH the selection: they are a
+                  // frame behind it, so a panel whose face is on one caught it
+                  // every frame and could only slide along it - the "it only
+                  // moves up and down" drag (the user, 2026-11-16).
+                  const carriedIds = new Set((sketchBaseline ?? []).map((k) => k.id));
+                  targets.push(...sketchSnapTargets(s.sketch.filter((k) => !carriedIds.has(k.id))));
                 }
 
                 // In cm, but held at a constant number of screen pixels so the
@@ -1866,10 +1934,29 @@ export const useEditorStore = create<EditorState>()(
           }),
 
         /** Arrow keys, in surface centimetres — so they follow the view too. */
-        nudgeSelection: (duCm, dvCm) =>
+        nudgeSelection: (duCm, dvCm, fine = false) =>
           commit((s) => {
             const selected = new Set(s.selectedIds);
             if (!selected.size) return {};
+            // On the squares: the selection's edge goes to the NEXT grid line
+            // that way, not one step on from where it stands - so a piece put
+            // down between the squares is on them after one press, and every
+            // press after is exactly one square (the user, 2026-11-16).
+            if (s.moveMode === 'grid' && !fine) {
+              const byId = new Map(s.materials.map((m) => [m.id, m]));
+              let u0 = Infinity;
+              let v0 = Infinity;
+              for (const p of s.pieces) {
+                if (!selected.has(p.id)) continue;
+                const m = byId.get(p.materialId);
+                if (!m) continue;
+                const b = projectPiece(p, m, s.surfaceView);
+                u0 = Math.min(u0, b.x);
+                v0 = Math.min(v0, b.y);
+              }
+              if (Number.isFinite(u0)) duCm = nextGridLine(u0, duCm) - u0;
+              if (Number.isFinite(v0)) dvCm = nextGridLine(v0, dvCm) - v0;
+            }
             const move = unprojectDelta(duCm, dvCm, s.surfaceView);
             return {
               pieces: s.pieces.map((p) =>
@@ -1961,12 +2048,12 @@ export const useEditorStore = create<EditorState>()(
             const selected = s.pieces.filter((p) => s.selectedIds.includes(p.id));
             if (!selected.length) return {};
             const offset = s.snap ? s.snapStep * 2 : 10;
-            const copies = selected.map((p) => ({
+            const copies = freshTemplateInstances(selected.map((p) => ({
               ...p,
               id: uid(),
               x: p.x + offset,
               y: p.y + offset,
-            }));
+            })));
             return {
               pieces: [...s.pieces, ...copies],
               selectedIds: copies.map((p) => p.id),
@@ -1982,12 +2069,12 @@ export const useEditorStore = create<EditorState>()(
           commit((s) => {
             if (!s.clipboard.length) return {};
             const offset = s.snap ? s.snapStep * 2 : 10;
-            const copies = s.clipboard.map((p) => ({
+            const copies = freshTemplateInstances(s.clipboard.map((p) => ({
               ...p,
               id: uid(),
               x: p.x + offset,
               y: p.y + offset,
-            }));
+            })));
             return {
               pieces: [...s.pieces, ...copies],
               selectedIds: copies.map((p) => p.id),
@@ -2003,7 +2090,8 @@ export const useEditorStore = create<EditorState>()(
             if (!selected.length || count < 1) return {};
             const copies: Piece[] = [];
             for (let i = 1; i <= count; i++) {
-              for (const p of selected) {
+              // Each copy of a template column is one more column of the set.
+              for (const p of freshTemplateInstances(selected)) {
                 copies.push({
                   ...p,
                   id: uid(),
@@ -2058,11 +2146,14 @@ export const useEditorStore = create<EditorState>()(
           return { added: plan.pieces.length, warnings: plan.warnings };
         },
 
-        insertPieces: (incoming) => {
-          if (!incoming.length) return;
+        insertPieces: (incoming, lines = []) => {
+          if (!incoming.length && !lines.length) return;
+          // Pieces and the lines that came with them (a template) in one step.
           commit((s) => ({
             pieces: [...s.pieces, ...incoming],
+            ...(lines.length ? { sketch: [...s.sketch, ...lines] } : {}),
             selectedIds: incoming.map((p) => p.id),
+            selectedSketchIds: lines.map((k) => k.id),
           }));
         },
 
@@ -2196,10 +2287,35 @@ export const useEditorStore = create<EditorState>()(
               { id: uid('ms'), a: { x: first.point.x, y: first.point.y }, b: { x: b.x, y: b.y } },
             ],
             measureFirst: null,
+            measureReopened: null,
           }));
         },
 
-        measureCancel: () => set({ measureFirst: null }),
+        measureCancel: () => {
+          const back = get().measureReopened;
+          if (back) {
+            // Abandoned: the line it was goes back, as one undo step with the take-up.
+            set((s) => ({ measures: [...s.measures, back], measureFirst: null, measureReopened: null, selectedMeasureId: back.id }));
+            return;
+          }
+          set({ measureFirst: null });
+        },
+
+        reopenMeasure: (id, at) => {
+          const m = get().measures.find((x) => x.id === id);
+          if (!m) return;
+          const da = Math.hypot(at.x - m.a.x, at.y - m.a.y);
+          const db = Math.hypot(at.x - m.b.x, at.y - m.b.y);
+          // The end clicked comes loose; the other stays where it is.
+          const fixed = da <= db ? m.b : m.a;
+          commit((s) => ({
+            measures: s.measures.filter((x) => x.id !== id),
+            tool: 'measure' as const,
+            measureFirst: freeAnchor({ x: fixed.x, y: fixed.y }),
+            measureReopened: m,
+            selectedMeasureId: null,
+          }));
+        },
 
         selectMeasure: (id) =>
           set(
@@ -2459,6 +2575,7 @@ export const useEditorStore = create<EditorState>()(
         // ── settings ──────────────────────────────────────────────────────
         setSnap: (on) => set({ snap: on }),
         setSnapStep: (step) => set({ snapStep: step }),
+        setMoveMode: (mode) => set({ moveMode: mode }),
         setEdgeSnap: (on) => set({ edgeSnap: on }),
         setOrthoLock: (on) => set({ orthoLock: on }),
         setShowLengths: (on) => set({ showLengths: on }),
@@ -2483,6 +2600,7 @@ export const useEditorStore = create<EditorState>()(
         setShowNames: (on) => set({ showNames: on }),
         setForceLabels: (on) => set({ forceLabels: on }),
         setShowOverlaps: (on) => set({ showOverlaps: on }),
+        setShowContacts: (on) => set({ showContacts: on }),
         setShowGaps: (on) => set({ showGaps: on }),
         setShowBolts: (on) => set({ showBolts: on }),
         setObjectShown: (target, shown) =>
@@ -2556,7 +2674,7 @@ export const useEditorStore = create<EditorState>()(
           }),
         takeRod: (rod, add) =>
           commit((s) => {
-            const m = rodMaterialFor(s.materials, rod.to - rod.from);
+            const m = rodMaterialForRod(s.materials, rod);
             if (!m) return {};
             const stack = rodStack(m, rodSpot(rod), [], uid);
             const ids = stack.map((p) => p.id);
@@ -2777,6 +2895,11 @@ export const useEditorStore = create<EditorState>()(
         },
 
         /** Editing a material updates every placed piece of that type live. */
+        setMaterialWeight: (id, kg) =>
+          commit((s) => ({
+            materials: s.materials.map((m) => (m.id === id ? { ...m, weight: Math.max(0, kg) } : m)),
+          })),
+
         updateMaterial: (id, draft) =>
           commit((s) => ({
             materials: s.materials.map((m) =>
@@ -2860,7 +2983,7 @@ export const useEditorStore = create<EditorState>()(
 
         resetCatalog: () =>
           commit(() => ({
-            materials: createSeedMaterials(),
+            materials: withCompanyWeights(createSeedMaterials()).materials,
             removedBuiltins: [],
             dialog: null,
           })),
@@ -2901,6 +3024,10 @@ export const useEditorStore = create<EditorState>()(
             penPoints: tool === 'pen' ? s.penPoints : [],
             penRedo: tool === 'pen' ? s.penRedo : [],
             measureFirst: tool === 'measure' ? s.measureFirst : null,
+            // A saved line taken up to change, and left: it goes back as it was.
+            ...(tool !== 'measure' && s.measureReopened
+              ? { measures: [...s.measures, s.measureReopened], measureReopened: null }
+              : {}),
           })),
 
         setPenPerimeter: (perimeter) => set({ penPerimeter: perimeter }),
@@ -3385,7 +3512,11 @@ export function mergeCatalog(
   stored: Material[] | undefined,
   removedBuiltins: string[] | undefined,
 ): Material[] {
-  if (!Array.isArray(stored) || stored.length === 0) return createSeedMaterials();
+  if (!Array.isArray(stored) || stored.length === 0) {
+    const seeds = createSeedMaterials();
+    applySizeFixes(seeds);
+    return seeds;
+  }
 
   const taken = new Set<string>();
   const materials: Material[] = [];

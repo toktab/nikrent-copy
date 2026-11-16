@@ -341,8 +341,10 @@ export function unionRect(rects: Rect[]): Rect | null {
  * word in its name is not one - a connector is a fitting, not a length.
  */
 export function isConnector(m: Material): boolean {
-  // Not a 40 სმ one: those are the შტირი 40 სმ heads, not the 25 სმ connector.
-  return m.name.includes('კონექტორ') && !isLinear(m) && !/40s?სმ/.test(m.name);
+  // Not a 40 სმ one: those are the 40 სმ heads (კონექტორი 40 სმ მთლიანი /
+  // ნახევარი თავით), not the 25 სმ connector. "40 სმ" with its space too -
+  // the old pattern only caught "40სმ".
+  return m.name.includes('კონექტორ') && !isLinear(m) && !/40\s?სმ/.test(m.name);
 }
 
 /** A ქანჩი + დისკო - the nut and washer on a შტირი end; see `lib/bolts.ts`. */
@@ -467,4 +469,21 @@ export function dropOrigin(
     x: Math.round(centreX - (Number.isFinite(sizeX) ? sizeX : 0) / 2),
     y: Math.round(centreY - (Number.isFinite(sizeY) ? sizeY : 0) / 2),
   };
+}
+
+/** How a piece moves - onto the squares, or by a step from where it stands. */
+export type MoveMode = 'grid' | 'step';
+
+/**
+ * The next grid line from `pos` in the direction of `delta`, the square being
+ * `|delta|` cm: 7 → 10 and 10 → 15 to the right, 7 → 5 and 10 → 5 to the left.
+ * A piece between the squares goes onto the nearest one that way, never past it.
+ */
+export function nextGridLine(pos: number, delta: number): number {
+  const step = Math.abs(delta);
+  if (!step) return pos;
+  const eps = 1e-6;
+  return delta > 0
+    ? Math.floor(pos / step + eps) * step + step
+    : Math.ceil(pos / step - eps) * step - step;
 }

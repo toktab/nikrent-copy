@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DrawingDoc, LayoutFile } from '../types';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
 import { boltTotals } from '../lib/boltMarks';
 import { normalizeKindsOn } from '../lib/boltKinds';
@@ -9,6 +9,41 @@ import { buildLayoutFile, exportLayoutFile, layoutFileHasContent } from '../lib/
 import type { PdfVisibility } from '../lib/dimensions';
 import { PDF_SCALES, SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
 import { segments } from '../lib/sketch';
+import { listTemplates, templateCounts, type Template } from '../lib/templates';
+import { fmtGel, priceSummary, type PriceSummary } from '../lib/prices';
+import type { DrawingPrices } from '../types';
+
+/**
+ * The templates the open drawing has drops of, with how many, for the
+ * კომპლექტის ფასი - names and prices read from the template list once.
+ */
+function useTemplatePrices(pieces: DrawingDoc['pieces']): Array<{ id: string; name: string; price: number | null; count: number }> {
+  const [list, setList] = useState<Template[]>([]);
+  useEffect(() => {
+    let live = true;
+    listTemplates()
+      .then((rows) => live && setList(rows))
+      .catch(() => {
+        // No list: the drops still count, by id, without a name or price.
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return useMemo(() => {
+    const counts = templateCounts(pieces);
+    return [...counts].map(([id, count]) => {
+      const t = list.find((x) => x.id === id);
+      return { id, name: t?.name ?? 'შაბლონი', price: t?.price ?? null, count };
+    });
+  }, [list, pieces]);
+}
+
+/** The prices the PDF prints, for the open drawing. */
+function usePriceSummary(doc: DrawingDoc | null, areaM2: number): PriceSummary | null {
+  const tpl = useTemplatePrices(doc?.pieces ?? []);
+  return useMemo(() => (doc ? priceSummary(doc.info?.prices, areaM2, tpl) : null), [doc, areaM2, tpl]);
+}
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 
@@ -39,6 +74,8 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [busy, setBusy] = useState(false);
 
+  // Real quantities of every ჭანჭიკი in the list, not marks - quantities.ts.
+  const bomKinds = useKindsOn();
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const setToast = useEditorStore((s) => s.setToast);
   const materials = useEditorStore((s) => s.materials);
@@ -69,11 +106,18 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
   );
 
   const bomOn = vis.bomPage && pieces.length > 0;
+  const areaM2 = useMemo(
+    () => buildBom(materials, pieces, [], '', bomKinds).totalAreaM2,
+    [materials, pieces, bomKinds],
+  );
+  const prices = usePriceSummary(doc, areaM2);
+  const pricesOn = !!doc?.info?.prices?.show && !!prices && prices.total > 0;
   const pdfHasContent =
     (vis.pieces && pieces.length > 0) ||
     ((vis.sketchLines || vis.line) && sketch.length > 0) ||
     ((vis.measureLines || vis.measure) && measures.length > 0) ||
-    bomOn;
+    bomOn ||
+    pricesOn;
   const jsonHasContent = !!file && layoutFileHasContent(file);
 
   const onPdf = async () => {
@@ -88,7 +132,8 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
         scale: pdfScale,
         visibility: vis,
         scales: useEditorStore.getState().materialScale,
-        bom: bomOn ? buildBom(materials, pieces, documents, activeDocId) : null,
+        bom: bomOn ? buildBom(materials, pieces, documents, activeDocId, bomKinds) : null,
+        prices: pricesOn ? prices : null,
       });
       if (!result) {
         setToast('PDF-ზე არაფერი დარჩა - ჩართე ერთი ნაწილი მაინც.');
@@ -324,6 +369,8 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
           />
         </div>
 
+        <PricesSection doc={doc} />
+
         <button
           type="button"
           className={`btn export-advanced${advanced ? ' on' : ''}`}
@@ -447,7 +494,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(worked.walers ?? 0)}
               />
               <Check
-                label="შტირი 40 სმ ნახევარი თავით"
+                label="კონექტორი 40 სმ ნახევარი თავით"
                 note="გარე კუთხე ჩ10-ით"
                 count={worked.halfHead ?? 0}
                 checked={vis.halfHead}
@@ -455,7 +502,7 @@ function PdfPanel({ doc, counts }: { doc: DrawingDoc; counts: Counts }) {
                 disabledWhy={boltWhy(worked.halfHead ?? 0)}
               />
               <Check
-                label="შტირი 40 სმ მთლიანი თავით"
+                label="კონექტორი 40 სმ მთლიანი თავით"
                 note="შიდა კუთხის ფეხთან"
                 count={worked.fullHead ?? 0}
                 checked={vis.fullHead}
@@ -609,6 +656,93 @@ function JsonPanel({ file, counts }: { file: LayoutFile | null; counts: Counts }
           <div className="export-empty">ფაილში არაფერი დარჩა - ჩართე ელემენტები, ხაზები ან ზომები.</div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * ფასი (the user, 2026-11-16): what the PDF prints as the price - a price typed
+ * in, the კვადრატულობა times a price per m², and the კომპლექტის ფასი, each
+ * template (column) on the drawing times its per-unit price, which can be
+ * changed here for this drawing. Kept with the drawing.
+ */
+function PricesSection({ doc }: { doc: DrawingDoc }) {
+  const setDrawingInfo = useEditorStore((s) => s.setDrawingInfo);
+  const materials = useEditorStore((s) => s.materials);
+  const kinds = useKindsOn();
+  const prices: DrawingPrices = doc.info?.prices ?? {};
+  const areaM2 = useMemo(
+    () => buildBom(materials, doc.pieces, [], '', kinds).totalAreaM2,
+    [materials, doc.pieces, kinds],
+  );
+  const tpl = useTemplatePrices(doc.pieces);
+  const summary = useMemo(() => priceSummary(prices, areaM2, tpl), [prices, areaM2, tpl]);
+  const patch = (p: Partial<DrawingPrices>) => setDrawingInfo({ prices: { ...prices, ...p } });
+  const parse = (text: string): number | null => {
+    const n = Number(text.trim().replace(',', '.').replace(/\s/g, ''));
+    return text.trim() && Number.isFinite(n) && n >= 0 ? n : null;
+  };
+
+  return (
+    <div className="vis-extra export-prices" style={{ marginTop: 12 }}>
+      <Check
+        label="ფასი"
+        note="უწყისის ბოლოს: ხელით შეყვანილი, კვადრატულობა × ფასი, კომპლექტის ფასი"
+        checked={!!prices.show}
+        onChange={(on) => patch({ show: on })}
+      />
+      {prices.show && (
+        <div className="price-grid">
+          <label>
+            <span>ფასი (ხელით), ₾</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              defaultValue={prices.manual ?? ''}
+              placeholder="-"
+              onBlur={(e) => patch({ manual: parse(e.target.value) })}
+            />
+          </label>
+          <label>
+            <span>ფასი 1 მ²-ზე, ₾</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              defaultValue={prices.perM2 ?? ''}
+              placeholder="-"
+              onBlur={(e) => patch({ perM2: parse(e.target.value) })}
+            />
+          </label>
+          <div className="price-calc">
+            კვადრატულობა {summary.areaM2} მ²
+            {summary.areaSum !== null ? ` × ${fmtGel(summary.perM2)} = ${fmtGel(summary.areaSum)}` : ''}
+          </div>
+          {tpl.length > 0 && (
+            <>
+              <div className="price-sub">კომპლექტის ფასი - შაბლონები ამ ნახაზზე</div>
+              {tpl.map((t) => {
+                const own = prices.templates?.[t.id];
+                return (
+                  <label key={t.id}>
+                    <span>
+                      {t.name} - {t.count} ც. ×
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      defaultValue={own ?? t.price ?? ''}
+                      placeholder="ერთეულის ფასი"
+                      onBlur={(e) => patch({ templates: { ...prices.templates, [t.id]: parse(e.target.value) } })}
+                    />
+                  </label>
+                );
+              })}
+              <div className="price-calc">კომპლექტის ფასი: {fmtGel(summary.setSum)}</div>
+            </>
+          )}
+          <div className="price-total">სულ: {fmtGel(summary.total)}</div>
+        </div>
+      )}
     </div>
   );
 }

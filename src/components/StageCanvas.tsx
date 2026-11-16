@@ -104,6 +104,7 @@ import {
 import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
 import { GapMark } from './GapMark';
+import { ContactLayer } from './ContactLayer';
 import { SketchLayer } from './SketchLayer';
 import { UnderlayLayer } from './UnderlayLayer';
 
@@ -694,7 +695,8 @@ export function StageCanvas() {
         e.preventDefault();
         return;
       }
-      // Arrow keys nudge: one grid step, or 1 cm with Shift for fine work.
+      // Arrow keys nudge: onto the next grid line (or one step, the old way -
+      // პარამეტრები), or 1 cm with Shift for fine work.
       // Arrows move by the move step from პარამეტრები whether or not the grid
       // snap is on - it is how far a piece moves, not where it lands. Shift: 1 cm.
       const step = e.shiftKey ? 1 : s.snapStep;
@@ -707,7 +709,7 @@ export function StageCanvas() {
       if (nudge[e.key]) {
         if (s.selectedIds.length) {
           e.preventDefault();
-          s.nudgeSelection(...nudge[e.key]);
+          s.nudgeSelection(...nudge[e.key], e.shiftKey);
         }
         return;
       }
@@ -1552,6 +1554,32 @@ export function StageCanvas() {
         setHoverPieceId(null);
       }}
       onDoubleClick={(e) => {
+        // A double click on a saved check line (გაზომვა), on an end above all:
+        // that end comes loose and is placed again with the tool's snaps -
+        // longer, shorter, another angle (the user, 2026-11-16).
+        if (tool === 'select' || tool === 'measure') {
+          const s = useEditorStore.getState();
+          const world = worldAt(e.clientX, e.clientY);
+          if (world && !isElevation(s.surfaceView) && s.measures.length) {
+            const reachCm = 9 / s.zoom;
+            const nearEnd = s.measures.find(
+              (m) =>
+                Math.hypot(world.x - m.a.x, world.y - m.a.y) <= reachCm ||
+                Math.hypot(world.x - m.b.x, world.y - m.b.y) <= reachCm,
+            );
+            // With the measure tool out only an end will do - the line itself
+            // is where new lines start from.
+            const id = nearEnd?.id ?? (tool === 'select' ? measureAt(s.measures, world, 7 / s.zoom) : null);
+            if (id) {
+              e.preventDefault();
+              // The first click of the pair started a new line there: not wanted.
+              if (s.measureFirst && !s.measureReopened) s.measureCancel();
+              s.reopenMeasure(id, world);
+              setMeasurePreview(measureTarget(e.clientX, e.clientY, e.shiftKey, overrideHeld(e)));
+              return;
+            }
+          }
+        }
         // A double click on a leg of a drawn line: straight into its length,
         // to be typed rather than dragged to (the user, 2026-10-30). The first
         // click of the pair has already picked the leg.
@@ -1742,6 +1770,8 @@ export function StageCanvas() {
       )}
 
       {/* კონექტორები on the plan: a joint is a place in plan, not on a face. */}
+      {/* Where pieces touch (green) or stop just short (red) - see contacts.ts. */}
+      {!elevation && <ContactLayer />}
       {/* The worked-out ვოლერები, behind panels nothing faces - see walers.ts. */}
       {!elevation && showBolts && <WalerLayer />}
       {!elevation && showBolts && <CornerConnectorLayer />}
