@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore } from '../store/useEditorStore';
-import { ADMIN_ONLY_TITLE, useCanManageCatalog } from '../store/useAuthStore';
+import { ADMIN_ONLY_TITLE, useCanEditDrawings, useCanManageCatalog } from '../store/useAuthStore';
+import type { Material } from '../types';
 import { categoryLabel } from '../data/categories';
 import { totalStock } from '../lib/inventory';
 import { PiecePreview } from './ShapeSvg';
@@ -179,12 +180,10 @@ export function DetailsPanel() {
         <span className="k">მარაგი</span>
         <span>{totalStock(material)} ცალი</span>
       </div>
-      {material.weight > 0 && (
-        <div className="kv">
-          <span className="k">წონა</span>
-          <span>{material.weight} კგ</span>
-        </div>
-      )}
+      <div className="kv">
+        <span className="k">წონა (ერთის)</span>
+        <WeightField material={material} />
+      </div>
 
       {actions}
       <button
@@ -736,6 +735,45 @@ function PositionField({ x, y }: { x: number; y: number }) {
         {field('y')}
         <span className="deg">სმ</span>
       </span>
+    </span>
+  );
+}
+
+/**
+ * The weight of one, in kg - typed right here by anyone who may draw (the
+ * user, 2026-11-16: editors too, saved to the database). Every piece of that
+ * part takes it; the PDF's სულ წონა is read from it.
+ */
+function WeightField({ material }: { material: Material }) {
+  const canEdit = useCanEditDrawings();
+  const setMaterialWeight = useEditorStore((s) => s.setMaterialWeight);
+  const [draft, setDraft] = useState<string | null>(null);
+  if (!canEdit) return <span>{material.weight > 0 ? `${material.weight} კგ` : 'არ არის მითითებული'}</span>;
+  const save = () => {
+    if (draft === null) return;
+    const n = Number(draft.trim().replace(',', '.'));
+    if (draft.trim() && Number.isFinite(n) && n >= 0 && n !== material.weight) setMaterialWeight(material.id, n);
+    setDraft(null);
+  };
+  return (
+    <span className="weight-field">
+      <input
+        type="number"
+        min={0}
+        step={0.1}
+        value={draft ?? (material.weight > 0 ? String(material.weight) : '')}
+        placeholder="0"
+        onWheel={keepWheelOffNumber}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') setDraft(null);
+        }}
+        style={{ width: 70, textAlign: 'right' }}
+        aria-label="ერთის წონა, კგ"
+      />{' '}
+      კგ
     </span>
   );
 }

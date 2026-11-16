@@ -430,6 +430,20 @@ export async function applyPlan(plan: SyncPlan): Promise<void> {
         .from('materials')
         .upsert(plan.materialsUpsert.map(materialToRow)));
     }
+    // Not an admin: the catalog itself is refused, but an editor may set a
+    // part's weight (the user, 2026-11-16) - through its own narrow function
+    // (migration 0016), which changes the weight and nothing else.
+    if (error && isRefused(error)) {
+      let weightError: { message: string; code?: string } | null = null;
+      for (const m of plan.materialsUpsert) {
+        const r = await supabase.rpc('set_material_weight', { p_material_id: m.id, p_weight: m.weight });
+        if (r.error) {
+          weightError = r.error;
+          break;
+        }
+      }
+      error = weightError as typeof error;
+    }
     if (error) throw wrapError('მასალები', error);
   }
 
@@ -513,4 +527,9 @@ export async function reloadDocument(id: string): Promise<DrawingDoc | null> {
   const row = data as DocumentRow;
   versions.set(row.id, row.version);
   return rowToDocument(row);
+}
+
+/** The server said no for this role - row-level security or a refused function. */
+function isRefused(error: { message?: string; code?: string }): boolean {
+  return error.code === '42501' || /row-level security|permission denied/i.test(error.message ?? '');
 }

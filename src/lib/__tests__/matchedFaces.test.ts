@@ -59,7 +59,8 @@ describe('the inner face made from a built outer one', () => {
     expect(matched.filter((p) => outerPieces.some((q) => q.id === p.id))).toHaveLength(outerPieces.length);
   });
 
-  it('re-solved together, every joint on both faces lines up', () => {
+  // A whole layout solve: about a second alone, more beside a dev server.
+  it('re-solved together, every joint on both faces lines up', { timeout: 30_000 }, () => {
     const both = solveLayout({
       paths: [inner, OUTER],
       height: 300,

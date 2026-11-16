@@ -855,6 +855,8 @@ export interface EditorState {
   // ── actions: catalog ──
   addMaterial: (draft: MaterialDraft) => Material;
   updateMaterial: (id: string, draft: MaterialDraft) => void;
+  /** Set one part's weight, kg - open to editors as well as admins (migration 0016). */
+  setMaterialWeight: (id: string, kg: number) => void;
   deleteMaterial: (id: string, cascade: boolean) => void;
   setStock: (id: string, warehouseId: string, quantity: number) => void;
   /** one quantity for every material in one warehouse - the admin's test "500 each" */
@@ -2893,6 +2895,11 @@ export const useEditorStore = create<EditorState>()(
         },
 
         /** Editing a material updates every placed piece of that type live. */
+        setMaterialWeight: (id, kg) =>
+          commit((s) => ({
+            materials: s.materials.map((m) => (m.id === id ? { ...m, weight: Math.max(0, kg) } : m)),
+          })),
+
         updateMaterial: (id, draft) =>
           commit((s) => ({
             materials: s.materials.map((m) =>

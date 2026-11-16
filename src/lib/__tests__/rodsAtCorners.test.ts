@@ -27,7 +27,8 @@ const INNER: SketchPath = {
 const apply = (pieces: Piece[], v: LayoutVariant) => [...pieces.filter((p) => !v.remove.includes(p.id)), ...v.add];
 
 describe('a შტირი where an inside corner leg ends (the user, 2026-11-16 - not a 40 სმ head)', () => {
-  it('ties the leg end to the outer joint across from it, at all four corners', () => {
+  // A whole layout solve: about a second alone, more beside a dev server.
+  it('ties the leg end to the outer joint across from it, at all four corners', { timeout: 30_000 }, () => {
     const side = panelSide(INNER, [INNER], [], materials);
     const outer = offsetFace(INNER, offsetSide(INNER, side, 'outer'), [20], 'outer')!;
     outer.id = 'outer';
