@@ -151,6 +151,34 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
     }
   };
 
+  /** The same pages as the PDF, as a Word file whose text can all be changed (2026-11-17). */
+  const onDocx = async () => {
+    if (!doc) return;
+    setBusy(true);
+    try {
+      const { exportDrawingToDocx } = await import('../lib/docxExport');
+      const result = await exportDrawingToDocx({
+        doc,
+        materials,
+        sheet,
+        scale: pdfScale,
+        visibility: vis,
+        scales: useEditorStore.getState().materialScale,
+        bom: bomOn ? buildBom(materials, pieces, documents, activeDocId, bomKinds) : null,
+        prices: pricesOn ? prices : null,
+      });
+      if (!result) {
+        setToast('ფაილში არაფერი დარჩა - ჩართე ერთი ნაწილი მაინც.');
+        return;
+      }
+      closeDialog();
+    } catch (e) {
+      setToast(`Word ფაილი ვერ შეიქმნა: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onJson = () => {
     if (!doc) return;
     exportLayoutFile(doc, materials, json);
@@ -171,6 +199,16 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
           <button className="btn" onClick={closeDialog}>
             გაუქმება
           </button>
+          {tab === 'pdf' && (
+            <button
+              className="btn"
+              disabled={!pdfHasContent || busy}
+              title="იგივე, რაც PDF-ში - Word ფაილად, სადაც ყველა ტექსტი ხელით იცვლება; შემდეგ Word-იდან PDF-ად შეინახება"
+              onClick={() => void onDocx()}
+            >
+              <Icon name="download" size={15} /> Word (.docx)
+            </button>
+          )}
           {tab === 'pdf' ? (
             <button
               className="btn primary"

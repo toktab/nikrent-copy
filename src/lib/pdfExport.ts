@@ -234,6 +234,20 @@ export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: b
   host.innerHTML = buildPrintableHtml(options);
   document.body.appendChild(host);
 
+  // The ფასი quote is kept whole: laid on its own after the list, and moved to
+  // the next page when it does not fit on this one - cut in two it lost its
+  // total from its lines (2026-11-17).
+  const quoteEl = host.querySelector('.quote') as HTMLElement | null;
+  let quoteHost: HTMLElement | null = null;
+  if (quoteEl && host.querySelector('table:not(.prices)')) {
+    quoteHost = document.createElement('div');
+    quoteHost.className = 'doc';
+    quoteHost.style.paddingTop = '0';
+    quoteEl.style.marginTop = '0';
+    quoteHost.appendChild(quoteEl);
+    host.appendChild(quoteHost);
+  }
+
   try {
     const target = host.querySelector('.doc') as HTMLElement;
     const canvas = await html2canvas(target, {
@@ -280,6 +294,19 @@ export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: b
         // opened as, and a landscape drawing sheet would turn the list sideways.
         pdf.addPage('a4', 'portrait');
         startY = margin;
+      } else startY += h / pxPerMm;
+    }
+
+    if (quoteHost) {
+      const q = await html2canvas(quoteHost, { scale: 2, backgroundColor: '#ffffff', logging: false });
+      if (q.width && q.height) {
+        const qMm = q.height / pxPerMm;
+        const gap = 4;
+        if (startY + gap + qMm > pageH - margin) {
+          pdf.addPage('a4', 'portrait');
+          startY = margin;
+        } else startY += gap;
+        pdf.addImage(q.toDataURL('image/png'), 'PNG', margin, startY, contentW, qMm, undefined, 'FAST');
       }
     }
   } finally {
