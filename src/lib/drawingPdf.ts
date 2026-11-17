@@ -1191,6 +1191,8 @@ export async function exportDrawingToPdf(
         bom,
         title: `${options.doc.name} - ${bom ? 'მასალების უწყისი' : 'ფასი'}`,
         perimeterM: sketchPerimeterM(options.doc.sketch ?? []),
+        client: options.doc.info?.clientName?.trim() || undefined,
+        drawing: options.doc.name,
         prices,
       },
       Boolean(sheet),
