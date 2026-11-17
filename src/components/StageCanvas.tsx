@@ -16,8 +16,6 @@ import {
   findOverlaps,
   isConnector,
   isPanelHolder,
-  GRID_MAJOR_CM,
-  gridStep,
   pieceBounds,
   planH,
   planW,
@@ -104,6 +102,7 @@ import {
 import { Rulers } from './Rulers';
 import { EmptyDrawing } from './EmptyDrawing';
 import { GapMark } from './GapMark';
+import { GridLayer } from './GridLayer';
 import { ContactLayer } from './ContactLayer';
 import { SketchLayer } from './SketchLayer';
 import { UnderlayLayer } from './UnderlayLayer';
@@ -1617,6 +1616,9 @@ export function StageCanvas() {
     >
       <Rulers />
 
+      {/* The squares, in screen pixels under the world layer - GridLayer.tsx. */}
+      <GridLayer elevation={elevation} />
+
       {/* World layer: 1 cm = 1 px, then translate+scale. --z lets CSS keep
           selection outlines exactly 1–2 screen px at any zoom. */}
       <div
@@ -1628,24 +1630,6 @@ export function StageCanvas() {
           } as CSSProperties
         }
       >
-        {/* An elevation is drawn above the ground line, at negative surface y,
-            so the grid has to reach up there too. */}
-        <div
-          className="grid"
-          style={
-            {
-              width: WORLD_W,
-              height: WORLD_H,
-              top: elevation ? -WORLD_H / 2 : 0,
-              // Drawn in world centimetres inside a scaled layer, so the line
-              // WIDTH scales too: at 4x the old fixed 1px was a 4px band, which
-              // is what made a zoomed-in drawing look furred. Divide it back.
-              '--gw': `${1 / zoom}px`,
-              '--gf': `${gridStep(zoom, snapStep)}px`,
-              '--gm': `${GRID_MAJOR_CM}px`,
-            } as CSSProperties
-          }
-        />
 
         {/* Ground level. In an elevation this is the slab everything stands on,
             and the one line that makes a height readable at a glance. */}

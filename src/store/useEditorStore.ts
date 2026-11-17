@@ -24,7 +24,7 @@ import { SEED_MATERIALS, createSeedMaterials, defaultDepth } from '../data/seedC
 import { COMPANY_WEIGHTS, withCompanyWeights } from '../data/companyWeights';
 import { findWallMate, flipWall } from '../lib/wallPen';
 import type { LineSpan } from '../lib/span';
-import { alignPieces } from '../lib/gridAlign';
+import { alignPieces, gridAnchor } from '../lib/gridAlign';
 import { EVERY_KIND, KIND_KEYS, normalizeKindsOn, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
 import { columnTypeId, freshTemplateInstances } from '../lib/templates';
@@ -1513,15 +1513,7 @@ export const useEditorStore = create<EditorState>()(
             let gridDu = snapValue(duCm, s.snapStep, onGrid);
             let gridDv = snapValue(dvCm, s.snapStep, onGrid);
             if (onGrid && picked.length) {
-              let u0 = Infinity;
-              let v0 = Infinity;
-              for (const p of picked) {
-                const m = byId.get(p.materialId);
-                if (!m) continue;
-                const b = projectPiece(p, m, view);
-                u0 = Math.min(u0, b.x);
-                v0 = Math.min(v0, b.y);
-              }
+              const { u0, v0 } = gridAnchor(picked, byId, view);
               if (Number.isFinite(u0) && Number.isFinite(v0)) {
                 gridDu = snapValue(u0 + duCm, s.snapStep, true) - u0;
                 gridDv = snapValue(v0 + dvCm, s.snapStep, true) - v0;
@@ -1944,16 +1936,11 @@ export const useEditorStore = create<EditorState>()(
             // press after is exactly one square (the user, 2026-11-16).
             if (s.moveMode === 'grid' && !fine) {
               const byId = new Map(s.materials.map((m) => [m.id, m]));
-              let u0 = Infinity;
-              let v0 = Infinity;
-              for (const p of s.pieces) {
-                if (!selected.has(p.id)) continue;
-                const m = byId.get(p.materialId);
-                if (!m) continue;
-                const b = projectPiece(p, m, s.surfaceView);
-                u0 = Math.min(u0, b.x);
-                v0 = Math.min(v0, b.y);
-              }
+              const { u0, v0 } = gridAnchor(
+                s.pieces.filter((p) => selected.has(p.id)),
+                byId,
+                s.surfaceView,
+              );
               if (Number.isFinite(u0)) duCm = nextGridLine(u0, duCm) - u0;
               if (Number.isFinite(v0)) dvCm = nextGridLine(v0, dvCm) - v0;
             }

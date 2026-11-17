@@ -1,5 +1,7 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { pieceBounds } from './geometry';
+import { isFace } from './gap';
+import { projectPiece } from './projection';
 
 /**
  * Pieces whose outline sits between whole centimetres, put back on them.
@@ -64,4 +66,40 @@ export function alignPieces(
     if (!dx && !dy) return p;
     return { ...p, x: Math.round((p.x + dx) * 100) / 100, y: Math.round((p.y + dy) * 100) / 100 };
   });
+}
+
+/**
+ * The corner a moved selection is put on the squares by: the top-left of its
+ * formwork - panels, ჩაკერება, corner profiles - and only of everything else
+ * when there is none of that.
+ *
+ * A selection can carry a hidden or small piece standing off the grid - a
+ * ჭანჭიკი on the back of a panel, a clamp, a disc - and when it was the one
+ * furthest left, the squares were fitted to it and the panel moved off them by
+ * the difference (the user, 2026-11-17: an arrow press left a panel half a
+ * square off).
+ */
+export function gridAnchor(
+  pieces: Piece[],
+  byId: Map<string, Material>,
+  view: Parameters<typeof projectPiece>[2],
+): { u0: number; v0: number } {
+  const corner = (list: Piece[]) => {
+    let u0 = Infinity;
+    let v0 = Infinity;
+    for (const p of list) {
+      const m = byId.get(p.materialId);
+      if (!m) continue;
+      const b = projectPiece(p, m, view);
+      u0 = Math.min(u0, b.x);
+      v0 = Math.min(v0, b.y);
+    }
+    return { u0, v0 };
+  };
+  const faces = pieces.filter((p) => isFace(byId.get(p.materialId)));
+  // Rounded to a thousandth: a turned piece's box carries float noise that
+  // could tip it into the square before.
+  const r = corner(faces.length ? faces : pieces);
+  const tidy = (v: number) => (Number.isFinite(v) ? Math.round(v * 1000) / 1000 : v);
+  return { u0: tidy(r.u0), v0: tidy(r.v0) };
 }
