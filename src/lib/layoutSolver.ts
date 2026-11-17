@@ -1,5 +1,6 @@
 import type { Material, Piece, SketchPath } from '../types';
 import { uid } from './ids';
+import { isFace } from './gap';
 import { pieceBounds, planH, planW, rotatedExtent } from './geometry';
 import { coverExact, optionsAt, panelDepthFor, panelHeights, placeAt, type PanelOption } from './formwork';
 import { isOrthogonal, type Point } from './sketch';
@@ -1684,7 +1685,11 @@ function buildVariant(
 
   // Pieces on the drawing that a placed profile would land on: kept means
   // the profile stands down, replaced means the old one goes.
-  const existingCorners = (req.pieces ?? []).filter((p) => byId.get(p.materialId)?.category === 'corner');
+  // ...corner profiles, never a კონექტორი (filed under corners) standing on a seam.
+  const existingCorners = (req.pieces ?? []).filter((p) => {
+    const m = byId.get(p.materialId);
+    return m?.category === 'corner' && isFace(m);
+  });
 
   let elevation = 0;
   stack.forEach((h, course) => {

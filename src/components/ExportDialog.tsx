@@ -9,7 +9,7 @@ import { buildLayoutFile, exportLayoutFile, layoutFileHasContent } from '../lib/
 import type { PdfVisibility } from '../lib/dimensions';
 import { PDF_SCALES, SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
 import { segments } from '../lib/sketch';
-import { listTemplates, templateCounts, type Template } from '../lib/templates';
+import { columnTypeName, listTemplates, templateCounts, type Template } from '../lib/templates';
 import { fmtGel, priceSummary, type PriceSummary } from '../lib/prices';
 import type { DrawingPrices } from '../types';
 
@@ -34,7 +34,8 @@ function useTemplatePrices(pieces: DrawingDoc['pieces']): Array<{ id: string; na
     const counts = templateCounts(pieces);
     return [...counts].map(([id, count]) => {
       const t = list.find((x) => x.id === id);
-      return { id, name: t?.name ?? 'შაბლონი', price: t?.price ?? null, count };
+      // A column from the კოლონა button is named by its size; its price is set here.
+      return { id, name: t?.name ?? columnTypeName(id) ?? 'შაბლონი', price: t?.price ?? null, count };
     });
   }, [list, pieces]);
 }
@@ -150,6 +151,34 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
     }
   };
 
+  /** The same pages as the PDF, as a Word file whose text can all be changed (2026-11-17). */
+  const onDocx = async () => {
+    if (!doc) return;
+    setBusy(true);
+    try {
+      const { exportDrawingToDocx } = await import('../lib/docxExport');
+      const result = await exportDrawingToDocx({
+        doc,
+        materials,
+        sheet,
+        scale: pdfScale,
+        visibility: vis,
+        scales: useEditorStore.getState().materialScale,
+        bom: bomOn ? buildBom(materials, pieces, documents, activeDocId, bomKinds) : null,
+        prices: pricesOn ? prices : null,
+      });
+      if (!result) {
+        setToast('ფაილში არაფერი დარჩა - ჩართე ერთი ნაწილი მაინც.');
+        return;
+      }
+      closeDialog();
+    } catch (e) {
+      setToast(`Word ფაილი ვერ შეიქმნა: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onJson = () => {
     if (!doc) return;
     exportLayoutFile(doc, materials, json);
@@ -170,6 +199,16 @@ export function ExportDialog({ tab: initialTab }: { tab: Tab }) {
           <button className="btn" onClick={closeDialog}>
             გაუქმება
           </button>
+          {tab === 'pdf' && (
+            <button
+              className="btn"
+              disabled={!pdfHasContent || busy}
+              title="იგივე, რაც PDF-ში - Word ფაილად, სადაც ყველა ტექსტი ხელით იცვლება; შემდეგ Word-იდან PDF-ად შეინახება"
+              onClick={() => void onDocx()}
+            >
+              <Icon name="download" size={15} /> Word (.docx)
+            </button>
+          )}
           {tab === 'pdf' ? (
             <button
               className="btn primary"

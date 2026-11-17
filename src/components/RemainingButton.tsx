@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { useStockView } from '../store/useStockView';
 import { remainingRows } from '../lib/remaining';
 import { Icon } from './Icon';
@@ -13,11 +13,13 @@ import { Icon } from './Icon';
 export function RemainingButton() {
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
+  // Real quantities of every ჭანჭიკი, not marks (quantities.ts).
+  const kinds = useKindsOn();
   const openDialog = useEditorStore((s) => s.openDialog);
   const view = useStockView();
   const shortages = useMemo(
-    () => remainingRows(materials, pieces, { show: 'short', view }).shortages,
-    [materials, pieces, view],
+    () => remainingRows(materials, pieces, { show: 'short', view, kinds }).shortages,
+    [materials, pieces, view, kinds],
   );
 
   return (

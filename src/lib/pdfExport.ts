@@ -3,6 +3,7 @@ import type { jsPDF } from 'jspdf';
 import type { Bom } from './bom';
 import { fmtNum, sizeLabel } from './bom';
 import { fmtGel, type PriceSummary } from './prices';
+import { isCountedPart } from './quantities';
 
 /**
  * The BOM *text* is rendered as ordinary HTML and rasterised with html2canvas
@@ -21,34 +22,48 @@ export interface PdfOptions {
   perimeterM?: number;
   /** the ფასი block (the user, 2026-11-16) - only when asked for */
   prices?: PriceSummary | null;
+  /** for the ფასი block's head */
+  client?: string;
+  drawing?: string;
 }
 
 /** The ფასი block: each price on its own line, then what they come to. */
-function pricesHtml(p: PriceSummary): string {
+/**
+ * The ფასი block, laid out as a quote (the user, 2026-11-17): who it is for and
+ * which drawing, one row per line of the price - what, how many, at what, how
+ * much - and the total in a box of its own that cannot be missed.
+ */
+function pricesHtml(p: PriceSummary, who: { client?: string; drawing?: string; date: string }): string {
   const rows: string[] = [];
-  if (p.manual !== null) rows.push(`<tr><td>ფასი</td><td class="num"></td><td class="num">${fmtGel(p.manual)}</td></tr>`);
+  const row = (what: string, qty: string, unit: string, sum: string, cls = '') =>
+    `<tr${cls ? ` class="${cls}"` : ''}><td>${what}</td><td class="num">${qty}</td><td class="num">${unit}</td><td class="num sum">${sum}</td></tr>`;
   if (p.perM2 !== null && p.areaSum !== null) {
-    rows.push(
-      `<tr><td>კვადრატულობა × ფასი 1 მ²-ზე</td><td class="num">${fmtNum(p.areaM2)} მ² × ${fmtGel(p.perM2)}</td><td class="num">${fmtGel(p.areaSum)}</td></tr>`,
-    );
+    rows.push(row('ყალიბი - კვადრატულობა', `${fmtNum(p.areaM2)} მ²`, `${fmtGel(p.perM2)} / მ²`, fmtGel(p.areaSum)));
   }
   for (const s of p.sets) {
-    rows.push(
-      `<tr><td>${esc(s.name)}</td><td class="num">${s.count} ც. × ${fmtGel(s.unit)}</td><td class="num">${s.unit === null ? '-' : fmtGel(s.sum)}</td></tr>`,
-    );
+    rows.push(row(esc(s.name), `${s.count} ც.`, s.unit === null ? '-' : fmtGel(s.unit), s.unit === null ? '-' : fmtGel(s.sum)));
   }
-  if (p.sets.length) {
-    rows.push(`<tr class="sub"><td>კომპლექტის ფასი</td><td class="num"></td><td class="num">${fmtGel(p.setSum)}</td></tr>`);
-  }
+  if (p.sets.length > 1) rows.push(row('კომპლექტის ფასი', '', '', fmtGel(p.setSum), 'sub'));
+  if (p.manual !== null) rows.push(row('ფასი (შეთანხმებით)', '', '', fmtGel(p.manual)));
   if (!rows.length) return '';
+  const meta = [
+    who.client ? `<div><span>კლიენტი</span><b>${esc(who.client)}</b></div>` : '',
+    who.drawing ? `<div><span>ნახაზი</span><b>${esc(who.drawing)}</b></div>` : '',
+    `<div><span>თარიღი</span><b>${esc(who.date)}</b></div>`,
+  ].join('');
   return `
-    <h2 class="price-head">ფასი</h2>
-    <table class="prices">
-      <tbody>
-        ${rows.join('')}
-        <tr class="total"><td>სულ</td><td class="num"></td><td class="num">${fmtGel(p.total)}</td></tr>
-      </tbody>
-    </table>`;
+    <section class="quote">
+      <div class="quote-head">
+        <h2>ფასი</h2>
+        <div class="quote-meta">${meta}</div>
+      </div>
+      <table class="prices">
+        <thead><tr><th>დასახელება</th><th class="num">რაოდენობა</th><th class="num">ერთეულის ფასი</th><th class="num">ჯამი</th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+      <div class="quote-total"><span>სულ გადასახდელი</span><b>${fmtGel(p.total)}</b></div>
+      <p class="quote-note">ფასი ლარში (₾). ჭანჭიკების რაოდენობა - რეალური, არა ნახაზის ნიშნების რიცხვი.</p>
+    </section>`;
 }
 
 function esc(value: unknown): string {
@@ -59,9 +74,9 @@ function esc(value: unknown): string {
     .replace(/"/g, '&quot;');
 }
 
-function buildPrintableHtml({ bom, title, perimeterM, prices }: PdfOptions): string {
+export function buildPrintableHtml({ bom, title, perimeterM, prices, client, drawing }: PdfOptions): string {
   const date = new Date().toLocaleDateString('ka-GE');
-  const priceBlock = prices ? pricesHtml(prices) : '';
+  const priceBlock = prices ? pricesHtml(prices, { client, drawing, date }) : '';
   if (!bom) {
     return `
   <div class="doc">
@@ -76,6 +91,12 @@ function buildPrintableHtml({ bom, title, perimeterM, prices }: PdfOptions): str
   // A blank rather than "0" where the quantity does not apply: accessories have
   // no length, linear members have no face area.
   const q = (value: number, unit: string) => (value > 0 ? `${fmtNum(value)} ${unit}` : '-');
+
+  // The cards split the count: what makes the formwork, and the ჭანჭიკები
+  // holding it - each at its real quantity (quantities.ts).
+  let bolts = 0;
+  for (const g of bom.groups) for (const r of g.rows) if (isCountedPart(r.material)) bolts += r.used;
+  const formwork = bom.totalPieces - bolts;
 
   const groups = bom.groups
     .map(
@@ -120,10 +141,12 @@ function buildPrintableHtml({ bom, title, perimeterM, prices }: PdfOptions): str
     </header>
 
     <section class="cards">
-      <div class="card"><span>სულ ელემენტი</span><b>${bom.totalPieces}</b></div>
+      <div class="card"><span>ყალიბის ელემენტი</span><b>${formwork} ც.</b></div>
+      <div class="card"><span>ჭანჭიკები</span><b>${bolts} ც.</b></div>
       <div class="card"><span>პერიმეტრი</span><b>${perimeterM !== undefined && perimeterM > 0 ? `${fmtNum(perimeterM)} მ` : '-'}</b></div>
-      <div class="card"><span>სულ ფართობი</span><b>${fmtNum(bom.totalAreaM2)} მ²</b></div>
+      <div class="card"><span>კვადრატულობა</span><b>${fmtNum(bom.totalAreaM2)} მ²</b></div>
       <div class="card"><span>სულ წონა${bom.unweighedRows > 0 ? ' *' : ''}</span><b>${fmtNum(bom.totalWeightKg)} კგ</b></div>
+      ${prices && prices.total > 0 ? `<div class="card price"><span>ფასი</span><b>${fmtGel(prices.total)}</b></div>` : ''}
     </section>
 
     <table>
@@ -149,7 +172,7 @@ function buildPrintableHtml({ bom, title, perimeterM, prices }: PdfOptions): str
   </div>`;
 }
 
-const PRINT_CSS = `
+export const PRINT_CSS = `
   .doc{width:900px;padding:34px 38px;background:#fff;color:#1b1f24;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Georgian",Arial,sans-serif;}
   .doc header{display:flex;align-items:baseline;justify-content:space-between;
@@ -170,9 +193,25 @@ const PRINT_CSS = `
   .doc tr.total td{font-weight:700;border-top:2px solid #1b1f24;background:#eef1f5;}
   .doc .empty{color:#7a8492;text-align:center;padding:22px;}
   .doc .note{font-size:11px;color:#7a8492;margin:9px 0 0;}
-  .doc .price-head{font-size:16px;margin:22px 0 8px;border-bottom:2px solid #1b1f24;padding-bottom:6px;}
-  .doc table.prices td:first-child{width:50%;}
-  .doc table.prices tr.total td{font-size:14px;}
+  .doc .card.price{background:#1b1f24;border-color:#1b1f24;}
+  .doc .card.price span{color:#c9ced6;}
+  .doc .card.price b{color:#fff;}
+  .doc .quote{margin-top:26px;border:1.5px solid #1b1f24;border-radius:10px;overflow:hidden;}
+  .doc .quote-head{display:flex;justify-content:space-between;align-items:center;background:#1b1f24;color:#fff;padding:12px 16px;}
+  .doc .quote-head h2{margin:0;font-size:18px;letter-spacing:.5px;}
+  .doc .quote-meta{display:flex;gap:18px;font-size:11px;}
+  .doc .quote-meta span{display:block;color:#9aa4b2;font-size:9px;text-transform:uppercase;letter-spacing:.5px;}
+  .doc .quote-meta b{font-size:12px;}
+  .doc table.prices{margin:0;}
+  .doc table.prices th{background:#f3f5f8;}
+  .doc table.prices td{padding:9px 12px;font-size:12.5px;}
+  .doc table.prices td:first-child{width:46%;}
+  .doc table.prices td.sum{font-weight:700;}
+  .doc table.prices tr.sub td{background:#fafbfc;border-top:1px solid #c9ced6;}
+  .doc .quote-total{display:flex;justify-content:flex-end;align-items:baseline;gap:18px;padding:14px 16px;background:#eef1f5;border-top:2px solid #1b1f24;}
+  .doc .quote-total span{font-size:12px;color:#404853;text-transform:uppercase;letter-spacing:.5px;}
+  .doc .quote-total b{font-size:24px;}
+  .doc .quote-note{margin:0;padding:8px 16px 12px;font-size:10px;color:#7a8492;background:#eef1f5;}
 `;
 
 /**
@@ -194,6 +233,20 @@ export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: b
   host.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1;background:#fff;';
   host.innerHTML = buildPrintableHtml(options);
   document.body.appendChild(host);
+
+  // The ფასი quote is kept whole: laid on its own after the list, and moved to
+  // the next page when it does not fit on this one - cut in two it lost its
+  // total from its lines (2026-11-17).
+  const quoteEl = host.querySelector('.quote') as HTMLElement | null;
+  let quoteHost: HTMLElement | null = null;
+  if (quoteEl && host.querySelector('table:not(.prices)')) {
+    quoteHost = document.createElement('div');
+    quoteHost.className = 'doc';
+    quoteHost.style.paddingTop = '0';
+    quoteEl.style.marginTop = '0';
+    quoteHost.appendChild(quoteEl);
+    host.appendChild(quoteHost);
+  }
 
   try {
     const target = host.querySelector('.doc') as HTMLElement;
@@ -241,6 +294,19 @@ export async function appendBomPages(pdf: jsPDF, options: PdfOptions, newPage: b
         // opened as, and a landscape drawing sheet would turn the list sideways.
         pdf.addPage('a4', 'portrait');
         startY = margin;
+      } else startY += h / pxPerMm;
+    }
+
+    if (quoteHost) {
+      const q = await html2canvas(quoteHost, { scale: 2, backgroundColor: '#ffffff', logging: false });
+      if (q.width && q.height) {
+        const qMm = q.height / pxPerMm;
+        const gap = 4;
+        if (startY + gap + qMm > pageH - margin) {
+          pdf.addPage('a4', 'portrait');
+          startY = margin;
+        } else startY += gap;
+        pdf.addImage(q.toDataURL('image/png'), 'PNG', margin, startY, contentW, qMm, undefined, 'FAST');
       }
     }
   } finally {

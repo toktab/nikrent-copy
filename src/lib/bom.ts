@@ -151,7 +151,8 @@ export function buildBom(
       const commitment = commitments.get(m.id) ?? emptyCommitment();
       const rowWeight = count * m.weight;
       const free = availableFor(m, view);
-      const shortage = !view.unlimited && count > free;
+      // A ჭანჭიკი nobody has entered stock for is not short (see remaining.ts).
+      const shortage = !view.unlimited && count > free && !(real && isCountedPart(m) && stock <= 0);
 
       rows.push({
         material: m,

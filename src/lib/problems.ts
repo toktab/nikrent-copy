@@ -8,6 +8,7 @@ import { allGaps, componentThatFits, faceBands, isFace, type GapRect } from './g
 import { hiddenSpan } from './projection';
 import { remainingRows } from './remaining';
 import { stockEntered } from './fillOptions';
+import type { KindsOn } from './boltKinds';
 import type { StockView } from './inventory';
 
 /**
@@ -68,6 +69,8 @@ interface Input {
   sketch: SketchPath[];
   /** the other drawings' hold on the yard - see `stockView`; none is the whole yard */
   view?: StockView;
+  /** the drawing's ჭანჭიკი kinds: shortages read at real quantities */
+  kinds?: KindsOn;
 }
 
 /** Colour for each drawn line - the cheap part of `findProblems`, for the canvas. */
@@ -84,7 +87,7 @@ export function lineStatuses(
   return out;
 }
 
-export function findProblems({ materials, pieces, sketch, view }: Input): ProblemReport {
+export function findProblems({ materials, pieces, sketch, view, kinds }: Input): ProblemReport {
   const byId = new Map(materials.map((m) => [m.id, m]));
   const problems: Problem[] = [];
   const lines = new Map<string, LineStatus>();
@@ -184,7 +187,7 @@ export function findProblems({ materials, pieces, sketch, view }: Input): Proble
 
   // ── short of stock (only once stock has been entered at all) ──
   if (stockEntered(materials)) {
-    for (const group of remainingRows(materials, pieces, { show: 'short', view }).groups) {
+    for (const group of remainingRows(materials, pieces, { show: 'short', view, kinds }).groups) {
       for (const row of group.rows) {
         problems.push({
           id: `shortage:${row.material.id}`,

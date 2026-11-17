@@ -1191,6 +1191,8 @@ export async function exportDrawingToPdf(
         bom,
         title: `${options.doc.name} - ${bom ? 'მასალების უწყისი' : 'ფასი'}`,
         perimeterM: sketchPerimeterM(options.doc.sketch ?? []),
+        client: options.doc.info?.clientName?.trim() || undefined,
+        drawing: options.doc.name,
         prices,
       },
       Boolean(sheet),
@@ -1221,3 +1223,23 @@ export function requiredScale(
 
 /** Re-exported so callers can size a preview without importing geometry. */
 export { pieceBounds };
+
+/**
+ * The key the sheet prints, as text rows - for the Word copy of the PDF
+ * (docxExport.ts), where every line of it can be changed by hand.
+ */
+export function sheetLegendRows(
+  doc: DrawingDoc,
+  materials: Material[],
+  visibility?: PdfVisibility,
+): Array<{ label: string; note?: string; count?: string; sample?: string }> {
+  const vis = visibility ?? DEFAULT_PDF_VISIBILITY;
+  const byId = new Map(materials.map((m) => [m.id, m]));
+  const content = sheetContent(doc, materials, byId, vis);
+  return legendEntries(doc, byId, vis, content, true, true).map(({ label, note, count, sample }) => ({
+    label,
+    note,
+    count,
+    sample,
+  }));
+}

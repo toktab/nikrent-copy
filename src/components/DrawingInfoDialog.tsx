@@ -1,27 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { buildBom } from '../lib/bom';
-import { boltKindOf, boltTotals } from '../lib/boltMarks';
+import { isCountedPart } from '../lib/quantities';
 import { infoSaveUnsupported } from '../lib/repo';
-import { soloPanels, placedWalers, WALER_LOCK_NAME, WALER_ROD_NAME, walerTotals } from '../lib/walers';
-import { fullHeadTotals } from '../lib/bolts';
-import { smallNutTotals } from '../lib/cornerConnectors';
-import { CORNER_CONNECTOR_NAME, cornerConnectorSpots, cornerConnectorTotals, FULL_HEAD_NAME, HALF_HEAD_NAME, INNER_CONNECTOR_NAME, SMALL_NUT_NAME } from '../lib/cornerConnectors';
 import { isConfigured } from '../lib/supabase';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
-
-/** The four ჭანჭიკი kinds as the ჭანჭიკები menu names them. */
-const BOLT_NAMES: Array<['connectors' | 'rods' | 'nuts' | 'latches' | 'holders' | 'crocodiles' | 'frogs' | 'props', string]> = [
-  ['crocodiles', 'ნიანგი (ჩამკეტი რეგულირებადი)'],
-  ['frogs', 'ბაყაყი (სამაგრი ფიქსი)'],
-  ['props', 'დგარი და თავი'],
-  ['connectors', 'კონექტორი 25 სმ'],
-  ['rods', 'შტირები'],
-  ['nuts', 'ქანჩი + დისკო'],
-  ['latches', 'ჩამკეტი fix'],
-  ['holders', 'პანელის ბეტონზე სამაგრი'],
-];
 
 /**
  * The drawing's own details, from the button beside its name (the user,
@@ -38,53 +22,26 @@ export function DrawingInfoDialog() {
   const setDrawingInfo = useEditorStore((s) => s.setDrawingInfo);
   const [productsOpen, setProductsOpen] = useState(true);
 
-  // Real quantities of every ჭანჭიკი, not marks - quantities.ts.
-
-  const bomKinds = useKindsOn();
-
+  // Every product at the quantity the job really needs (the user,
+  // 2026-11-17): one კონექტორი mark up a 300 is 5, one ვოლერი mark 3 - the
+  // same list the PDF prints (quantities.ts), so it can never disagree.
+  const kindsOn = useKindsOn();
   const bom = useMemo(
-    () => buildBom(materials, pieces, documents, activeDocId, bomKinds),
-    [pieces, materials, documents, activeDocId, bomKinds],
+    () => buildBom(materials, pieces, documents, activeDocId, kindsOn),
+    [pieces, materials, documents, activeDocId, kindsOn],
   );
-  // Only the ჭანჭიკი kinds the drawing has on.
-  const on = useKindsOn();
-  const bolts = useMemo(
-    () => boltTotals(pieces, new Map(materials.map((m) => [m.id, m])), on),
-    [pieces, materials, on],
-  );
-  // ჭანჭიკები come from their own count - placed and worked out alike - so
-  // the placed ones are not listed twice.
+  // How many marks the plan shows for each, where that is fewer - said beside the real count.
+  const marks = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const p of pieces) n.set(p.materialId, (n.get(p.materialId) ?? 0) + 1);
+    return n;
+  }, [pieces]);
   const rows = bom.groups.flatMap((g) =>
-    g.rows.filter((r) => r.used > 0 && !boltKindOf(r.material)).map((r) => ({ group: g.label, row: r })),
+    g.rows
+      .filter((r) => r.used > 0)
+      .map((r) => ({ group: isCountedPart(r.material) ? 'ჭანჭიკები' : g.label, row: r })),
   );
-  const walers = useMemo(
-    () => walerTotals(soloPanels(pieces, new Map(materials.map((m) => [m.id, m]))), placedWalers(pieces, new Map(materials.map((m) => [m.id, m])))),
-    [pieces, materials],
-  );
-  const cc = useMemo(
-    () => cornerConnectorTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m])))),
-    [pieces, materials],
-  );
-  // The corner connectors are the same კონექტორი 25 სმ - counted in its row.
-  const countOf = (k: (typeof BOLT_NAMES)[number][0]) =>
-    k === 'connectors'
-      ? bolts.connectors + (on.cornerConnectors ? cc.connectors : 0) + (on.innerConnectors ? cc.innerConnectors : 0)
-      : bolts[k];
-  const boltRows = BOLT_NAMES.filter(([k]) => countOf(k) > 0);
-  const walerRows: Array<[string, number]> = [];
-  if (on.halfHead && cc.halfHead) walerRows.push([HALF_HEAD_NAME, cc.halfHead]);
-  // At inside corners and on the walers - one part (the user, 2026-11-08).
-  const full = fullHeadTotals(pieces, new Map(materials.map((m) => [m.id, m])), on).total;
-  if (full) walerRows.push([FULL_HEAD_NAME, full]);
-  const small = smallNutTotals(cornerConnectorSpots(pieces, new Map(materials.map((m) => [m.id, m]))), pieces, new Map(materials.map((m) => [m.id, m])));
-  if (on.smallNuts && small.total) walerRows.push([SMALL_NUT_NAME, small.total]);
-  walerRows.push(...(on.walers && walers.walers
-    ? [
-        ['ვოლერი', walers.walers],
-        [WALER_LOCK_NAME, walers.locks],
-      ]
-    : []) as Array<[string, number]>);
-  const kinds = rows.length + boltRows.length + walerRows.length;
+  const kinds = rows.length;
   const notSaved = isConfigured && infoSaveUnsupported();
 
   return (
@@ -141,25 +98,12 @@ export function DrawingInfoDialog() {
                   {row.material.name}
                   <span className="menu-note"> · {group}</span>
                 </td>
-                <td>{row.used}</td>
-              </tr>
-            ))}
-            {boltRows.map(([k, name]) => (
-              <tr key={k}>
                 <td>
-                  {name}
-                  <span className="menu-note"> · ჭანჭიკები</span>
+                  <b>{row.used}</b>
+                  {isCountedPart(row.material) && (marks.get(row.material.id) ?? 0) !== row.used && (
+                    <span className="menu-note"> (ნახაზზე {marks.get(row.material.id) ?? 0} ნიშანი)</span>
+                  )}
                 </td>
-                <td>{countOf(k)}</td>
-              </tr>
-            ))}
-            {walerRows.map(([name, n]) => (
-              <tr key={name}>
-                <td>
-                  {name}
-                  <span className="menu-note"> · ჭანჭიკები</span>
-                </td>
-                <td>{n}</td>
               </tr>
             ))}
             {!kinds && (

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { useStockView } from '../store/useStockView';
 import { sizeLabel, fmtNum } from '../lib/bom';
 import { STATUS_LABEL, statusOf } from '../lib/inventory';
@@ -19,6 +19,8 @@ import { Icon } from './Icon';
 export function RemainingDialog() {
   const materials = useEditorStore((s) => s.materials);
   const pieces = useEditorStore((s) => s.pieces);
+  // Real quantities of every ჭანჭიკი, not marks (quantities.ts).
+  const kinds = useKindsOn();
   const closeDialog = useEditorStore((s) => s.closeDialog);
   const openDialog = useEditorStore((s) => s.openDialog);
   const activeDoc = useEditorStore((s) => s.documents.find((d) => d.id === s.activeDocId));
@@ -31,12 +33,12 @@ export function RemainingDialog() {
   const [error, setError] = useState<string | null>(null);
 
   const remaining = useMemo(
-    () => remainingRows(materials, pieces, { show, query, view }),
-    [materials, pieces, show, query, view],
+    () => remainingRows(materials, pieces, { show, query, view, kinds }),
+    [materials, pieces, show, query, view, kinds],
   );
   const usedKinds = useMemo(
-    () => remainingRows(materials, pieces, { show: 'used' }).groups.reduce((n, g) => n + g.rows.length, 0),
-    [materials, pieces],
+    () => remainingRows(materials, pieces, { show: 'used', kinds }).groups.reduce((n, g) => n + g.rows.length, 0),
+    [materials, pieces, kinds],
   );
   const heldElsewhere = view.reserved.size > 0;
 
@@ -47,7 +49,7 @@ export function RemainingDialog() {
       const { exportRemainingToExcel } = await import('../lib/excelExport');
       // The file carries every component: the filters tidy the screen, a sheet
       // sent on should not silently drop rows.
-      exportRemainingToExcel(remainingRows(materials, pieces, { view }), drawingName);
+      exportRemainingToExcel(remainingRows(materials, pieces, { view, kinds }), drawingName);
     } catch (e) {
       setError(`ექსპორტი ვერ მოხერხდა: ${(e as Error).message}`);
     }
