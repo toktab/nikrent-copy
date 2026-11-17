@@ -6922,3 +6922,20 @@ kbd {
   background: rgba(245, 217, 10, 0.12);
   font-weight: 600;
 }
+
+/* The squares (GridLayer): screen-space lines, under the world layer. */
+.grid-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.grid-layer .grid-fine {
+  stroke: var(--grid);
+  stroke-width: 1;
+  fill: none;
+}
+.grid-layer .grid-major {
+  stroke: var(--gridMajor);
+  stroke-width: 1;
+  fill: none;
+}
