@@ -35,3 +35,15 @@ describe('review fixes (the user, 2026-11-17)', () => {
     expect(columnTypeName(id)).toBe('კოლონა 40×60, 300 სმ');
   });
 });
+
+import { alignPieces } from '../gridAlign';
+
+describe('grid alignment on open (2026-11-17)', () => {
+  it('puts a panel half a cm off back on the squares, and leaves a კონექტორი on its seam', () => {
+    const panel: Piece = { id: 'p', materialId: 'panel-60x300', x: 700.45, y: 940, rot: 0 };
+    const conn: Piece = { id: 'c', materialId: 'corner-connector', x: 756.3, y: 941.2, rot: 0 };
+    const [p, c] = alignPieces([panel, conn], byId, [], 5);
+    expect(p.x).toBeCloseTo(700);
+    expect(c).toBe(conn);
+  });
+});
