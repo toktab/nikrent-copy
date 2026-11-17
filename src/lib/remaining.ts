@@ -1,5 +1,7 @@
 import type { Category, Material, Piece } from '../types';
 import { CATEGORY_ORDER, categoryLabel } from '../data/categories';
+import { boltQuantities, isCountedPart } from './quantities';
+import type { KindsOn } from './boltKinds';
 import { OPEN_YARD, availableFor, totalStock, type StockView } from './inventory';
 
 /**
@@ -67,6 +69,12 @@ export function remainingRows(
     keep?: ReadonlySet<string>;
     /** the other drawings' hold on the yard; none given is the whole yard */
     view?: StockView;
+    /**
+     * The drawing's ჭანჭიკი kinds. Given, every ჭანჭიკი, ვოლერი and შტირი is
+     * counted at its real quantity - five კონექტორი for one mark up a 300 -
+     * not as the marks on the plan (quantities.ts).
+     */
+    kinds?: KindsOn;
   } = {},
 ): Remaining {
   const show = opts.show ?? 'all';
@@ -77,6 +85,11 @@ export function remainingRows(
   // A piece whose material has left the catalog has no stock row to count
   // against; the bill of materials already reports those.
   for (const p of pieces) counts.set(p.materialId, (counts.get(p.materialId) ?? 0) + 1);
+  if (opts.kinds) {
+    const byId = new Map(materials.map((m) => [m.id, m]));
+    const real = boltQuantities(pieces, byId, materials, opts.kinds);
+    for (const m of materials) if (isCountedPart(m)) counts.set(m.id, real.get(m.id) ?? 0);
+  }
 
   const groups: RemainingGroup[] = [];
   let shortages = 0;
@@ -97,7 +110,9 @@ export function remainingRows(
         reserved: view.reserved.get(material.id) ?? 0,
         used: count,
         left,
-        short: !view.unlimited && left < 0,
+        // A ჭანჭიკი nobody has entered stock for is not short - its stock is
+        // simply not kept yet; otherwise every one went red (2026-11-17).
+        short: !view.unlimited && left < 0 && !(isCountedPart(material) && stock <= 0),
         weightKg: count * material.weight,
       };
 

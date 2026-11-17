@@ -290,3 +290,18 @@ export function sameTemplate(
   const key = templateKey(pieces, byId);
   return templates.find((t) => t.pieces.length === pieces.length && templateKey(t.pieces, byId) === key) ?? null;
 }
+
+/** Columns built with the კოლონა button are a type of their own: "col:<short>x<long>x<height>". */
+const COLUMN_TYPE = /^col:(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/;
+
+/** The type id of a column from the კოლონა button - 40 × 60 and 60 × 40 are one type. */
+export function columnTypeId(spec: { sectionX: number; sectionY: number; height: number }): string {
+  const [a, b] = [spec.sectionX, spec.sectionY].sort((x, y) => x - y);
+  return `col:${a}x${b}x${spec.height}`;
+}
+
+/** "კოლონა 40×60, 300 სმ" for a კოლონა-button type id; null for a saved template's id. */
+export function columnTypeName(id: string): string | null {
+  const m = COLUMN_TYPE.exec(id);
+  return m ? `კოლონა ${m[1]}×${m[2]}, ${m[3]} სმ` : null;
+}

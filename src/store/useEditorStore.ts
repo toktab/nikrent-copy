@@ -27,7 +27,7 @@ import type { LineSpan } from '../lib/span';
 import { alignPieces } from '../lib/gridAlign';
 import { EVERY_KIND, KIND_KEYS, normalizeKindsOn, type KindKey, type KindsOn } from '../lib/boltKinds';
 import { sanitizeMaterial, type ParsedLayout } from '../lib/catalogFile';
-import { freshTemplateInstances } from '../lib/templates';
+import { columnTypeId, freshTemplateInstances } from '../lib/templates';
 import {
   clampZoom,
   computeEdgeSnap,
@@ -2114,8 +2114,17 @@ export const useEditorStore = create<EditorState>()(
           const plan = planColumn(spec, get().materials);
           if (plan.pieces.length) {
             commit((s) => ({
-              // Marked as the fill's, so a later fill may replace them.
-              pieces: [...s.pieces, ...plan.pieces.map((p): Piece => ({ ...p, auto: true }))],
+              // Marked as the fill's, so a later fill may replace them - and
+              // as one column of its size, so the export prices it as one
+              // unit of the კომპლექტის ფასი (the user, 2026-11-17).
+              pieces: [
+                ...s.pieces,
+                ...(() => {
+                  const tpl = columnTypeId(spec);
+                  const inst = uid('ti');
+                  return plan.pieces.map((p): Piece => ({ ...p, auto: true, tpl, tplInst: inst }));
+                })(),
+              ],
               selectedIds: plan.pieces.map((p) => p.id),
             }));
           }

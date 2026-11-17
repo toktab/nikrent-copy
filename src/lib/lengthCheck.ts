@@ -1,5 +1,6 @@
 import type { Category, Material, Piece, SketchPath } from '../types';
 import { pieceBounds, planH } from './geometry';
+import { isFace } from './gap';
 import { isOrthogonal } from './sketch';
 import {
   MAX_WALL_CM,
@@ -336,7 +337,8 @@ export function checkPath(
     const m = byId.get(piece.materialId);
     // Only square to the drawing: the check reads boxes, and so does the fill.
     const square = Math.abs(((piece.rot % 90) + 90) % 90) < TOL || Math.abs(((piece.rot % 90) + 90) % 90) > 90 - TOL;
-    return m && FACE.has(m.category) && square ? [{ piece, m }] : [];
+    // A კონექტორი is filed under corners but is no part of the face.
+    return m && FACE.has(m.category) && isFace(m) && square ? [{ piece, m }] : [];
   });
 
   const standingFor = (side: 1 | -1) =>

@@ -9,7 +9,7 @@ import { buildLayoutFile, exportLayoutFile, layoutFileHasContent } from '../lib/
 import type { PdfVisibility } from '../lib/dimensions';
 import { PDF_SCALES, SHEET_SIZES, type JsonExportOptions } from '../lib/exportOptions';
 import { segments } from '../lib/sketch';
-import { listTemplates, templateCounts, type Template } from '../lib/templates';
+import { columnTypeName, listTemplates, templateCounts, type Template } from '../lib/templates';
 import { fmtGel, priceSummary, type PriceSummary } from '../lib/prices';
 import type { DrawingPrices } from '../types';
 
@@ -34,7 +34,8 @@ function useTemplatePrices(pieces: DrawingDoc['pieces']): Array<{ id: string; na
     const counts = templateCounts(pieces);
     return [...counts].map(([id, count]) => {
       const t = list.find((x) => x.id === id);
-      return { id, name: t?.name ?? 'შაბლონი', price: t?.price ?? null, count };
+      // A column from the კოლონა button is named by its size; its price is set here.
+      return { id, name: t?.name ?? columnTypeName(id) ?? 'შაბლონი', price: t?.price ?? null, count };
     });
   }, [list, pieces]);
 }

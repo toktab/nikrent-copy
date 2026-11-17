@@ -1,5 +1,5 @@
 import type { Category, Material } from '../types';
-import { planH, planW, type Rect } from './geometry';
+import { isConnector, planH, planW, type Rect } from './geometry';
 import { cornerLeg } from './shapePath';
 
 /**
@@ -19,7 +19,15 @@ export const FACE_CATEGORIES: ReadonlySet<Category> = new Set<Category>([
 
 /** True when a component makes up the face, rather than holding it together. */
 export function isFace(m: Material | undefined): boolean {
-  return !!m && FACE_CATEGORIES.has(m.category);
+  // Never a ჭანჭიკი: the კუთხის კონექტორი is filed under corners, and sitting
+  // on the seam by design it was reported as overlapping both panels and
+  // drew touching marks round itself (the user, 2026-11-17).
+  return !!m && FACE_CATEGORIES.has(m.category) && !isConnector(m) && !isHalfOrFull40(m);
+}
+
+/** The 40 სმ heads, wherever a catalog files them. */
+function isHalfOrFull40(m: Material): boolean {
+  return m.id === 'corner-connector-40' || m.id === 'rod-40-half-head' || (/40\s?სმ/.test(m.name) && m.name.includes('კონექტორ'));
 }
 
 /**

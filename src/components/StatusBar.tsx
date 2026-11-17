@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useEditorStore } from '../store/useEditorStore';
+import { useEditorStore, useKindsOn } from '../store/useEditorStore';
 import { allGaps, faceBands, isFace } from '../lib/gap';
 import { hiddenSpan, projectPiece } from '../lib/projection';
 import { useSyncStore } from '../lib/syncEngine';
@@ -27,6 +27,8 @@ export function StatusBar() {
   const pending = useSyncStore((s) => s.pendingChanges);
   const online = useOnline();
   const pieces = useEditorStore((s) => s.pieces);
+  // Real quantities of every ჭანჭიკი, not marks (quantities.ts).
+  const kinds = useKindsOn();
   const materials = useEditorStore((s) => s.materials);
   const showGaps = useEditorStore((s) => s.showGaps);
   const simple = useEditorStore((s) => s.simpleMode);
@@ -52,7 +54,7 @@ export function StatusBar() {
 
   // What the drawing weighs, for the truck. Always on: a count and a sum per
   // component, nothing like the gap check's cost.
-  const weight = useMemo(() => remainingRows(materials, pieces, { show: 'used' }), [materials, pieces]);
+  const weight = useMemo(() => remainingRows(materials, pieces, { show: 'used', kinds }), [materials, pieces, kinds]);
 
   const view = viewMode === '3d' ? '3D' : VIEW_LABEL[surfaceView];
 
