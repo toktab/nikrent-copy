@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useEditorStore } from './store/useEditorStore';
+import { useCanEditDrawings } from './store/useAuthStore';
 import { legacyBritaniaToV1, schemaToSketchPaths } from './lib/detectImport';
 import { takeTraceImport, TRACE_IMPORT_KEY } from './lib/trace/handoff';
 import { uid } from './lib/ids';
@@ -78,6 +79,20 @@ export default function App() {
       sessionStorage.removeItem('detect-import');
     }
   }, [dataLoaded]);
+
+  /**
+   * A drawing opened with pieces standing between the squares - placed while
+   * panels were drawn 9 cm thick, or snapped to a neighbour that was off - is
+   * put back on them at once (the user, 2026-11-17: "just by a little" off).
+   * Only for someone who may change the drawing; one undo step, said in a toast.
+   */
+  const activeDocId = useEditorStore((s) => s.activeDocId);
+  const canEditDrawing = useCanEditDrawings();
+  useEffect(() => {
+    if (!dataLoaded || !canEditDrawing) return;
+    const n = useEditorStore.getState().alignToGrid();
+    if (n) setToast(`ბადეზე გასწორდა ${n} ელემენტი (Ctrl+Z - დაბრუნება).`);
+  }, [dataLoaded, activeDocId, canEditDrawing, setToast]);
 
   /**
    * Walls traced off a PDF in the /trace tab.

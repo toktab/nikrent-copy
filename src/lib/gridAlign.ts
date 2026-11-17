@@ -57,7 +57,8 @@ export function alignPieces(
 
   return pieces.map((p) => {
     const m = byId.get(p.materialId);
-    if (!m || (m.category !== 'panel' && m.category !== 'filler' && m.category !== 'corner')) return p;
+    // Formwork only: a კონექტორი (filed under corners) sits on its seam, not on the squares.
+    if (!m || !isFace(m)) return p;
     const r = ((p.rot % 90) + 90) % 90;
     if (r > 0.5 && r < 89.5) return p;
     const b = pieceBounds(p, m);
