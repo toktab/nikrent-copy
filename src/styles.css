@@ -6939,3 +6939,19 @@ kbd {
   stroke-width: 1;
   fill: none;
 }
+
+/* კოპირება / ამოჭრა / ჩასმა / ჩანაცვლება on the bottom rail. */
+.status-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.status-actions .btn.small {
+  height: 22px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+}
+.status-actions .btn.small:disabled {
+  opacity: 0.4;
+}

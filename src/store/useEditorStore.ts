@@ -824,6 +824,8 @@ export interface EditorState {
   selectAllOf: (target: SelectTarget) => void;
   /** ჩანაცვლება: the selected pieces become `materialId`, where they stand. */
   replaceSelected: (materialId: string) => void;
+  /** Copy the selection and take it off the drawing, as one undo step. */
+  cutSelection: () => void;
   /** A catalog rod let go on a rod spot: the whole stack that spot takes. */
   placeRodStack: (materialId: string, spot: RodSpot) => void;
   /** A catalog ქანჩი + დისკო let go on a rod end: one for every rod up it. */
@@ -2724,6 +2726,17 @@ export const useEditorStore = create<EditorState>()(
               ...(kind && !s.boltsShown[kind] ? { boltsShown: { ...s.boltsShown, [kind]: true }, showBolts: true } : {}),
             };
           }),
+        cutSelection: () =>
+          commit((s) => {
+            const picked = new Set(s.selectedIds);
+            if (!picked.size) return {};
+            return {
+              clipboard: s.pieces.filter((p) => picked.has(p.id)),
+              pieces: s.pieces.filter((p) => !picked.has(p.id)),
+              selectedIds: [],
+            };
+          }),
+
         replaceSelected: (materialId) =>
           commit((s) => {
             const m = s.materials.find((mm) => mm.id === materialId);

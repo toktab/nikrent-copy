@@ -679,6 +679,10 @@ export function StageCanvas() {
             e.preventDefault();
             s.pasteClipboard();
             return;
+          case 'KeyX':
+            e.preventDefault();
+            s.cutSelection();
+            return;
           case 'KeyA':
             e.preventDefault();
             s.selectAll();

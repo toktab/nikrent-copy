@@ -27,14 +27,16 @@ interface MenuProps {
   trigger: (open: boolean) => ReactElement<Record<string, unknown>>;
   /** Which edge of the menu lines up with the trigger. */
   align?: 'left' | 'right';
+  /** Opens upward - for a trigger at the foot of the window (the status bar). */
+  up?: boolean;
   children: ReactNode | ((close: () => void) => ReactNode);
 }
 
-export function Menu({ trigger, align = 'left', children }: MenuProps) {
+export function Menu({ trigger, align = 'left', up = false, children }: MenuProps) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left?: number; right?: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number; maxHeight?: number; overflowY?: 'auto' } | null>(null);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -45,12 +47,16 @@ export function Menu({ trigger, align = 'left', children }: MenuProps) {
     }
     const r = anchor.current?.getBoundingClientRect();
     if (!r) return;
+    // Upward, never past the top of the window: a long list scrolls instead.
+    const v = up
+      ? { bottom: window.innerHeight - r.top + 6, maxHeight: Math.max(120, r.top - 12), overflowY: 'auto' as const }
+      : { top: r.bottom + 6 };
     setPos(
       align === 'right'
-        ? { top: r.bottom + 6, right: Math.max(window.innerWidth - r.right, 8) }
-        : { top: r.bottom + 6, left: Math.max(r.left, 8) },
+        ? { ...v, right: Math.max(window.innerWidth - r.right, 8) }
+        : { ...v, left: Math.max(r.left, 8) },
     );
-  }, [open, align]);
+  }, [open, align, up]);
 
   // A menu that survives a click elsewhere, Escape, or the window moving under
   // it would be a menu the user has to dismiss on purpose. None of them are
