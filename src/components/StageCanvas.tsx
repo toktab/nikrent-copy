@@ -88,6 +88,8 @@ import { BoltLayer } from './BoltLayer';
 import { MeasureLayer } from './MeasureLayer';
 import {
   collinearRun,
+  formworkCorners,
+  nearestCorner,
   firstPoint,
   freeAnchor,
   measureAt,
@@ -981,6 +983,14 @@ export function StageCanvas() {
         if (onto) return onto.point;
       }
 
+      // ...and the corners of the formwork, exactly: a line drawn to measure a
+      // wall for the PDF starts and ends on a panel's or a corner profile's
+      // corner, which is rarely on the 5 cm grid (the user, 2026-11-19).
+      const byId = new Map(s.materials.map((m) => [m.id, m]));
+      const corners = formworkCorners(s.pieces, byId);
+      const corner = free ? null : nearestCorner(corners, at, 12 / s.zoom);
+      if (corner) return { ...corner };
+
       const last = s.penPoints[s.penPoints.length - 1];
       if (!last) return { x: round(at.x), y: round(at.y) };
 
@@ -1007,6 +1017,16 @@ export function StageCanvas() {
        */
       const squared = orthogonal(last, at);
       const across = squared.y === last.y;
+      // Level with a corner on the way: the leg stops exactly beside it, the
+      // way the measure tool does, instead of a few cm short or past.
+      const along = across ? squared.x : squared.y;
+      const reachCm = 8 / s.zoom;
+      let level: number | null = null;
+      for (const c of corners) {
+        const v = across ? c.x : c.y;
+        if (Math.abs(v - along) <= reachCm && (level === null || Math.abs(v - along) < Math.abs(level - along))) level = v;
+      }
+      if (level !== null) return across ? { x: level, y: last.y } : { x: last.x, y: level };
       const length = round(across ? squared.x - last.x : squared.y - last.y);
       return across
         ? { x: last.x + length, y: last.y }

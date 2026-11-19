@@ -134,7 +134,9 @@ import {
 } from '../lib/dimensions';
 import {
   DEFAULT_MEASURE_STYLE,
+  formworkCorners,
   freeAnchor,
+  nearestCorner,
   normalizeMeasureStyle,
   type MeasureAnchor,
   type MeasureStyle,
@@ -3118,13 +3120,40 @@ export const useEditorStore = create<EditorState>()(
             // pen rounds: dragging a wall to 180.2 is not a dimension anybody
             // asked for, and it is the neighbouring legs that inherit it.
             const step = drawStep(s.snap, s.snapStep);
+            // A formwork corner within reach beats the grid (the user,
+            // 2026-11-19): a moved end lands ON the corner of a panel or a
+            // შიდა კუთხე, a moved leg level with one - never a few cm off.
+            const corners = formworkCorners(s.pieces, new Map(s.materials.map((m) => [m.id, m])));
+            const reachCm = 12 / s.zoom;
+            const level = (v: number, axis: 'x' | 'y') => {
+              let best: number | null = null;
+              for (const c of corners) {
+                const cv = c[axis];
+                if (Math.abs(cv - v) <= reachCm && (best === null || Math.abs(cv - v) < Math.abs(best - v))) best = cv;
+              }
+              return best;
+            };
             const snapped = {
               ...moved,
-              points: moved.points.map((p, i) =>
-                baseline.points[i] && p.x === baseline.points[i].x && p.y === baseline.points[i].y
-                  ? p
-                  : { x: snapValue(p.x, step, true), y: snapValue(p.y, step, true) },
-              ),
+              points: moved.points.map((p, i) => {
+                const was = baseline.points[i];
+                if (was && p.x === was.x && p.y === was.y) return p;
+                if (!whole && hit.vertex !== undefined) {
+                  const c = nearestCorner(corners, p, reachCm);
+                  if (c) return { ...c };
+                } else if (!whole) {
+                  // A leg slides square to itself: only the coordinate it moves in.
+                  const xMoved = !was || p.x !== was.x;
+                  const yMoved = !was || p.y !== was.y;
+                  const lx = xMoved ? level(p.x, 'x') : null;
+                  const ly = yMoved ? level(p.y, 'y') : null;
+                  return {
+                    x: lx ?? (xMoved ? snapValue(p.x, step, true) : p.x),
+                    y: ly ?? (yMoved ? snapValue(p.y, step, true) : p.y),
+                  };
+                }
+                return { x: snapValue(p.x, step, true), y: snapValue(p.y, step, true) };
+              }),
             };
             // A moved line is not the line the picked stretch was read off.
             return { sketch: s.sketch.map((k) => (k.id === baseline.id ? snapped : k)), selectedSpan: null };
