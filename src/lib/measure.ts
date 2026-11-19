@@ -806,3 +806,34 @@ export function parallelEdge(
   }
   return best;
 }
+
+/**
+ * Every corner of the formwork on the plan - each outline point of each panel,
+ * ჩაკერება and corner profile (an L has six) - for the pen to land on (the
+ * user, 2026-11-19: a drawn line could not be put on the corner of a green
+ * შიდა კუთხე, it stopped short or ran past on the 5 cm grid).
+ */
+export function formworkCorners(pieces: Piece[], byId: Map<string, Material>): Point[] {
+  const out: Point[] = [];
+  for (const p of pieces) {
+    const m = byId.get(p.materialId);
+    if (!m || !['panel', 'filler', 'corner'].includes(m.category)) continue;
+    if (m.category === 'corner' && m.name.includes('კონექტორ')) continue;
+    for (const pt of pieceOutline(p, m)) out.push({ x: Math.round(pt.x * 1000) / 1000, y: Math.round(pt.y * 1000) / 1000 });
+  }
+  return out;
+}
+
+/** The corner nearest `at` within `tol` cm, or null. */
+export function nearestCorner(corners: Point[], at: Point, tol: number): Point | null {
+  let best: Point | null = null;
+  let d = tol;
+  for (const c of corners) {
+    const dd = Math.hypot(c.x - at.x, c.y - at.y);
+    if (dd <= d) {
+      d = dd;
+      best = c;
+    }
+  }
+  return best;
+}
