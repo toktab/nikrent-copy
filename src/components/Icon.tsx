@@ -58,7 +58,9 @@ export type IconName =
   | 'eye'
   | 'eye-off'
   | 'magnet'
-  | 'swap';
+  | 'swap'
+  | 'scissors'
+  | 'paste';
 
 /** Path data only — stroke styling is applied once, on the <svg>. */
 const PATHS: Record<IconName, string> = {
@@ -67,6 +69,8 @@ const PATHS: Record<IconName, string> = {
   pencil: 'M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z M14 6l4 4',
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6',
   copy: 'M9 9h11v11H9z M5 15H4V4h11v1',
+  scissors: 'M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M8.6 7.6L20 18 M8.6 16.4L20 6',
+  paste: 'M9 3h6v3H9z M8 4.5H5V21h14V4.5h-3',
   grid: 'M4 4h16v16H4z M4 10h16 M4 16h16 M10 4v16 M16 4v16',
   array: 'M4 5h4v4H4z M4 15h4v4H4z M14 5h4v4h-4z M14 15h4v4h-4z',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M20 20l-4-4',
